@@ -29,7 +29,7 @@ the repo safe: no real names, photos, or events can ever be committed.
      descriptions, photos, feelings notes). Never in `config.json`, never in Git.
 
 4. **Fake data is quarantined.** All development/demo data lives under
-   `src/lib/fake/` and is the *only* place literal people may appear. Production
+   `src/lib/fake/` and is the _only_ place literal people may appear. Production
    rendering never imports from `src/lib/fake/`.
 
 5. **The setup wizard writes config; code never assumes it.** Components degrade
@@ -39,7 +39,7 @@ the repo safe: no real names, photos, or events can ever be committed.
 
 - A CI lint rule (added later) can assert that non-`fake/` source contains no
   known demo names.
-- Adding a feature means adding a flag *and* an empty/disabled state, not just
+- Adding a feature means adding a flag _and_ an empty/disabled state, not just
   the happy path.
 - Selling as a kit is a packaging exercise, not a code fork: flash the image,
   run the wizard, done.

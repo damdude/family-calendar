@@ -34,8 +34,21 @@ export default defineConfig(
 		}
 	},
 	{
-		// Override or add rule settings here, such as:
-		// 'svelte/button-has-type': 'error'
-		rules: {}
+		rules: {
+			// Allow `_` (and `_foo`) as intentional throwaway bindings, e.g.
+			// `{#each Array(n) as _, i}`.
+			'@typescript-eslint/no-unused-vars': [
+				'error',
+				{ argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' }
+			],
+			// We use plain string hrefs for our known, static route table. SvelteKit
+			// typed routes / `resolve()` are not adopted in this phase; revisit if we
+			// enable experimental typed routing.
+			'svelte/no-navigation-without-resolve': 'off',
+			// `Date` is used here only for pure, non-reactive computation (formatting,
+			// week math). The live clock reassigns a fresh Date rather than mutating,
+			// so SvelteDate is not required.
+			'svelte/prefer-svelte-reactivity': 'off'
+		}
 	}
 );

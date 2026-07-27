@@ -1,0 +1,106 @@
+/* ============================================================================
+   Typography — following apple-design §15 (optical sizing, tracking, leading)
+
+   Principles applied:
+   - System font first (ships optical sizing, tracking tables, legibility).
+   - Tracking is size-specific: negative on large display text, ~0 on body.
+   - Leading tracks size inversely: tight on headings, looser on body.
+   - Hierarchy from weight + size + leading as a set, not size alone.
+   - Sizes in rem so layout scales with the user's text-size setting.
+   ========================================================================== */
+
+:root {
+	--font-sans:
+		system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji',
+		'Segoe UI Emoji';
+	/* Rounded face for kid + celebration surfaces (falls back to sans). */
+	--font-rounded: ui-rounded, 'SF Pro Rounded', var(--font-sans);
+
+	/* Type scale (rem). Each step pairs size + line-height + tracking. */
+	--text-xs: 0.75rem; /* 12px — captions, event times */
+	--text-sm: 0.875rem; /* 14px — secondary labels */
+	--text-base: 1rem; /* 16px — body */
+	--text-lg: 1.125rem; /* 18px — emphasized body / event titles */
+	--text-xl: 1.375rem; /* 22px — section headers */
+	--text-2xl: 1.75rem; /* 28px — view titles */
+	--text-3xl: 2.25rem; /* 36px — top bar family name / clock */
+	--text-4xl: 3rem; /* 48px — kid view names */
+	--text-5xl: 4rem; /* 64px — celebration / screensaver clock */
+
+	/* Weights */
+	--weight-regular: 400;
+	--weight-medium: 500;
+	--weight-semibold: 600;
+	--weight-bold: 700;
+}
+
+/* Base document type: system font, comfortable leading, tracking near 0. */
+:root {
+	font-family: var(--font-sans);
+	font-size: 100%;
+	line-height: 1.5;
+	letter-spacing: 0;
+	-webkit-font-smoothing: antialiased;
+	text-rendering: optimizeLegibility;
+}
+
+/* Utility type classes — size + leading + tracking as a coordinated set.
+   Large text gets negative tracking + tight leading; body stays near 0. */
+.type-display {
+	font-size: var(--text-5xl);
+	line-height: 1.02;
+	letter-spacing: -0.03em;
+	font-weight: var(--weight-bold);
+	font-optical-sizing: auto;
+}
+.type-title-xl {
+	font-size: var(--text-4xl);
+	line-height: 1.05;
+	letter-spacing: -0.025em;
+	font-weight: var(--weight-bold);
+}
+.type-title-lg {
+	font-size: var(--text-3xl);
+	line-height: 1.08;
+	letter-spacing: -0.02em;
+	font-weight: var(--weight-semibold);
+}
+.type-title {
+	font-size: var(--text-2xl);
+	line-height: 1.12;
+	letter-spacing: -0.015em;
+	font-weight: var(--weight-semibold);
+}
+.type-heading {
+	font-size: var(--text-xl);
+	line-height: 1.2;
+	letter-spacing: -0.01em;
+	font-weight: var(--weight-semibold);
+}
+.type-body-lg {
+	font-size: var(--text-lg);
+	line-height: 1.35;
+	letter-spacing: -0.005em;
+	font-weight: var(--weight-medium);
+}
+.type-body {
+	font-size: var(--text-base);
+	line-height: 1.5;
+	letter-spacing: 0;
+	font-weight: var(--weight-regular);
+}
+.type-label {
+	font-size: var(--text-sm);
+	line-height: 1.3;
+	letter-spacing: 0.005em;
+	font-weight: var(--weight-medium);
+}
+.type-caption {
+	font-size: var(--text-xs);
+	line-height: 1.25;
+	letter-spacing: 0.01em; /* small text wants slightly positive tracking */
+	font-weight: var(--weight-medium);
+}
+.type-rounded {
+	font-family: var(--font-rounded);
+}

@@ -1,0 +1,77 @@
+/* ============================================================================
+   Motion tokens — derived from ~/.claude/skills/apple-design (SKILL.md)
+
+   Guiding principles (see the skill):
+   - Respond on pointer-down; feedback is instant and continuous (§1).
+   - Springs, not fixed-duration curves, for anything a user can grab (§4).
+     Gesture-driven interactions (drag/swipe/sheets) will use a spring library
+     (Motion) with the parameters below — CSS transitions can't be grabbed and
+     reversed mid-flight. These CSS tokens cover non-gesture UI: hovers, presses,
+     enters/exits, and reduced-motion fallbacks.
+   - Critically damped by default; add bounce only after momentum (a flick).
+   - Tap feedback: scale(0.97) on :active, ~100ms ease-out (§1).
+
+   Apple's shipped spring values (§4), for the spring layer:
+     Move / reposition ....... damping 1.0, response 0.4
+     Rotation ................ damping 0.8, response 0.4
+     Drawer / sheet .......... damping 0.8, response 0.3
+   ========================================================================== */
+
+:root {
+	/* Durations — for the CSS (non-gesture) layer. */
+	--dur-instant: 100ms; /* press / tap feedback */
+	--dur-quick: 180ms;
+	--dur-standard: 320ms;
+	--dur-slow: 500ms;
+
+	/* Easings.
+	   --ease-apple: the fluid decelerate curve used across Apple UI.
+	   --ease-out / --ease-in: mirrored pair for reversible transitions (§7).
+	   --ease-spring-bounce: an overshoot curve approximating a damping~0.8
+	     spring, for MOMENTUM-driven moments only (a flick landing, a celebration
+	     pop). Do not use it for things that merely faded in. For truly
+	     interruptible, velocity-aware motion, use a spring library instead. */
+	--ease-apple: cubic-bezier(0.32, 0.72, 0, 1);
+	--ease-out: cubic-bezier(0.32, 0.72, 0, 1);
+	--ease-in: cubic-bezier(1, 0, 0.68, 0.28); /* inverse of --ease-out */
+	--ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+	--ease-spring-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+	/* Spring parameters (consumed by the JS spring layer, e.g. Motion's
+	   bounce+duration API which maps to Apple's damping+response). */
+	--spring-default-bounce: 0; /* damping 1.0 — critically damped */
+	--spring-default-duration: 0.4s; /* response */
+	--spring-momentum-bounce: 0.2; /* damping ~0.8 — slight overshoot */
+	--spring-momentum-duration: 0.4s;
+	--spring-sheet-bounce: 0.2;
+	--spring-sheet-duration: 0.3s;
+}
+
+/* Instant, continuous press feedback — the foundation of directness (§1). */
+.pressable {
+	transition: transform var(--dur-instant) var(--ease-out);
+	touch-action: manipulation; /* removes the ~300ms tap delay */
+}
+.pressable:active {
+	transform: scale(0.97);
+}
+
+/* Reduced motion: replace slides/springs with short cross-fades, drop
+   overshoot — but keep opacity/color changes that aid comprehension (§14). */
+@media (prefers-reduced-motion: reduce) {
+	:root {
+		--ease-spring-bounce: var(--ease-out);
+		--spring-default-bounce: 0;
+		--spring-momentum-bounce: 0;
+	}
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.001ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: var(--dur-quick) !important;
+	}
+	.pressable:active {
+		transform: none;
+	}
+}

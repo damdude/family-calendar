@@ -1,0 +1,81 @@
+/* ============================================================================
+   Design tokens — color, elevation, radius, spacing
+   Palette calibrated from the Skylight reference captures in
+   docs/design/skylight-reference/ plus the project spec.
+   ========================================================================== */
+
+:root {
+	/* --- Base neutrals --- */
+	--color-canvas: #fafafa;
+	--color-surface: #ffffff;
+	--color-surface-elevated: #f5f5f5;
+	--color-text-primary: #1a1a1a;
+	--color-text-secondary: #666666;
+	--color-text-tertiary: #999999;
+	--color-border-subtle: #eeeeee;
+	--color-border-hairline: #f0f0f0;
+
+	/* --- Pastel profile colors (one per profile) ---
+	   Each has a `-fill` (card/pill background), a stronger `-ink` (text/accents
+	   on a light tint), and a `-bar` (all-day / multi-day bars). */
+	--color-profile-mint: #b5d5b0;
+	--color-profile-pink: #f8bbd0;
+	--color-profile-blue: #b3e5fc;
+	--color-profile-lavender: #d4c5f9;
+	--color-profile-peach: #ffe0b2;
+	--color-profile-coral: #f5c6cb;
+	--color-profile-sage: #c1d5c0;
+	--color-profile-purple: #e1bee7;
+
+	/* --- Accents (used sparingly) --- */
+	--color-accent-gold: #f9c74f; /* stars, celebrations */
+	--color-accent-success: #74c69d;
+	--color-accent-warning: #e76f51;
+	--color-accent-allday: #ffcf9e; /* all-day marker bar (e.g. Garbage day) */
+
+	/* --- Screensaver / sleep mode --- */
+	--color-screensaver-bg: #000000;
+	--color-screensaver-fg: #ffffff;
+
+	/* --- Elevation (soft, low-contrast — the reference UI is very airy) --- */
+	--shadow-card: 0 1px 2px rgba(26, 26, 26, 0.04), 0 1px 3px rgba(26, 26, 26, 0.06);
+	--shadow-raised: 0 4px 12px rgba(26, 26, 26, 0.08), 0 1px 3px rgba(26, 26, 26, 0.06);
+	--shadow-float: 0 12px 32px rgba(26, 26, 26, 0.12), 0 2px 8px rgba(26, 26, 26, 0.08);
+
+	/* --- Radius (everything is generously rounded) --- */
+	--radius-xs: 6px;
+	--radius-sm: 10px;
+	--radius-md: 14px;
+	--radius-lg: 20px;
+	--radius-xl: 28px;
+	--radius-pill: 999px;
+
+	/* --- Spacing scale (rem so layout scales with Dynamic Type) --- */
+	--space-1: 0.25rem;
+	--space-2: 0.5rem;
+	--space-3: 0.75rem;
+	--space-4: 1rem;
+	--space-5: 1.5rem;
+	--space-6: 2rem;
+	--space-8: 3rem;
+
+	/* --- Touch targets --- */
+	--touch-min: 44px; /* baseline */
+	--touch-kid: 96px; /* pre-reader minimum (spec) */
+
+	/* --- Translucent chrome (apple-design §12) --- */
+	--material-thin: rgba(255, 255, 255, 0.6);
+	--material-regular: rgba(250, 250, 250, 0.72);
+	--material-thick: rgba(245, 245, 245, 0.85);
+	--material-blur: blur(20px) saturate(180%);
+}
+
+/* Materials go frostier / solid when the user reduces transparency. */
+@media (prefers-reduced-transparency: reduce) {
+	:root {
+		--material-thin: #ffffff;
+		--material-regular: #fafafa;
+		--material-thick: #f5f5f5;
+		--material-blur: none;
+	}
+}

@@ -12,7 +12,6 @@ Suggested captures:
 - `profile-pills.png` — the profile pill row with avatar + name + task counter.
 - `sidebar.png` — the left navigation rail.
 
-These images are **not** committed (they are third-party product photos); this
-folder is a local calibration aid only. The design tokens and layout in
-`src/lib/design/` and `src/routes/` are derived from the written spec plus these
-references when present.
+The design tokens and layout in `src/lib/design/` and `src/routes/` are derived
+from the written spec plus these reference captures. They are calibration aids
+only — our UI is an independent implementation, not a copy.

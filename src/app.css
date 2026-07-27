@@ -1,0 +1,59 @@
+@import 'tailwindcss';
+
+@import './lib/design/tokens.css';
+@import './lib/design/typography.css';
+@import './lib/design/motion.css';
+
+/* Expose a few tokens to Tailwind's theme so utilities like `rounded-lg`,
+   `text-secondary`, and the profile colors align with the design system. */
+@theme {
+	--color-canvas: #fafafa;
+	--color-surface: #ffffff;
+	--color-ink: #1a1a1a;
+	--color-ink-secondary: #666666;
+	--color-ink-tertiary: #999999;
+
+	--color-mint: #b5d5b0;
+	--color-pink: #f8bbd0;
+	--color-sky: #b3e5fc;
+	--color-lavender: #d4c5f9;
+	--color-peach: #ffe0b2;
+	--color-coral: #f5c6cb;
+	--color-sage: #c1d5c0;
+	--color-orchid: #e1bee7;
+
+	--radius-md: 14px;
+	--radius-lg: 20px;
+	--radius-xl: 28px;
+}
+
+/* ---- Base ---- */
+html,
+body {
+	height: 100%;
+}
+
+body {
+	background: var(--color-canvas);
+	color: var(--color-text-primary);
+	font-family: var(--font-sans);
+	/* Kiosk: the page body must never scroll horizontally. */
+	overflow-x: hidden;
+}
+
+/* Kiosk hygiene: no text selection or long-press callouts on a wall display,
+   and no tap-highlight flash. Re-enabled per-element where editing is needed. */
+:root {
+	-webkit-tap-highlight-color: transparent;
+}
+
+a {
+	color: inherit;
+	text-decoration: none;
+}
+
+/* Thin, unobtrusive scrollbars for any internal scroll regions. */
+* {
+	scrollbar-width: thin;
+	scrollbar-color: var(--color-border-subtle) transparent;
+}

@@ -3,19 +3,19 @@
 Phased, batch-by-batch delivery. Each batch is presented and approved before
 starting the next.
 
-| Batch | Scope | Status |
-| --- | --- | --- |
-| 0 | Repo scaffold (SvelteKit 5 + TS + Tailwind, docs, ADRs, license) | ✅ Done |
-| 1 | Design system + fake data + primary mockup views | 🚧 In progress |
-| 2 | Config schema + QR/phone setup wizard + SSE live preview | ⏳ Planned |
-| 3 | Kid mode deepening — routine library, streak persistence, celebration polish, feelings data | ⏳ Planned |
-| 4 | Calendar sync (Google device flow), encrypted at-rest storage, SQLite migrations | ⏳ Planned |
-| 5 | Meal planning + custom lists persistence + Sites of Interest scraper | ⏳ Planned |
-| 6 | Deploy to Pi + TV read-only mode (kiosk, systemd, HDMI) | ⏳ Planned |
-| 7 | OTA update mechanism + fail-safe rollback | ⏳ Planned |
-| 8 | Touchscreen support (pointer events) + PIN-locked admin + parental lock | ⏳ Planned |
-| 9 | Screensaver (B&W photo rotation + B&W clock) + sleep mode window | ⏳ Planned |
-| 10 | Polish, docs, one-liner install, CONTRIBUTING.md, kit packaging | ⏳ Planned |
+| Batch | Scope                                                                                       | Status         |
+| ----- | ------------------------------------------------------------------------------------------- | -------------- |
+| 0     | Repo scaffold (SvelteKit 5 + TS + Tailwind, docs, ADRs, license)                            | ✅ Done        |
+| 1     | Design system + fake data + primary mockup views                                            | ✅ Done |
+| 2     | Config schema + QR/phone setup wizard + SSE live preview                                    | ⏳ Planned     |
+| 3     | Kid mode deepening — routine library, streak persistence, celebration polish, feelings data | ⏳ Planned     |
+| 4     | Calendar sync (Google device flow), encrypted at-rest storage, SQLite migrations            | ⏳ Planned     |
+| 5     | Meal planning + custom lists persistence + Sites of Interest scraper                        | ⏳ Planned     |
+| 6     | Deploy to Pi + TV read-only mode (kiosk, systemd, HDMI)                                     | ⏳ Planned     |
+| 7     | OTA update mechanism + fail-safe rollback                                                   | ⏳ Planned     |
+| 8     | Touchscreen support (pointer events) + PIN-locked admin + parental lock                     | ⏳ Planned     |
+| 9     | Screensaver (B&W photo rotation + B&W clock) + sleep mode window                            | ⏳ Planned     |
+| 10    | Polish, docs, one-liner install, CONTRIBUTING.md, kit packaging                             | ⏳ Planned     |
 
 ## Design references
 
