@@ -12,6 +12,7 @@
 	}
 
 	function toggle(listId: number, itemId: number) {
+		if (family.readOnly) return;
 		family.toggleListItem(listId, itemId);
 		family.persistFamilyData();
 	}
@@ -63,48 +64,54 @@
 								</span>
 								<span class="text type-body">{item.text}</span>
 							</button>
-							<button
-								type="button"
-								class="del"
-								aria-label="Remove {item.text}"
-								onclick={() => removeItem(list.id, item.id)}><X size={14} /></button
-							>
+							{#if !family.readOnly}
+								<button
+									type="button"
+									class="del"
+									aria-label="Remove {item.text}"
+									onclick={() => removeItem(list.id, item.id)}><X size={14} /></button
+								>
+							{/if}
 						</li>
 					{/each}
 				</ul>
 
-				<div class="additem">
-					<input
-						class="addinput"
-						type="text"
-						placeholder="Add item…"
-						bind:value={drafts[list.id]}
-						onkeydown={(e) => e.key === 'Enter' && addItem(list.id)}
-					/>
-					<button
-						type="button"
-						class="addbtn"
-						aria-label="Add item"
-						onclick={() => addItem(list.id)}
-					>
-						<Plus size={16} />
-					</button>
-				</div>
+				{#if !family.readOnly}
+					<div class="additem">
+						<input
+							class="addinput"
+							type="text"
+							placeholder="Add item…"
+							bind:value={drafts[list.id]}
+							onkeydown={(e) => e.key === 'Enter' && addItem(list.id)}
+						/>
+						<button
+							type="button"
+							class="addbtn"
+							aria-label="Add item"
+							onclick={() => addItem(list.id)}
+						>
+							<Plus size={16} />
+						</button>
+					</div>
+				{/if}
 			</section>
 		{/each}
 
-		<section class="list-card newlist">
-			<input
-				class="addinput"
-				type="text"
-				placeholder="New list name…"
-				bind:value={newListName}
-				onkeydown={(e) => e.key === 'Enter' && addList()}
-			/>
-			<button type="button" class="addbtn wide" onclick={addList}
-				><Plus size={16} /> New list</button
-			>
-		</section>
+		{#if !family.readOnly}
+			<section class="list-card newlist">
+				<input
+					class="addinput"
+					type="text"
+					placeholder="New list name…"
+					bind:value={newListName}
+					onkeydown={(e) => e.key === 'Enter' && addList()}
+				/>
+				<button type="button" class="addbtn wide" onclick={addList}
+					><Plus size={16} /> New list</button
+				>
+			</section>
+		{/if}
 	</div>
 </div>
 

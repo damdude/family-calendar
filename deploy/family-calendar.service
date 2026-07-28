@@ -1,0 +1,27 @@
+# Family Calendar dashboard server (SvelteKit / adapter-node).
+# Install: sudo cp deploy/family-calendar.service /etc/systemd/system/
+#          sudo systemctl daemon-reload && sudo systemctl enable --now family-calendar
+[Unit]
+Description=Family Calendar dashboard server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/family-calendar
+Environment=NODE_ENV=production
+Environment=PORT=5173
+Environment=HOST=0.0.0.0
+# Optional secrets (Google OAuth, scraper UA, DATA_DIR). Leading '-' = optional.
+EnvironmentFile=-/home/pi/family-calendar/.env
+ExecStart=/usr/bin/node build
+Restart=on-failure
+RestartSec=5
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

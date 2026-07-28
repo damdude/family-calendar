@@ -163,6 +163,25 @@
 					<span class="knob"></span>
 				</button>
 			</div>
+			<div class="row">
+				<span class="type-label"
+					>Read-only display <span class="hint type-caption">edits from a phone only</span></span
+				>
+				<button
+					type="button"
+					class="switch"
+					class:on={family.config.kiosk.readOnly}
+					role="switch"
+					aria-checked={family.config.kiosk.readOnly}
+					aria-label="Read-only display"
+					onclick={() => {
+						family.config.kiosk.readOnly = !family.config.kiosk.readOnly;
+						persist();
+					}}
+				>
+					<span class="knob"></span>
+				</button>
+			</div>
 		</div>
 	</section>
 
@@ -259,6 +278,11 @@
 	}
 	.lbl {
 		color: var(--color-text-secondary);
+	}
+	.hint {
+		display: block;
+		color: var(--color-text-tertiary);
+		font-weight: var(--weight-regular);
 	}
 	.input {
 		width: 100%;

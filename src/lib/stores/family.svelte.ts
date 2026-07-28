@@ -34,6 +34,11 @@ class FamilyStore {
 		return this.config.view.orientation;
 	}
 
+	/** Read-only TV mode — editing controls are hidden on the display. */
+	get readOnly(): boolean {
+		return this.config.kiosk.readOnly;
+	}
+
 	/**
 	 * Apply persisted config (from config.json) onto the demo-seeded store.
 	 * App config (features, view prefs, orientation) is applied wholesale;

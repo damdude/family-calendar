@@ -59,10 +59,17 @@ export interface SleepWindow {
 	enabled: boolean;
 }
 
+export interface KioskPrefs {
+	/** Read-only TV mode: the display shows everything but editing is disabled
+	 *  (edits happen from a paired phone). */
+	readOnly: boolean;
+}
+
 export interface AppConfig {
 	features: FeatureFlags;
 	view: ViewPrefs;
 	sleep: SleepWindow;
+	kiosk: KioskPrefs;
 	/** Master switch for celebration animations (confetti, star bursts). */
 	celebrations: boolean;
 }
@@ -119,6 +126,9 @@ export const defaultConfig: AppConfig = {
 		start: '21:00',
 		end: '06:30',
 		enabled: true
+	},
+	kiosk: {
+		readOnly: false
 	},
 	celebrations: true
 };

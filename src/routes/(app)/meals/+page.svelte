@@ -29,6 +29,7 @@
 	let draft = $state('');
 
 	function startEdit(date: string, type: MealType, current?: string) {
+		if (family.readOnly) return;
 		editing = { date, type };
 		draft = current ?? '';
 	}
@@ -96,13 +97,15 @@
 							<span class="emoji">{m.emoji}</span>
 							<span class="name type-caption">{m.name}</span>
 						</button>
-						<button
-							class="clear"
-							type="button"
-							aria-label="Clear meal"
-							onclick={() => clearMeal(key, type)}><X size={12} /></button
-						>
-					{:else}
+						{#if !family.readOnly}
+							<button
+								class="clear"
+								type="button"
+								aria-label="Clear meal"
+								onclick={() => clearMeal(key, type)}><X size={12} /></button
+							>
+						{/if}
+					{:else if !family.readOnly}
 						<button
 							class="add pressable"
 							type="button"

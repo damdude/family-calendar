@@ -72,11 +72,18 @@ const SleepWindowSchema = z
 	})
 	.prefault({});
 
+const KioskPrefsSchema = z
+	.object({
+		readOnly: z.boolean().default(false)
+	})
+	.prefault({});
+
 export const AppConfigSchema = z
 	.object({
 		features: FeatureFlagsSchema,
 		view: ViewPrefsSchema,
 		sleep: SleepWindowSchema,
+		kiosk: KioskPrefsSchema,
 		celebrations: z.boolean().default(true)
 	})
 	.prefault({});

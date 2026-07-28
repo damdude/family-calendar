@@ -1,0 +1,23 @@
+# Chromium kiosk that displays the Family Calendar dashboard on the HDMI screen.
+# Runs under the graphical (Wayland) session as the 'pi' user.
+# Install: sudo cp deploy/family-calendar-kiosk.service /etc/systemd/system/
+#          sudo systemctl daemon-reload && sudo systemctl enable --now family-calendar-kiosk
+[Unit]
+Description=Family Calendar kiosk (Chromium)
+After=family-calendar.service
+Wants=family-calendar.service
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+User=pi
+Environment=KIOSK_URL=http://localhost:5173
+# Wayland session for the 'pi' user (uid 1000). Adjust if different.
+Environment=WAYLAND_DISPLAY=wayland-0
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+ExecStart=/home/pi/family-calendar/deploy/start-kiosk.sh
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical.target
