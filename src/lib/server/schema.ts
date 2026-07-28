@@ -88,7 +88,9 @@ export const PersistedProfileSchema = z.object({
 	age: z.number().int().min(0).max(120),
 	role: z.enum(['parent', 'child']),
 	color: ProfileColorSchema,
-	avatarEmoji: z.string().min(1).max(8)
+	avatarEmoji: z.string().min(1).max(8),
+	/** Set when the profile has an uploaded (encrypted) photo; cache-buster. */
+	photoUpdatedAt: z.number().optional()
 });
 
 export const PersistedConfigSchema = z.object({

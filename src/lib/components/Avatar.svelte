@@ -7,6 +7,10 @@
 		size = 36,
 		ring = true
 	}: { profile: Profile; size?: number; ring?: boolean } = $props();
+
+	// Fall back to the emoji if the photo fails to load.
+	let photoFailed = $state(false);
+	const showPhoto = $derived(!!profile.photoUpdatedAt && !photoFailed);
 </script>
 
 <span
@@ -18,7 +22,16 @@
 	style:box-shadow={ring ? `0 0 0 2px ${profileColorVar(profile.color)}` : 'none'}
 	title={profile.name}
 >
-	{profile.avatarEmoji}
+	{#if showPhoto}
+		<img
+			class="photo"
+			src="/media/avatar/{profile.id}?v={profile.photoUpdatedAt}"
+			alt={profile.name}
+			onerror={() => (photoFailed = true)}
+		/>
+	{:else}
+		{profile.avatarEmoji}
+	{/if}
 </span>
 
 <style>
@@ -30,5 +43,12 @@
 		line-height: 1;
 		flex: none;
 		user-select: none;
+		overflow: hidden;
+	}
+	.photo {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		display: block;
 	}
 </style>

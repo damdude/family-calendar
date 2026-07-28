@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { family } from '$lib/stores/family.svelte';
 	import type { FeatureFlags } from '$lib/config';
-	import Avatar from '$lib/components/Avatar.svelte';
+	import ProfileEditor from '$lib/components/ProfileEditor.svelte';
 	import { QrCode, Check } from 'lucide-svelte';
 
 	// Persist store snapshot to config.json (debounced) on any change.
@@ -90,12 +90,8 @@
 		</label>
 		<div class="field">
 			<span class="type-label lbl">People</span>
-			<div class="people">
-				{#each family.profiles as p (p.id)}
-					<span class="person"><Avatar profile={p} size={30} /> {p.name}</span>
-				{/each}
-			</div>
-			<p class="type-caption sub">Editing people & photos moves here next.</p>
+			<p class="type-caption sub">Tap a photo to upload one. Photos are encrypted on the device.</p>
+			<ProfileEditor onChange={persist} />
 		</div>
 	</section>
 
@@ -262,17 +258,6 @@
 		border: 1px solid var(--color-border-subtle);
 		background: var(--color-surface);
 		color: var(--color-text-primary);
-	}
-	.people {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--space-3);
-	}
-	.person {
-		display: inline-flex;
-		align-items: center;
-		gap: 8px;
-		font-weight: var(--weight-medium);
 	}
 
 	/* Orientation picker */
