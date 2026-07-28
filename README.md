@@ -23,7 +23,17 @@ An open-source, self-hosted, no-subscription family calendar dashboard designed 
 
 ## Quick start
 
-See `docs/install/README.md` (populated once we reach Batch 6).
+On a Raspberry Pi (Raspberry Pi OS 64-bit), one line installs everything —
+server, Chromium kiosk, and systemd services:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/damdude/family-calendar/main/scripts/bootstrap.sh | bash
+```
+
+On first boot the display shows a **QR code** — scan it with your phone to set up
+the family, profiles, and calendars (no keyboard needed on the Pi). Full details
+in [`docs/install/README.md`](docs/install/README.md); selling it as a kit is
+covered in [`docs/kit.md`](docs/kit.md).
 
 For local development:
 
@@ -44,11 +54,13 @@ Then open http://localhost:5173.
 
 ## Development status
 
-Under active development. See `docs/roadmap.md` for phase status.
+Under active development — all planned build phases are complete. See
+[`docs/roadmap.md`](docs/roadmap.md) for phase status and
+[`CHANGELOG.md`](CHANGELOG.md) for what shipped.
 
 ## Contributing
 
-See `CONTRIBUTING.md` (populated in Batch 10).
+See [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## License
 
