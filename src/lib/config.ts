@@ -8,7 +8,7 @@
  * A disabled feature is *absent* from navigation — not hidden with CSS.
  */
 
-import type { Feeling } from '$lib/types';
+import type { Feeling, ProfileColor, ProfileRole } from '$lib/types';
 
 /** Default "Today's Feelings" palette (configurable per family). */
 export const defaultFeelings: Feeling[] = [
@@ -37,6 +37,8 @@ export interface FeatureFlags {
 	sitesOfInterest: boolean;
 }
 
+export type Orientation = 'landscape' | 'portrait';
+
 export interface ViewPrefs {
 	/** First hour shown on the weekly grid (0–23). */
 	dayStartHour: number;
@@ -45,6 +47,8 @@ export interface ViewPrefs {
 	weekStartsOn: 0 | 1; // 0 = Sunday, 1 = Monday
 	/** Use 24-hour clock in the top bar and grid. */
 	clock24h: boolean;
+	/** Display mounting orientation — drives the app shell layout. */
+	orientation: Orientation;
 }
 
 export interface SleepWindow {
@@ -61,6 +65,33 @@ export interface AppConfig {
 	sleep: SleepWindow;
 	/** Master switch for celebration animations (confetti, star bursts). */
 	celebrations: boolean;
+}
+
+/**
+ * Client-safe shape of the persisted config.json (mirrors the server Zod
+ * schema in src/lib/server/schema.ts). Defined here so the client store can
+ * apply persisted config without importing server-only code.
+ */
+export interface PersistedFamily {
+	name: string;
+	timezone: string;
+	weekStartsOn: 0 | 1;
+}
+export interface PersistedProfileMeta {
+	id: number;
+	name: string;
+	nickname?: string;
+	age: number;
+	role: ProfileRole;
+	color: ProfileColor;
+	avatarEmoji: string;
+	photoUpdatedAt?: number;
+}
+export interface PersistedConfigShape {
+	setupComplete: boolean;
+	family: PersistedFamily;
+	profiles: PersistedProfileMeta[];
+	app: AppConfig;
 }
 
 export const defaultConfig: AppConfig = {
@@ -81,7 +112,8 @@ export const defaultConfig: AppConfig = {
 		dayStartHour: 9,
 		dayEndHour: 17,
 		weekStartsOn: 1,
-		clock24h: false
+		clock24h: false,
+		orientation: 'landscape'
 	},
 	sleep: {
 		start: '21:00',

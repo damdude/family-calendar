@@ -42,7 +42,7 @@
 		{ label: 'Recipes', href: '/recipes', icon: ChefHat, feature: 'recipes', soon: true },
 		{ label: 'Photos', href: '/photos', icon: Image, feature: 'photos', soon: true },
 		{ label: 'Sleep', href: '/sleep', icon: Moon, feature: 'sleep', soon: true },
-		{ label: 'Settings', href: '/settings', icon: Settings, soon: true }
+		{ label: 'Settings', href: '/settings', icon: Settings }
 	];
 
 	// Only render items whose feature flag is on (Settings has no flag).
@@ -56,7 +56,7 @@
 	}
 </script>
 
-<nav class="sidebar" aria-label="Main">
+<nav class="sidebar" data-orientation={family.orientation} aria-label="Main">
 	<div class="brand" aria-hidden="true">
 		<span class="mark">🗓️</span>
 	</div>
@@ -132,5 +132,31 @@
 	}
 	.label {
 		text-align: center;
+	}
+
+	/* Portrait: a horizontal bottom bar. */
+	.sidebar[data-orientation='portrait'] {
+		width: 100%;
+		height: auto;
+		flex-direction: row;
+		align-items: center;
+		gap: var(--space-2);
+		padding: var(--space-2) var(--space-4);
+		border-right: none;
+		border-top: 1px solid var(--color-border-subtle);
+		overflow-x: auto;
+		overflow-y: hidden;
+	}
+	.sidebar[data-orientation='portrait'] .brand {
+		display: none;
+	}
+	.sidebar[data-orientation='portrait'] ul {
+		flex-direction: row;
+		gap: 2px;
+	}
+	.sidebar[data-orientation='portrait'] .item {
+		flex-direction: column;
+		padding: 8px 12px;
+		margin: 0;
 	}
 </style>

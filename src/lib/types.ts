@@ -23,8 +23,13 @@ export interface Profile {
 	age: number;
 	role: ProfileRole;
 	color: ProfileColor;
-	/** Emoji stand-in for a photo avatar in the mockup (no real photos in repo). */
+	/** Emoji stand-in used when no uploaded photo is present. */
 	avatarEmoji: string;
+	/**
+	 * Set when the profile has an uploaded (encrypted) photo. Doubles as a
+	 * cache-buster for the /media/avatar/<id> URL. Absent → show the emoji.
+	 */
+	photoUpdatedAt?: number;
 	/** Today's task progress, shown on the profile pill (e.g. "Liam 2/3"). */
 	tasks: { done: number; total: number };
 }

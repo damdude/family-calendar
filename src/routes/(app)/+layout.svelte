@@ -1,11 +1,19 @@
 <script lang="ts">
+	import { family } from '$lib/stores/family.svelte';
 	import Sidebar from '$lib/components/Sidebar.svelte';
 	import TopBar from '$lib/components/TopBar.svelte';
+	import type { LayoutData } from './$types';
 
-	let { children } = $props();
+	let { data, children }: { data: LayoutData; children: import('svelte').Snippet } = $props();
+
+	// Apply persisted config (family name, profiles, feature flags, orientation)
+	// onto the demo-seeded store whenever it changes.
+	$effect(() => {
+		family.applyConfig(data.config);
+	});
 </script>
 
-<div class="app">
+<div class="app" data-orientation={family.orientation}>
 	<Sidebar />
 	<div class="content">
 		<TopBar />
@@ -27,6 +35,7 @@
 		display: flex;
 		flex-direction: column;
 		min-width: 0;
+		min-height: 0;
 		background: var(--color-canvas);
 	}
 	main {
@@ -34,5 +43,16 @@
 		min-height: 0;
 		overflow-y: auto;
 		padding: 0 var(--space-6) var(--space-6);
+	}
+
+	/* Portrait: nav moves to the bottom as a horizontal bar. */
+	.app[data-orientation='portrait'] {
+		flex-direction: column;
+	}
+	.app[data-orientation='portrait'] .content {
+		order: 1;
+	}
+	.app[data-orientation='portrait'] :global(.sidebar) {
+		order: 2;
 	}
 </style>

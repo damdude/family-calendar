@@ -10,7 +10,12 @@
  */
 
 import { demoFamily } from '$lib/fake/family';
-import { defaultConfig, type AppConfig } from '$lib/config';
+import {
+	defaultConfig,
+	type AppConfig,
+	type Orientation,
+	type PersistedConfigShape
+} from '$lib/config';
 import type { FamilyData, FamilyEvent, Profile, Routine } from '$lib/types';
 
 class FamilyStore {
@@ -19,6 +24,36 @@ class FamilyStore {
 
 	get profiles(): Profile[] {
 		return this.data.profiles;
+	}
+
+	get orientation(): Orientation {
+		return this.config.view.orientation;
+	}
+
+	/**
+	 * Apply persisted config (from config.json) onto the demo-seeded store.
+	 * App config (features, view prefs, orientation) is applied wholesale;
+	 * family name and matching profiles' display fields are overridden in place
+	 * so the curated calendar demo (events/routines keyed by profile id) stays
+	 * intact. No-op until setup is complete.
+	 */
+	applyConfig(cfg: PersistedConfigShape) {
+		this.config = cfg.app;
+		if (!cfg.setupComplete) return;
+		if (cfg.family.name) this.data.familyName = cfg.family.name;
+		this.data.weekStartsOn = cfg.family.weekStartsOn;
+		for (const pc of cfg.profiles) {
+			const p = this.data.profiles.find((x) => x.id === pc.id);
+			if (p) {
+				p.name = pc.name;
+				p.nickname = pc.nickname;
+				p.age = pc.age;
+				p.role = pc.role;
+				p.color = pc.color;
+				p.avatarEmoji = pc.avatarEmoji;
+				p.photoUpdatedAt = pc.photoUpdatedAt;
+			}
+		}
 	}
 
 	profile(id: number): Profile | undefined {
@@ -57,6 +92,29 @@ class FamilyStore {
 	routineComplete(routineId: number): boolean {
 		const routine = this.routine(routineId);
 		return !!routine && routine.steps.length > 0 && routine.steps.every((s) => s.done);
+	}
+
+	/** Snapshot the persistable parts of the store as a full config to save. */
+	toPersisted(): PersistedConfigShape {
+		return {
+			setupComplete: true,
+			family: {
+				name: this.data.familyName,
+				timezone: this.data.timezone,
+				weekStartsOn: this.data.weekStartsOn
+			},
+			profiles: this.data.profiles.map((p) => ({
+				id: p.id,
+				name: p.name,
+				nickname: p.nickname,
+				age: p.age,
+				role: p.role,
+				color: p.color,
+				avatarEmoji: p.avatarEmoji,
+				photoUpdatedAt: p.photoUpdatedAt
+			})),
+			app: this.config
+		};
 	}
 
 	/** Toggle a list item's completion (mutate in place → reactive). */

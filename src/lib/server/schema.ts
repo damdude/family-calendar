@@ -59,7 +59,8 @@ const ViewPrefsSchema = z
 		dayStartHour: z.number().int().min(0).max(23).default(9),
 		dayEndHour: z.number().int().min(1).max(24).default(17),
 		weekStartsOn: z.union([z.literal(0), z.literal(1)]).default(1),
-		clock24h: z.boolean().default(false)
+		clock24h: z.boolean().default(false),
+		orientation: z.enum(['landscape', 'portrait']).default('landscape')
 	})
 	.prefault({});
 
