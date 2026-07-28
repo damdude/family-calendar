@@ -1,9 +1,9 @@
 /**
  * Demo data — the ONLY place a literal family may appear (ADR-002).
  *
- * Production rendering never imports from src/lib/fake. This mirrors the
- * "Williams family" shown on the Skylight reference box so the mockups match a
- * real reference (Mom, Dad, Liam 7, Harper 3), with a dense, realistic week.
+ * Production rendering never imports from src/lib/fake. The structure mirrors
+ * the demo family on the Skylight reference box (two parents + two kids, ages 7
+ * and 3) so the mockups match a real reference, with a dense, realistic week.
  *
  * Dates are resolved relative to the current week so "Today" is always
  * meaningful in the grid.
@@ -54,7 +54,8 @@ function ymd(dayOffset: number): string {
 const profiles: Profile[] = [
 	{
 		id: 1,
-		name: 'Mom',
+		name: 'Eva',
+		nickname: 'Mom',
 		age: 38,
 		role: 'parent',
 		color: 'pink',
@@ -63,7 +64,8 @@ const profiles: Profile[] = [
 	},
 	{
 		id: 2,
-		name: 'Dad',
+		name: 'Rahul',
+		nickname: 'Dad',
 		age: 40,
 		role: 'parent',
 		color: 'sage',
@@ -72,7 +74,7 @@ const profiles: Profile[] = [
 	},
 	{
 		id: 3,
-		name: 'Liam',
+		name: 'Revansh',
 		age: 7,
 		role: 'child',
 		color: 'sky',
@@ -81,7 +83,7 @@ const profiles: Profile[] = [
 	},
 	{
 		id: 4,
-		name: 'Harper',
+		name: 'Enaya',
 		age: 3,
 		role: 'child',
 		color: 'lavender',
@@ -329,7 +331,7 @@ const meals: Meal[] = [
 // --- Assembled dataset ----------------------------------------------------
 
 export const demoFamily: FamilyData = {
-	familyName: 'Williams Family',
+	familyName: 'Sharma Family',
 	timezone: 'America/New_York',
 	weekStartsOn: 1,
 	profiles,

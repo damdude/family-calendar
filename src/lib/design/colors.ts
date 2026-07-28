@@ -1,5 +1,17 @@
 import type { ProfileColor } from '$lib/types';
 
+/** All profile colors, in swatch-picker order. */
+export const PROFILE_COLORS: ProfileColor[] = [
+	'pink',
+	'sky',
+	'sage',
+	'lavender',
+	'peach',
+	'coral',
+	'mint',
+	'orchid'
+];
+
 /** Map a profile color key to its CSS custom property name. */
 export const PROFILE_VAR: Record<ProfileColor, string> = {
 	pink: '--color-profile-pink',
