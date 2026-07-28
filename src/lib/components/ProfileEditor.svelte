@@ -56,15 +56,18 @@
 		const name = newName.trim();
 		if (!name || newAge === null) return;
 		const id = family.data.profiles.reduce((m, p) => Math.max(m, p.id), 0) + 1;
+		const age = Number(newAge);
 		family.data.profiles.push({
 			id,
 			name,
-			age: Number(newAge),
-			role: Number(newAge) >= 18 ? 'parent' : 'child',
+			age,
+			role: age >= 18 ? 'parent' : 'child',
 			color: newColor,
 			avatarEmoji: newAvatar,
 			tasks: { done: 0, total: 0 }
 		});
+		// Give kids sensible starter routines from the age library.
+		family.seedRoutinesForProfile(id, age);
 		newName = '';
 		newAge = null;
 		onChange();

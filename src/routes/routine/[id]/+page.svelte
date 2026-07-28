@@ -2,7 +2,9 @@
 	import { page } from '$app/state';
 	import { family } from '$lib/stores/family.svelte';
 	import { profileColorVar, profileTint } from '$lib/design/colors';
+	import { dateKey } from '$lib/time';
 	import type { Feeling } from '$lib/types';
+	import type { PageData } from './$types';
 	import Avatar from '$lib/components/Avatar.svelte';
 	import RoutineStepCard from '$lib/components/RoutineStepCard.svelte';
 	import StreakBadge from '$lib/components/StreakBadge.svelte';
@@ -10,6 +12,15 @@
 	import FeelingsPicker from '$lib/components/FeelingsPicker.svelte';
 	import Confetti from '$lib/components/Confetti.svelte';
 	import { ArrowLeft } from 'lucide-svelte';
+
+	let { data }: { data: PageData } = $props();
+
+	// Hydrate the store from persisted config + progress (covers a direct load
+	// of this full-screen route, outside the (app) layout).
+	$effect(() => {
+		family.applyConfig(data.config);
+		family.applyProgress(data.progress);
+	});
 
 	const routineId = $derived(Number(page.params.id));
 	const routine = $derived(family.routine(routineId));
@@ -20,6 +31,28 @@
 	const doneCount = $derived(routine?.steps.filter((s) => s.done).length ?? 0);
 	const allDone = $derived(total > 0 && doneCount === total);
 	const progress = $derived(total ? (doneCount / total) * 100 : 0);
+
+	// Toggle a step, then persist the day's completion set and sync the streak.
+	async function onToggle(stepId: number) {
+		family.toggleStep(routineId, stepId);
+		try {
+			const res = await fetch(`/api/routine/${routineId}`, {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({
+					date: dateKey(),
+					doneStepIds: family.doneStepIds(routineId),
+					total
+				})
+			});
+			if (res.ok) {
+				const p = await res.json();
+				family.setStreak(routineId, p.streakCurrent, p.streakLongest, p.lastCompletedDate);
+			}
+		} catch {
+			/* offline; next toggle re-syncs */
+		}
+	}
 
 	// Celebrate once when the routine flips to fully complete.
 	let awarded = $state(false);
@@ -34,16 +67,36 @@
 		}
 	});
 
-	const baseStars = $derived(profile ? family.starsFor(profile.id) : 0);
-	const displayStars = $derived(baseStars + (awarded ? 1 : 0));
-	const displayStreak = $derived((routine?.streak.current ?? 0) + (awarded ? 1 : 0));
+	const stars = $derived(profile ? family.starsFor(profile.id) : 0);
+	const streakNow = $derived(routine?.streak.current ?? 0);
+	// A milestone lands on multiples of 5 (only celebrated when just completed).
+	const milestone = $derived(awarded && streakNow > 0 && streakNow % 5 === 0);
 
-	// Today's Feelings (morning routines).
+	// Today's Feelings (morning routines) — seeded from persisted state.
 	let feeling = $state<Feeling | undefined>(undefined);
 	$effect(() => {
 		const existing = profile ? family.feelingFor(profile.id) : undefined;
 		if (existing && !feeling) feeling = { emoji: existing.emoji, label: existing.label };
 	});
+
+	async function saveFeeling(f: Feeling) {
+		if (!profile) return;
+		family.setFeelingToday(profile.id, f.emoji, f.label);
+		try {
+			await fetch('/api/feeling', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({
+					profileId: profile.id,
+					date: dateKey(),
+					emoji: f.emoji,
+					label: f.label
+				})
+			});
+		} catch {
+			/* offline */
+		}
+	}
 </script>
 
 {#if !routine || !profile}
@@ -72,8 +125,8 @@
 				</div>
 			</div>
 			<div class="stats">
-				<StreakBadge current={displayStreak} size="lg" />
-				<StarTally stars={displayStars} size="lg" />
+				<StreakBadge current={streakNow} size="lg" />
+				<StarTally {stars} size="lg" />
 			</div>
 		</header>
 
@@ -85,7 +138,11 @@
 		{#if awarded}
 			<div class="celebrate type-rounded">
 				<span class="big">🎉 Great job, {profile.name}!</span>
-				<span class="sub type-body-lg">You earned a star and grew your streak!</span>
+				{#if milestone}
+					<span class="sub type-body-lg">🔥 {streakNow}-day streak — amazing!</span>
+				{:else}
+					<span class="sub type-body-lg">You earned a star and grew your streak!</span>
+				{/if}
 			</div>
 		{/if}
 
@@ -96,7 +153,7 @@
 						{step}
 						color={profile.color}
 						{showText}
-						onToggle={() => family.toggleStep(routine.id, step.id)}
+						onToggle={() => onToggle(step.id)}
 					/>
 				</li>
 			{/each}
@@ -105,7 +162,7 @@
 		{#if routine.timeOfDay === 'morning' && family.config.features.feelings}
 			<section class="feelings-block">
 				<h2 class="type-heading">How are you feeling today?</h2>
-				<FeelingsPicker bind:selected={feeling} />
+				<FeelingsPicker bind:selected={feeling} onpick={saveFeeling} />
 			</section>
 		{/if}
 	</div>

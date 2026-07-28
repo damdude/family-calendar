@@ -4,11 +4,13 @@
 
 	let {
 		selected = $bindable(undefined),
-		compact = false
-	}: { selected?: Feeling; compact?: boolean } = $props();
+		compact = false,
+		onpick
+	}: { selected?: Feeling; compact?: boolean; onpick?: (f: Feeling) => void } = $props();
 
 	function pick(f: Feeling) {
 		selected = f;
+		onpick?.(f);
 	}
 </script>
 

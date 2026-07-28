@@ -7,9 +7,10 @@
 	let { data, children }: { data: LayoutData; children: import('svelte').Snippet } = $props();
 
 	// Apply persisted config (family name, profiles, feature flags, orientation)
-	// onto the demo-seeded store whenever it changes.
+	// and kid progress (streaks, completions, feelings) onto the store.
 	$effect(() => {
 		family.applyConfig(data.config);
+		family.applyProgress(data.progress);
 	});
 </script>
 

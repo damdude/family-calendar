@@ -14,6 +14,7 @@
 	const stars = $derived(family.starsFor(profile.id));
 	const bestStreak = $derived(Math.max(0, ...routines.map((r) => r.streak.current)));
 	const feeling = $derived(family.feelingFor(profile.id));
+	const feelingHistory = $derived(family.feelingHistory(profile.id, 7));
 
 	// Nearest reward the child can aim for.
 	const nextReward = $derived(
@@ -38,6 +39,17 @@
 			</div>
 		</div>
 	</header>
+
+	{#if feelingHistory.length}
+		<section class="feelings-strip">
+			<h2 class="type-heading">Recent feelings</h2>
+			<div class="strip">
+				{#each feelingHistory as f (f.date)}
+					<span class="fbubble" title="{f.feeling.label} · {f.date}">{f.feeling.emoji}</span>
+				{/each}
+			</div>
+		</section>
+	{/if}
 
 	<section class="block">
 		<h2 class="type-heading">My Routines</h2>
@@ -91,6 +103,26 @@
 		font-size: var(--text-lg);
 		font-weight: var(--weight-semibold);
 		color: var(--color-text-secondary);
+	}
+	.feelings-strip {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-2);
+	}
+	.strip {
+		display: flex;
+		gap: var(--space-2);
+		flex-wrap: wrap;
+	}
+	.fbubble {
+		display: grid;
+		place-items: center;
+		width: 44px;
+		height: 44px;
+		border-radius: var(--radius-pill);
+		background: var(--color-surface);
+		box-shadow: var(--shadow-card);
+		font-size: 1.5rem;
 	}
 	.block {
 		display: flex;

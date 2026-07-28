@@ -99,3 +99,23 @@ export function sameDay(a: Date, b: Date): boolean {
 export function fractionalHour(d: Date): number {
 	return d.getHours() + d.getMinutes() / 60;
 }
+
+/** Local date key, YYYY-MM-DD. */
+export function dateKey(d = new Date()): string {
+	return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
+		d.getDate()
+	).padStart(2, '0')}`;
+}
+
+/** Parse a YYYY-MM-DD key as a LOCAL date (avoids UTC parsing shifts). */
+export function parseDateKey(key: string): Date {
+	const [y, m, d] = key.split('-').map(Number);
+	return new Date(y, m - 1, d);
+}
+
+/** Whether `key` (YYYY-MM-DD) is exactly one day before `ref`. */
+export function isYesterday(key: string, ref = new Date()): boolean {
+	const y = new Date(ref);
+	y.setDate(y.getDate() - 1);
+	return key === dateKey(y);
+}
