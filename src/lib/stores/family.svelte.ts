@@ -263,6 +263,85 @@ class FamilyStore {
 		const it = list?.items.find((i) => i.id === itemId);
 		if (it) it.completed = !it.completed;
 	}
+
+	/** Apply persisted meals + lists over the demo data. */
+	applyFamilyData(data: { meals: FamilyData['meals']; lists: FamilyData['lists'] } | null) {
+		if (!data) return;
+		this.data.meals = data.meals;
+		this.data.lists = data.lists;
+	}
+
+	/** Snapshot meals + lists for persistence. */
+	familyDataSnapshot() {
+		return { meals: this.data.meals, lists: this.data.lists };
+	}
+
+	private fdTimer?: ReturnType<typeof setTimeout>;
+	/** Persist meals + lists to the server (debounced). Client-only. */
+	persistFamilyData() {
+		clearTimeout(this.fdTimer);
+		this.fdTimer = setTimeout(() => {
+			fetch('/api/family-data', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify(this.familyDataSnapshot())
+			}).catch(() => {});
+		}, 400);
+	}
+
+	private nextId(items: { id: number }[]): number {
+		return items.reduce((m, x) => Math.max(m, x.id), 0) + 1;
+	}
+
+	addListItem(listId: number, text: string) {
+		const list = this.data.lists.find((l) => l.id === listId);
+		if (!list || !text.trim()) return;
+		list.items.push({ id: this.nextId(list.items), text: text.trim(), completed: false });
+	}
+
+	removeListItem(listId: number, itemId: number) {
+		const list = this.data.lists.find((l) => l.id === listId);
+		if (!list) return;
+		const i = list.items.findIndex((x) => x.id === itemId);
+		if (i >= 0) list.items.splice(i, 1);
+	}
+
+	addList(name: string, kind: FamilyData['lists'][number]['kind'] = 'custom', icon = '📝') {
+		if (!name.trim()) return;
+		this.data.lists.push({
+			id: this.nextId(this.data.lists),
+			name: name.trim(),
+			kind,
+			icon,
+			items: []
+		});
+	}
+
+	/** Set (or clear) the meal for a date + type. */
+	setMeal(
+		date: string,
+		mealType: FamilyData['meals'][number]['mealType'],
+		name: string,
+		emoji: string
+	) {
+		const existing = this.data.meals.find((m) => m.date === date && m.mealType === mealType);
+		if (!name.trim()) {
+			if (existing) this.data.meals.splice(this.data.meals.indexOf(existing), 1);
+			return;
+		}
+		if (existing) {
+			existing.name = name.trim();
+			existing.emoji = emoji;
+		} else {
+			this.data.meals.push({
+				id: this.nextId(this.data.meals),
+				date,
+				mealType,
+				name: name.trim(),
+				emoji
+			});
+		}
+	}
 }
 
 export const family = new FamilyStore();

@@ -10,7 +10,7 @@ starting the next.
 | 2     | Config schema + QR/phone setup wizard + SSE live preview                               | ✅ Done    |
 | 3     | Kid mode + Settings (orientation), encrypted photo upload, config/progress persistence | ✅ Done    |
 | 4     | Calendar sync (Google device flow), encrypted SQLite storage, SQLite migrations        | ✅ Done    |
-| 5     | Meal planning + custom lists persistence + Sites of Interest scraper                   | ⏳ Planned |
+| 5     | Meal planning + custom lists persistence + Sites of Interest scraper                   | ✅ Done    |
 | 6     | Deploy to Pi + TV read-only mode (kiosk, systemd, HDMI)                                | ⏳ Planned |
 | 7     | OTA update mechanism + fail-safe rollback                                              | ⏳ Planned |
 | 8     | Touchscreen support (pointer events) + PIN-locked admin + parental lock                | ⏳ Planned |

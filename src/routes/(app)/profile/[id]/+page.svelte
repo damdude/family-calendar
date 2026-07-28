@@ -2,8 +2,11 @@
 	import { page } from '$app/state';
 	import { family } from '$lib/stores/family.svelte';
 	import AgeAdaptive from '$lib/ui/AgeAdaptive.svelte';
+	import SitesPanel from '$lib/components/SitesPanel.svelte';
 	import { ArrowLeft } from 'lucide-svelte';
+	import type { PageData } from './$types';
 
+	let { data }: { data: PageData } = $props();
 	const profile = $derived(family.profile(Number(page.params.id)));
 </script>
 
@@ -14,6 +17,9 @@
 
 	{#if profile}
 		<AgeAdaptive {profile} />
+		{#if family.config.features.sitesOfInterest}
+			<SitesPanel profileId={profile.id} initial={data.sites} />
+		{/if}
 	{:else}
 		<p class="type-title">Profile not found</p>
 	{/if}

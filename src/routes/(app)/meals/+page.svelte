@@ -2,7 +2,7 @@
 	import { family } from '$lib/stores/family.svelte';
 	import type { MealType } from '$lib/types';
 	import { startOfWeek, weekColumns } from '$lib/time';
-	import { Plus } from 'lucide-svelte';
+	import { Plus, X } from 'lucide-svelte';
 
 	const weekStart = $derived(startOfWeek(new Date(), family.config.view.weekStartsOn));
 	const columns = $derived(weekColumns(weekStart, 7));
@@ -23,6 +23,36 @@
 		const key = ymd(date);
 		return family.data.meals.find((m) => m.date === key && m.mealType === type);
 	}
+
+	// Inline cell editing.
+	let editing = $state<{ date: string; type: MealType } | null>(null);
+	let draft = $state('');
+
+	function startEdit(date: string, type: MealType, current?: string) {
+		editing = { date, type };
+		draft = current ?? '';
+	}
+	function isEditing(date: string, type: MealType) {
+		return editing?.date === date && editing?.type === type;
+	}
+	/** Split a leading emoji off the text (so "🍕 Pizza" → emoji 🍕). */
+	function splitEmoji(text: string): { emoji: string; name: string } {
+		const m = text.trim().match(/^(\p{Extended_Pictographic}️?)\s*(.*)$/u);
+		if (m) return { emoji: m[1], name: m[2] };
+		return { emoji: '🍽️', name: text.trim() };
+	}
+	function commit() {
+		if (!editing) return;
+		const { emoji, name } = splitEmoji(draft);
+		family.setMeal(editing.date, editing.type, name, emoji);
+		family.persistFamilyData();
+		editing = null;
+		draft = '';
+	}
+	function clearMeal(date: string, type: MealType) {
+		family.setMeal(date, type, '', '');
+		family.persistFamilyData();
+	}
 </script>
 
 <div class="meals-page">
@@ -40,13 +70,45 @@
 		{#each mealTypes as type (type)}
 			<div class="typelabel type-label">{typeLabel[type]}</div>
 			{#each columns as col (col.date.getTime())}
+				{@const key = ymd(col.date)}
 				{@const m = mealAt(col.date, type)}
 				<div class="cell" class:today={col.isToday}>
-					{#if m}
-						<span class="emoji">{m.emoji}</span>
-						<span class="name type-caption">{m.name}</span>
+					{#if isEditing(key, type)}
+						<!-- svelte-ignore a11y_autofocus -->
+						<input
+							class="celledit"
+							type="text"
+							bind:value={draft}
+							placeholder="🍕 Meal"
+							autofocus
+							onkeydown={(e) => {
+								if (e.key === 'Enter') commit();
+								if (e.key === 'Escape') editing = null;
+							}}
+							onblur={commit}
+						/>
+					{:else if m}
+						<button
+							class="filled"
+							type="button"
+							onclick={() => startEdit(key, type, `${m.emoji} ${m.name}`)}
+						>
+							<span class="emoji">{m.emoji}</span>
+							<span class="name type-caption">{m.name}</span>
+						</button>
+						<button
+							class="clear"
+							type="button"
+							aria-label="Clear meal"
+							onclick={() => clearMeal(key, type)}><X size={12} /></button
+						>
 					{:else}
-						<button class="add pressable" type="button" aria-label="Add {typeLabel[type]}">
+						<button
+							class="add pressable"
+							type="button"
+							aria-label="Add {typeLabel[type]}"
+							onclick={() => startEdit(key, type)}
+						>
 							<Plus size={18} />
 						</button>
 					{/if}
@@ -104,6 +166,7 @@
 		color: var(--color-text-secondary);
 	}
 	.cell {
+		position: relative;
 		min-height: 84px;
 		border-radius: var(--radius-md);
 		background: var(--color-surface);
@@ -115,6 +178,47 @@
 		gap: 4px;
 		padding: var(--space-2);
 		text-align: center;
+	}
+	.filled {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 4px;
+		width: 100%;
+		height: 100%;
+		justify-content: center;
+	}
+	.clear {
+		position: absolute;
+		top: 4px;
+		right: 4px;
+		display: grid;
+		place-items: center;
+		width: 20px;
+		height: 20px;
+		border-radius: var(--radius-pill);
+		color: var(--color-text-tertiary);
+		opacity: 0;
+		transition: opacity var(--dur-quick) var(--ease-out);
+	}
+	.cell:hover .clear {
+		opacity: 1;
+	}
+	.clear:hover {
+		background: var(--color-surface-elevated);
+		color: var(--color-accent-warning);
+	}
+	.celledit {
+		width: 100%;
+		border: none;
+		background: transparent;
+		text-align: center;
+		font-size: var(--text-base);
+		color: var(--color-text-primary);
+		outline: 2px solid var(--color-profile-blue);
+		outline-offset: 2px;
+		border-radius: var(--radius-sm);
+		padding: 4px;
 	}
 	.cell.today {
 		box-shadow:

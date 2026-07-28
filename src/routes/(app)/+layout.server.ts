@@ -1,5 +1,6 @@
 import { loadConfig } from '$lib/server/config';
 import { loadProgress } from '$lib/server/progress';
+import { loadFamilyData } from '$lib/server/familydata';
 import { getSyncedEventsLean } from '$lib/server/db/repo';
 import type { LayoutServerLoad } from './$types';
 
@@ -12,6 +13,7 @@ export const load: LayoutServerLoad = async () => {
 	return {
 		config: await loadConfig(),
 		progress: await loadProgress(),
+		familyData: await loadFamilyData(),
 		syncedEvents: getSyncedEventsLean(from, to)
 	};
 };
