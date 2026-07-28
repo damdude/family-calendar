@@ -8,8 +8,8 @@ starting the next.
 | 0     | Repo scaffold (SvelteKit 5 + TS + Tailwind, docs, ADRs, license)                            | ✅ Done    |
 | 1     | Design system + fake data + primary mockup views                                            | ✅ Done    |
 | 2     | Config schema + QR/phone setup wizard + SSE live preview                                    | ✅ Done    |
-| 3     | Kid mode deepening — routine library, streak persistence, celebration polish, feelings data | ⏳ Planned |
-| 4     | Calendar sync (Google device flow), encrypted at-rest storage, SQLite migrations            | ⏳ Planned |
+| 3     | Kid mode + Settings (orientation), encrypted photo upload, config/progress persistence      | ✅ Done    |
+| 4     | Calendar sync (Google device flow), encrypted SQLite storage, SQLite migrations             | ⏳ Planned |
 | 5     | Meal planning + custom lists persistence + Sites of Interest scraper                        | ⏳ Planned |
 | 6     | Deploy to Pi + TV read-only mode (kiosk, systemd, HDMI)                                     | ⏳ Planned |
 | 7     | OTA update mechanism + fail-safe rollback                                                   | ⏳ Planned |
