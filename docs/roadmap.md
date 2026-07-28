@@ -14,7 +14,7 @@ starting the next.
 | 6     | Deploy to Pi + TV read-only mode (kiosk, systemd, HDMI)                                | ✅ Done    |
 | 7     | OTA update mechanism + fail-safe rollback                                              | ✅ Done    |
 | 8     | Touchscreen support (pointer events) + PIN-locked admin + parental lock                | ✅ Done    |
-| 9     | Screensaver (B&W photo rotation + B&W clock) + sleep mode window                       | ⏳ Planned |
+| 9     | Screensaver (B| 9     | Screensaver (B&W photo rotation + B&W clock) + sleep mode window                       | ⏳ Planned |W photo rotation + B| 9     | Screensaver (B&W photo rotation + B&W clock) + sleep mode window                       | ⏳ Planned |W clock) + sleep mode window                       | ✅ Done    |
 | 10    | Polish, docs, one-liner install, CONTRIBUTING.md, kit packaging                        | ⏳ Planned |
 
 ## Design references

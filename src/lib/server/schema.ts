@@ -72,6 +72,14 @@ const SleepWindowSchema = z
 	})
 	.prefault({});
 
+const ScreensaverSchema = z
+	.object({
+		enabled: z.boolean().default(true),
+		mode: z.enum(['clock', 'photos']).default('clock'),
+		idleMinutes: z.number().int().min(0).max(240).default(10)
+	})
+	.prefault({});
+
 const KioskPrefsSchema = z
 	.object({
 		readOnly: z.boolean().default(false),
@@ -91,6 +99,7 @@ export const AppConfigSchema = z
 		features: FeatureFlagsSchema,
 		view: ViewPrefsSchema,
 		sleep: SleepWindowSchema,
+		screensaver: ScreensaverSchema,
 		kiosk: KioskPrefsSchema,
 		updates: UpdatePrefsSchema,
 		celebrations: z.boolean().default(true)

@@ -100,6 +100,18 @@ export function fractionalHour(d: Date): number {
 	return d.getHours() + d.getMinutes() / 60;
 }
 
+/** Whether `now` falls in the [start,end) HH:MM window (handles overnight wrap). */
+export function isWithinWindow(now: Date, start: string, end: string): boolean {
+	const [sh, sm] = start.split(':').map(Number);
+	const [eh, em] = end.split(':').map(Number);
+	const cur = now.getHours() * 60 + now.getMinutes();
+	const s = sh * 60 + sm;
+	const e = eh * 60 + em;
+	if (s === e) return false;
+	if (s < e) return cur >= s && cur < e;
+	return cur >= s || cur < e; // wraps past midnight
+}
+
 /** Local date key, YYYY-MM-DD. */
 export function dateKey(d = new Date()): string {
 	return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(

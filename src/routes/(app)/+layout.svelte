@@ -2,7 +2,9 @@
 	import { family } from '$lib/stores/family.svelte';
 	import Sidebar from '$lib/components/Sidebar.svelte';
 	import TopBar from '$lib/components/TopBar.svelte';
+	import Screensaver from '$lib/components/Screensaver.svelte';
 	import { dragScroll } from '$lib/actions/dragScroll';
+	import { isWithinWindow } from '$lib/time';
 	import type { LayoutData } from './$types';
 
 	let { data, children }: { data: LayoutData; children: import('svelte').Snippet } = $props();
@@ -15,6 +17,34 @@
 		family.applyFamilyData(data.familyData);
 		family.applySyncedEvents(data.syncedEvents);
 	});
+
+	// --- Screensaver / sleep mode ---
+	let tick = $state(Date.now());
+	let lastActivity = $state(Date.now());
+	$effect(() => {
+		const iv = setInterval(() => (tick = Date.now()), 5000);
+		const act = () => {
+			lastActivity = Date.now();
+			tick = Date.now();
+		};
+		window.addEventListener('pointerdown', act);
+		window.addEventListener('keydown', act);
+		return () => {
+			clearInterval(iv);
+			window.removeEventListener('pointerdown', act);
+			window.removeEventListener('keydown', act);
+		};
+	});
+	const sv = $derived(family.config.screensaver);
+	// The sleep window forces the screensaver on (a tap won't dismiss it).
+	const sleepActive = $derived(
+		family.config.sleep.enabled &&
+			isWithinWindow(new Date(tick), family.config.sleep.start, family.config.sleep.end)
+	);
+	const idleActive = $derived(
+		sv.enabled && sv.idleMinutes > 0 && tick - lastActivity > sv.idleMinutes * 60_000
+	);
+	const screensaverActive = $derived(sv.enabled && (sleepActive || idleActive));
 </script>
 
 <div class="app" data-orientation={family.orientation}>
@@ -26,6 +56,10 @@
 		</main>
 	</div>
 </div>
+
+{#if screensaverActive}
+	<Screensaver mode={sv.mode} />
+{/if}
 
 <style>
 	.app {

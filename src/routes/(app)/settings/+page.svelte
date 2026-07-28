@@ -268,6 +268,110 @@
 			</div>
 		</section>
 
+		<!-- Screensaver & sleep -->
+		<section class="card">
+			<div class="cardhead">
+				<h2 class="type-heading">Screensaver &amp; sleep</h2>
+			</div>
+			<div class="rowset">
+				<div class="row">
+					<span class="type-label">Screensaver</span>
+					<button
+						type="button"
+						class="switch"
+						class:on={family.config.screensaver.enabled}
+						role="switch"
+						aria-checked={family.config.screensaver.enabled}
+						aria-label="Screensaver"
+						onclick={() => {
+							family.config.screensaver.enabled = !family.config.screensaver.enabled;
+							persist();
+						}}
+					>
+						<span class="knob"></span>
+					</button>
+				</div>
+				<div class="row">
+					<span class="type-label">Mode</span>
+					<div class="segmented">
+						<button
+							type="button"
+							class="seg"
+							class:on={family.config.screensaver.mode === 'clock'}
+							onclick={() => {
+								family.config.screensaver.mode = 'clock';
+								persist();
+							}}>Clock</button
+						>
+						<button
+							type="button"
+							class="seg"
+							class:on={family.config.screensaver.mode === 'photos'}
+							onclick={() => {
+								family.config.screensaver.mode = 'photos';
+								persist();
+							}}>Photos</button
+						>
+					</div>
+				</div>
+				<div class="row">
+					<span class="type-label">Show after idle</span>
+					<div class="segmented">
+						{#each [0, 5, 10, 30] as m (m)}
+							<button
+								type="button"
+								class="seg"
+								class:on={family.config.screensaver.idleMinutes === m}
+								onclick={() => {
+									family.config.screensaver.idleMinutes = m;
+									persist();
+								}}>{m === 0 ? 'Off' : m + 'm'}</button
+							>
+						{/each}
+					</div>
+				</div>
+				<div class="row">
+					<span class="type-label"
+						>Sleep window <span class="hint type-caption">screensaver stays on</span></span
+					>
+					<button
+						type="button"
+						class="switch"
+						class:on={family.config.sleep.enabled}
+						role="switch"
+						aria-checked={family.config.sleep.enabled}
+						aria-label="Sleep window"
+						onclick={() => {
+							family.config.sleep.enabled = !family.config.sleep.enabled;
+							persist();
+						}}
+					>
+						<span class="knob"></span>
+					</button>
+				</div>
+				{#if family.config.sleep.enabled}
+					<div class="row">
+						<span class="type-label">From — to</span>
+						<div class="times">
+							<input
+								class="timeinput"
+								type="time"
+								bind:value={family.config.sleep.start}
+								onchange={persist}
+							/>
+							<span class="dash">–</span>
+							<input
+								class="timeinput"
+								type="time"
+								bind:value={family.config.sleep.end}
+								onchange={persist}
+							/>
+						</div>
+					</div>
+				{/if}
+			</div>
+		</section>
+
 		<!-- Features -->
 		<section class="card">
 			<div class="cardhead">
@@ -473,6 +577,22 @@
 	.pinform .input {
 		flex: 1;
 		min-width: 140px;
+	}
+	.times {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--space-2);
+	}
+	.timeinput {
+		padding: 6px 10px;
+		border-radius: var(--radius-sm);
+		border: 1px solid var(--color-border-subtle);
+		background: var(--color-surface);
+		color: var(--color-text-primary);
+		font-variant-numeric: tabular-nums;
+	}
+	.dash {
+		color: var(--color-text-tertiary);
 	}
 	.input {
 		width: 100%;

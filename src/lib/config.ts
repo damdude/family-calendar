@@ -59,6 +59,15 @@ export interface SleepWindow {
 	enabled: boolean;
 }
 
+export type ScreensaverMode = 'clock' | 'photos';
+
+export interface ScreensaverPrefs {
+	enabled: boolean;
+	mode: ScreensaverMode;
+	/** Minutes of inactivity before the screensaver appears (0 = only in sleep window). */
+	idleMinutes: number;
+}
+
 export interface KioskPrefs {
 	/** Read-only TV mode: the display shows everything but editing is disabled
 	 *  (edits happen from a paired phone). */
@@ -78,6 +87,7 @@ export interface AppConfig {
 	features: FeatureFlags;
 	view: ViewPrefs;
 	sleep: SleepWindow;
+	screensaver: ScreensaverPrefs;
 	kiosk: KioskPrefs;
 	updates: UpdatePrefs;
 	/** Master switch for celebration animations (confetti, star bursts). */
@@ -136,6 +146,11 @@ export const defaultConfig: AppConfig = {
 		start: '21:00',
 		end: '06:30',
 		enabled: true
+	},
+	screensaver: {
+		enabled: true,
+		mode: 'clock',
+		idleMinutes: 10
 	},
 	kiosk: {
 		readOnly: false,
