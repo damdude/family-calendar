@@ -1,0 +1,60 @@
+name: Build Raspberry Pi image
+
+# Builds a ready-to-flash Raspberry Pi OS Lite image with Family Calendar +
+# kiosk baked in. Trigger manually (Actions → Build Raspberry Pi image → Run)
+# or on a published release. The build runs pi-gen under ARM emulation and
+# takes ~30–60 min.
+#
+# The default is a 32-bit (armhf) image so it boots on Pi 2, Pi 3 AND Pi 4.
+
+on:
+  workflow_dispatch:
+    inputs:
+      password:
+        description: 'Password for the "pi" user (change this!)'
+        required: true
+        default: 'changeme'
+      hostname:
+        description: 'Device hostname (mDNS: <hostname>.local)'
+        required: false
+        default: 'familycalendar'
+  release:
+    types: [published]
+
+jobs:
+  build-image:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build image with pi-gen
+        id: build
+        uses: usimd/pi-gen-action@v1
+        with:
+          image-name: family-calendar
+          # Raspberry Pi OS Lite = stages 0–2, then our app stage.
+          stage-list: stage0 stage1 stage2 ./pi-gen/stage-family-calendar
+          release: bookworm
+          # 32-bit userland → runs on Pi 2/3/4.
+          pi-gen-version: arm
+          hostname: ${{ github.event.inputs.hostname || 'familycalendar' }}
+          username: pi
+          password: ${{ github.event.inputs.password || 'changeme' }}
+          enable-ssh: 1
+          # emoji + build deps are installed by the stage's 00-packages.
+          verbose-output: true
+          compression: none
+
+      - name: Upload image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: family-calendar-pi-image
+          path: ${{ steps.build.outputs.image-path }}
+          if-no-files-found: error
+
+      - name: Attach image to release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.build.outputs.image-path }}

@@ -38,9 +38,20 @@ development toward a 1.0 release.
 - **Screensaver** (B&W clock + photo rotation) + sleep-window scheduling.
 - One-line bootstrap installer, CONTRIBUTING guide, kit-packaging guide.
 
+### Added — after the initial 11 batches
+
+- **Universal calendar subscriptions**: add any calendar by its iCal/webcal link
+  (Google, Apple iCloud, Outlook, or any ICS feed) — fetched, parsed, and
+  recurrence-expanded into the grid. Google OAuth remains an option.
+- **Prebuilt SD image via GitHub Actions** (`pi-gen`): one 32-bit image boots on
+  Pi 2 / 3 / 4 with the app + a cage Wayland kiosk baked in; first boot runs the
+  QR setup, then self-updates from GitHub. See `docs/image.md`.
+
 ### Notes
 
-- Google Calendar sync requires a Google Cloud OAuth client
-  (`GOOGLE_OAUTH_CLIENT_ID`/`SECRET` in `.env`).
-- Not yet implemented: Apple iCloud / Outlook sync, a dedicated Tasks/Recipes/
-  Photos tab (Photos screensaver ships; a photo library does not).
+- The prebuilt image is CI-built (untested on hardware in this repo's history) —
+  flash and report issues.
+- Google _account connect_ (OAuth) still needs a Google Cloud client
+  (`GOOGLE_OAUTH_CLIENT_ID`/`SECRET`); the **iCal link** path needs no credentials.
+- Not yet implemented: a dedicated Tasks / Recipes / Photos tab (the Photos-driven
+  screensaver ships; a photo library does not).

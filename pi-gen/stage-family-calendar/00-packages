@@ -1,0 +1,9 @@
+git
+curl
+ca-certificates
+build-essential
+python3
+chromium-browser
+cage
+seatd
+fonts-noto-color-emoji

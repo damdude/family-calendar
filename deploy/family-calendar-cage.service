@@ -1,0 +1,25 @@
+# Kiosk for Raspberry Pi OS **Lite** (no desktop): cage is a minimal Wayland
+# kiosk compositor that runs a single fullscreen app on tty1. This is what the
+# baked SD image uses. (On a full desktop / labwc session, use
+# family-calendar-kiosk.service instead.)
+[Unit]
+Description=Family Calendar kiosk (cage + Chromium)
+After=family-calendar.service systemd-user-sessions.target
+Wants=family-calendar.service
+Conflicts=getty@tty1.service
+
+[Service]
+User=pi
+PAMName=login
+TTYPath=/dev/tty1
+StandardInput=tty
+StandardOutput=journal
+StandardError=journal
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+# cage runs the kiosk script as its single Wayland client.
+ExecStart=/usr/bin/cage -- /home/pi/family-calendar/deploy/start-kiosk.sh
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

@@ -5,7 +5,8 @@ An open-source, self-hosted, no-subscription family calendar dashboard designed 
 ## Features
 
 - Multi-user family profiles with per-person color coding and avatars
-- Sync with Google Calendar, Apple iCloud (CalDAV), Outlook
+- Subscribe to **any** calendar by iCal/webcal link (Google, Apple iCloud,
+  Outlook, or any ICS feed); optional Google account connect
 - Kid-friendly visual routines with icons, streaks, and celebration animations
 - Age-aware UI (adapts for pre-readers, school-age, teens, adults)
 - Chore charts, star rewards, meal planning, custom lists
@@ -29,6 +30,9 @@ server, Chromium kiosk, and systemd services:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/damdude/family-calendar/main/scripts/bootstrap.sh | bash
 ```
+
+Or **flash a ready-made SD image** built by GitHub Actions (one 32-bit image
+boots on Pi 2 / 3 / 4) — see [`docs/image.md`](docs/image.md).
 
 On first boot the display shows a **QR code** — scan it with your phone to set up
 the family, profiles, and calendars (no keyboard needed on the Pi). Full details
