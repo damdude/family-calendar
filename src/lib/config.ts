@@ -63,6 +63,8 @@ export interface KioskPrefs {
 	/** Read-only TV mode: the display shows everything but editing is disabled
 	 *  (edits happen from a paired phone). */
 	readOnly: boolean;
+	/** Require the admin PIN to open Settings. */
+	parentalLock: boolean;
 }
 
 export interface UpdatePrefs {
@@ -136,7 +138,8 @@ export const defaultConfig: AppConfig = {
 		enabled: true
 	},
 	kiosk: {
-		readOnly: false
+		readOnly: false,
+		parentalLock: false
 	},
 	updates: {
 		paused: false,

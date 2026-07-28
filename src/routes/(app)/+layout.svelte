@@ -2,6 +2,7 @@
 	import { family } from '$lib/stores/family.svelte';
 	import Sidebar from '$lib/components/Sidebar.svelte';
 	import TopBar from '$lib/components/TopBar.svelte';
+	import { dragScroll } from '$lib/actions/dragScroll';
 	import type { LayoutData } from './$types';
 
 	let { data, children }: { data: LayoutData; children: import('svelte').Snippet } = $props();
@@ -20,7 +21,7 @@
 	<Sidebar />
 	<div class="content">
 		<TopBar />
-		<main>
+		<main use:dragScroll>
 			{@render children()}
 		</main>
 	</div>
@@ -46,6 +47,11 @@
 		min-height: 0;
 		overflow-y: auto;
 		padding: 0 var(--space-6) var(--space-6);
+		touch-action: pan-y;
+	}
+	main:global(.dragging) {
+		user-select: none;
+		cursor: grabbing;
 	}
 
 	/* Portrait: nav moves to the bottom as a horizontal bar. */

@@ -74,7 +74,8 @@ const SleepWindowSchema = z
 
 const KioskPrefsSchema = z
 	.object({
-		readOnly: z.boolean().default(false)
+		readOnly: z.boolean().default(false),
+		parentalLock: z.boolean().default(false)
 	})
 	.prefault({});
 
