@@ -1,0 +1,11 @@
+# One-shot OTA update check (invoked by family-calendar-update.timer).
+[Unit]
+Description=Family Calendar OTA update check
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=pi
+WorkingDirectory=/home/pi/family-calendar
+ExecStart=/home/pi/family-calendar/scripts/update.sh

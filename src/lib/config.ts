@@ -65,11 +65,19 @@ export interface KioskPrefs {
 	readOnly: boolean;
 }
 
+export interface UpdatePrefs {
+	/** Pause automatic OTA updates. */
+	paused: boolean;
+	/** How often the update timer checks (hours). */
+	intervalHours: number;
+}
+
 export interface AppConfig {
 	features: FeatureFlags;
 	view: ViewPrefs;
 	sleep: SleepWindow;
 	kiosk: KioskPrefs;
+	updates: UpdatePrefs;
 	/** Master switch for celebration animations (confetti, star bursts). */
 	celebrations: boolean;
 }
@@ -129,6 +137,10 @@ export const defaultConfig: AppConfig = {
 	},
 	kiosk: {
 		readOnly: false
+	},
+	updates: {
+		paused: false,
+		intervalHours: 4
 	},
 	celebrations: true
 };

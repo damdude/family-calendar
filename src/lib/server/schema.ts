@@ -78,12 +78,20 @@ const KioskPrefsSchema = z
 	})
 	.prefault({});
 
+const UpdatePrefsSchema = z
+	.object({
+		paused: z.boolean().default(false),
+		intervalHours: z.number().int().min(1).max(168).default(4)
+	})
+	.prefault({});
+
 export const AppConfigSchema = z
 	.object({
 		features: FeatureFlagsSchema,
 		view: ViewPrefsSchema,
 		sleep: SleepWindowSchema,
 		kiosk: KioskPrefsSchema,
+		updates: UpdatePrefsSchema,
 		celebrations: z.boolean().default(true)
 	})
 	.prefault({});

@@ -3,7 +3,28 @@
 	import type { FeatureFlags } from '$lib/config';
 	import ProfileEditor from '$lib/components/ProfileEditor.svelte';
 	import GoogleConnect from '$lib/components/GoogleConnect.svelte';
-	import { QrCode, Check } from 'lucide-svelte';
+	import { QrCode, Check, RefreshCw } from 'lucide-svelte';
+
+	// Update status.
+	let version = $state<{ commit: string; dirty: boolean } | null>(null);
+	let checking = $state(false);
+	let checkMsg = $state('');
+	$effect(() => {
+		fetch('/api/update')
+			.then((r) => (r.ok ? r.json() : null))
+			.then((v) => (version = v))
+			.catch(() => {});
+	});
+	async function checkUpdates() {
+		checking = true;
+		checkMsg = '';
+		try {
+			const r = await fetch('/api/update', { method: 'POST' });
+			checkMsg = r.ok ? 'Checking for updates…' : 'Could not start update check.';
+		} finally {
+			checking = false;
+		}
+	}
 
 	// Persist store snapshot to config.json (debounced) on any change.
 	let saveTimer: ReturnType<typeof setTimeout>;
@@ -220,6 +241,45 @@
 		<GoogleConnect />
 	</section>
 
+	<!-- Software updates -->
+	<section class="card">
+		<div class="cardhead"><h2 class="type-heading">Software updates</h2></div>
+		<div class="rowset">
+			<div class="row">
+				<span class="type-label"
+					>Version <span class="hint type-caption"
+						>{version ? version.commit + (version.dirty ? ' (modified)' : '') : '…'}</span
+					></span
+				>
+				<button type="button" class="pairbtn small" disabled={checking} onclick={checkUpdates}>
+					<RefreshCw size={15} /> Check now
+				</button>
+			</div>
+			<div class="row">
+				<span class="type-label"
+					>Automatic updates <span class="hint type-caption"
+						>every {family.config.updates.intervalHours}h</span
+					></span
+				>
+				<button
+					type="button"
+					class="switch"
+					class:on={!family.config.updates.paused}
+					role="switch"
+					aria-checked={!family.config.updates.paused}
+					aria-label="Automatic updates"
+					onclick={() => {
+						family.config.updates.paused = !family.config.updates.paused;
+						persist();
+					}}
+				>
+					<span class="knob"></span>
+				</button>
+			</div>
+			{#if checkMsg}<p class="type-caption hint">{checkMsg}</p>{/if}
+		</div>
+	</section>
+
 	<!-- Pairing -->
 	<section class="card">
 		<div class="cardhead"><h2 class="type-heading">Pair a phone</h2></div>
@@ -392,5 +452,13 @@
 		background: var(--color-text-primary);
 		color: var(--color-surface);
 		font-weight: var(--weight-semibold);
+	}
+	.pairbtn.small {
+		padding: 7px 14px;
+		gap: 6px;
+		font-size: var(--text-sm);
+	}
+	.pairbtn:disabled {
+		opacity: 0.5;
 	}
 </style>
