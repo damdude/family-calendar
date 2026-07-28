@@ -4,6 +4,7 @@
 	import type { FeatureFlags } from '$lib/config';
 	import ProfileEditor from '$lib/components/ProfileEditor.svelte';
 	import GoogleConnect from '$lib/components/GoogleConnect.svelte';
+	import CalendarLinks from '$lib/components/CalendarLinks.svelte';
 	import PinPad from '$lib/components/PinPad.svelte';
 	import { QrCode, Check, RefreshCw } from 'lucide-svelte';
 
@@ -398,12 +399,16 @@
 			</div>
 		</section>
 
-		<!-- Calendar accounts -->
+		<!-- Calendars -->
 		<section class="card">
 			<div class="cardhead">
-				<h2 class="type-heading">Calendar accounts</h2>
-				<p class="type-caption sub">Sync events from Google Calendar.</p>
+				<h2 class="type-heading">Calendars</h2>
+				<p class="type-caption sub">
+					Subscribe to any calendar by link, or connect a Google account.
+				</p>
 			</div>
+			<CalendarLinks />
+			<div class="divider"></div>
 			<GoogleConnect />
 		</section>
 
@@ -550,6 +555,11 @@
 		display: flex;
 		flex-direction: column;
 		gap: 2px;
+	}
+	.divider {
+		height: 1px;
+		background: var(--color-border-subtle);
+		margin: var(--space-1) 0;
 	}
 	.sub {
 		color: var(--color-text-tertiary);

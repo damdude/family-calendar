@@ -7,7 +7,26 @@ import {
 	listEvents,
 	refreshAccessToken
 } from './google';
-import { getOAuthToken, saveOAuthToken, upsertCalendar, upsertEvent } from './db/repo';
+import { fetchIcsEvents } from './ical';
+import {
+	clearCalendarEvents,
+	getCalendars,
+	getOAuthToken,
+	saveOAuthToken,
+	setCalendarSynced,
+	upsertCalendar,
+	upsertEvent
+} from './db/repo';
+
+/** The window we sync events within: 2 weeks back, 6 weeks forward. */
+function syncWindow(): { min: Date; max: Date } {
+	const now = new Date();
+	const min = new Date(now);
+	min.setDate(min.getDate() - 14);
+	const max = new Date(now);
+	max.setDate(max.getDate() + 42);
+	return { min, max };
+}
 
 /** Return a valid Google access token, refreshing (and persisting) if needed. */
 async function validGoogleAccessToken(): Promise<string | null> {
@@ -39,11 +58,7 @@ export async function syncGoogle(): Promise<number> {
 	const accessToken = await validGoogleAccessToken();
 	if (!accessToken) return 0;
 
-	const now = new Date();
-	const timeMin = new Date(now);
-	timeMin.setDate(timeMin.getDate() - 14);
-	const timeMax = new Date(now);
-	timeMax.setDate(timeMax.getDate() + 42);
+	const { min: timeMin, max: timeMax } = syncWindow();
 
 	let count = 0;
 	const calendars = await listCalendars(accessToken);
@@ -70,4 +85,45 @@ export async function syncGoogle(): Promise<number> {
 		}
 	}
 	return count;
+}
+
+/**
+ * Sync all ICS/webcal subscriptions. Each feed is fully re-materialized within
+ * the window (removed/changed occurrences drop out). Returns events synced.
+ */
+export async function syncIcal(): Promise<number> {
+	const cals = getCalendars('ical');
+	if (cals.length === 0) return 0;
+	const { min, max } = syncWindow();
+
+	let count = 0;
+	for (const cal of cals) {
+		try {
+			const events = await fetchIcsEvents(cal.externalId, min, max);
+			clearCalendarEvents(cal.id);
+			for (const e of events) {
+				upsertEvent({
+					calendarId: cal.id,
+					externalId: e.externalId,
+					startTs: e.startTs,
+					endTs: e.endTs,
+					allDay: e.allDay,
+					title: e.title,
+					description: e.description,
+					location: e.location
+				});
+				count += 1;
+			}
+			setCalendarSynced(cal.id);
+		} catch {
+			// Leave the last good events in place if a feed is temporarily down.
+		}
+	}
+	return count;
+}
+
+/** Sync every connected source (Google OAuth + ICS links). */
+export async function syncAll(): Promise<number> {
+	const [g, i] = await Promise.all([syncGoogle().catch(() => 0), syncIcal().catch(() => 0)]);
+	return g + i;
 }

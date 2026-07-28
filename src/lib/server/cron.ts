@@ -1,7 +1,7 @@
 /** Background schedulers (server-only). Started once from hooks.server.ts. */
 
 import cron from 'node-cron';
-import { syncGoogle } from './sync';
+import { syncAll } from './sync';
 import { refreshAllSites } from './sites';
 
 let started = false;
@@ -10,10 +10,10 @@ export function startScheduler(): void {
 	if (started) return;
 	started = true;
 
-	// Calendar sync every 15 minutes (no-op when not connected).
+	// Calendar sync (Google + ICS links) every 15 minutes (no-op when none).
 	cron.schedule('*/15 * * * *', async () => {
 		try {
-			await syncGoogle();
+			await syncAll();
 		} catch {
 			/* transient; next tick retries */
 		}

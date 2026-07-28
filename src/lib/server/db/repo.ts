@@ -89,6 +89,60 @@ export function upsertCalendar(c: {
 	).id;
 }
 
+export interface CalendarRow {
+	id: number;
+	provider: string;
+	externalId: string;
+	name: string | null;
+	colorHex: string | null;
+	profileId: number | null;
+	lastSync: number | null;
+}
+
+/** All calendars, optionally filtered by provider (e.g. 'ical'). */
+export function getCalendars(provider?: string): CalendarRow[] {
+	const db = getDb();
+	const rows = (
+		provider
+			? db.prepare('SELECT * FROM calendars WHERE provider = ? ORDER BY id').all(provider)
+			: db.prepare('SELECT * FROM calendars ORDER BY id').all()
+	) as Array<{
+		id: number;
+		provider: string;
+		external_id: string;
+		name: string | null;
+		color_hex: string | null;
+		profile_id: number | null;
+		last_sync: number | null;
+	}>;
+	return rows.map((r) => ({
+		id: r.id,
+		provider: r.provider,
+		externalId: r.external_id,
+		name: r.name,
+		colorHex: r.color_hex,
+		profileId: r.profile_id,
+		lastSync: r.last_sync
+	}));
+}
+
+export function setCalendarSynced(id: number): void {
+	getDb()
+		.prepare('UPDATE calendars SET last_sync = ? WHERE id = ?')
+		.run(Math.floor(Date.now() / 1000), id);
+}
+
+export function removeCalendar(id: number): void {
+	// Events cascade via the FK.
+	getDb().prepare('DELETE FROM events WHERE calendar_id = ?').run(id);
+	getDb().prepare('DELETE FROM calendars WHERE id = ?').run(id);
+}
+
+/** Drop all events for a calendar (used before a full ICS re-sync). */
+export function clearCalendarEvents(calendarId: number): void {
+	getDb().prepare('DELETE FROM events WHERE calendar_id = ?').run(calendarId);
+}
+
 export interface SyncedEvent {
 	calendarId: number;
 	externalId: string;
