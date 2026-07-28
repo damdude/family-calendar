@@ -44,5 +44,8 @@
 		"node-cron": "^4.6.0",
 		"qrcode": "^1.5.4",
 		"zod": "^4.4.3"
+	},
+	"allowScripts": {
+		"better-sqlite3@13.0.1": true
 	}
 }

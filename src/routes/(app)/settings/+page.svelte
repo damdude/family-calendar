@@ -2,6 +2,7 @@
 	import { family } from '$lib/stores/family.svelte';
 	import type { FeatureFlags } from '$lib/config';
 	import ProfileEditor from '$lib/components/ProfileEditor.svelte';
+	import GoogleConnect from '$lib/components/GoogleConnect.svelte';
 	import { QrCode, Check } from 'lucide-svelte';
 
 	// Persist store snapshot to config.json (debounced) on any change.
@@ -189,6 +190,15 @@
 				</div>
 			{/each}
 		</div>
+	</section>
+
+	<!-- Calendar accounts -->
+	<section class="card">
+		<div class="cardhead">
+			<h2 class="type-heading">Calendar accounts</h2>
+			<p class="type-caption sub">Sync events from Google Calendar.</p>
+		</div>
+		<GoogleConnect />
 	</section>
 
 	<!-- Pairing -->

@@ -11,6 +11,7 @@
 	$effect(() => {
 		family.applyConfig(data.config);
 		family.applyProgress(data.progress);
+		family.applySyncedEvents(data.syncedEvents);
 	});
 </script>
 

@@ -1,0 +1,214 @@
+/** Typed data access over the SQLite connection. Server-only. */
+
+import { getDb, dbExists } from './index';
+import { encryptString, decryptString, encrypt, decrypt } from '../crypto';
+
+// --- OAuth tokens (encrypted at rest) ---
+
+export interface StoredToken {
+	provider: string;
+	accountEmail?: string;
+	refreshToken: string;
+	accessToken?: string;
+	accessExpiresAt?: number;
+	scope?: string;
+}
+
+export function saveOAuthToken(t: StoredToken): void {
+	const db = getDb();
+	const now = Math.floor(Date.now() / 1000);
+	db.prepare(
+		`INSERT INTO oauth_tokens
+			(provider, account_email, refresh_token_encrypted, access_token_encrypted, access_expires_at, scope, created_at, updated_at)
+		 VALUES (@provider, @email, @refresh, @access, @exp, @scope, @now, @now)
+		 ON CONFLICT(provider) DO UPDATE SET
+			account_email=@email, refresh_token_encrypted=@refresh,
+			access_token_encrypted=@access, access_expires_at=@exp, scope=@scope, updated_at=@now`
+	).run({
+		provider: t.provider,
+		email: t.accountEmail ?? null,
+		refresh: encryptString(t.refreshToken),
+		access: t.accessToken ? encryptString(t.accessToken) : null,
+		exp: t.accessExpiresAt ?? null,
+		scope: t.scope ?? null,
+		now
+	});
+}
+
+export function getOAuthToken(provider: string): StoredToken | null {
+	const row = getDb().prepare('SELECT * FROM oauth_tokens WHERE provider = ?').get(provider) as
+		| {
+				provider: string;
+				account_email: string | null;
+				refresh_token_encrypted: Buffer;
+				access_token_encrypted: Buffer | null;
+				access_expires_at: number | null;
+				scope: string | null;
+		  }
+		| undefined;
+	if (!row) return null;
+	return {
+		provider: row.provider,
+		accountEmail: row.account_email ?? undefined,
+		refreshToken: decryptString(row.refresh_token_encrypted),
+		accessToken: row.access_token_encrypted ? decryptString(row.access_token_encrypted) : undefined,
+		accessExpiresAt: row.access_expires_at ?? undefined,
+		scope: row.scope ?? undefined
+	};
+}
+
+export function deleteOAuthToken(provider: string): void {
+	getDb().prepare('DELETE FROM oauth_tokens WHERE provider = ?').run(provider);
+}
+
+// --- Calendars + events ---
+
+export function upsertCalendar(c: {
+	provider: string;
+	externalId: string;
+	name?: string;
+	colorHex?: string;
+	profileId?: number;
+}): number {
+	const db = getDb();
+	db.prepare(
+		`INSERT INTO calendars (provider, external_id, name, color_hex, profile_id, enabled)
+		 VALUES (@provider, @externalId, @name, @colorHex, @profileId, 1)
+		 ON CONFLICT(provider, external_id) DO UPDATE SET name=@name, color_hex=@colorHex`
+	).run({
+		provider: c.provider,
+		externalId: c.externalId,
+		name: c.name ?? null,
+		colorHex: c.colorHex ?? null,
+		profileId: c.profileId ?? null
+	});
+	return (
+		db
+			.prepare('SELECT id FROM calendars WHERE provider = ? AND external_id = ?')
+			.get(c.provider, c.externalId) as { id: number }
+	).id;
+}
+
+export interface SyncedEvent {
+	calendarId: number;
+	externalId: string;
+	startTs: number;
+	endTs: number;
+	allDay: boolean;
+	title?: string;
+	description?: string;
+	location?: string;
+}
+
+export function upsertEvent(e: SyncedEvent): void {
+	getDb()
+		.prepare(
+			`INSERT INTO events
+				(calendar_id, external_id, start_ts, end_ts, all_day, title, description_encrypted, location, updated_at)
+			 VALUES (@calendarId, @externalId, @startTs, @endTs, @allDay, @title, @desc, @location, @now)
+			 ON CONFLICT(calendar_id, external_id) DO UPDATE SET
+				start_ts=@startTs, end_ts=@endTs, all_day=@allDay, title=@title,
+				description_encrypted=@desc, location=@location, updated_at=@now`
+		)
+		.run({
+			calendarId: e.calendarId,
+			externalId: e.externalId,
+			startTs: e.startTs,
+			endTs: e.endTs,
+			allDay: e.allDay ? 1 : 0,
+			title: e.title ?? null,
+			desc: e.description ? encryptString(e.description) : null,
+			location: e.location ?? null,
+			now: Math.floor(Date.now() / 1000)
+		});
+}
+
+export interface EventRow {
+	id: number;
+	calendarId: number;
+	profileId?: number;
+	startTs: number;
+	endTs: number;
+	allDay: boolean;
+	title: string;
+	location?: string;
+	description?: string;
+}
+
+/** Events overlapping [from, to] (unix seconds), with owning profile if any. */
+export function getEventsInRange(from: number, to: number): EventRow[] {
+	const rows = getDb()
+		.prepare(
+			`SELECT e.*, c.profile_id AS profile_id
+			 FROM events e JOIN calendars c ON c.id = e.calendar_id
+			 WHERE c.enabled = 1 AND e.start_ts < ? AND e.end_ts > ?
+			 ORDER BY e.start_ts`
+		)
+		.all(to, from) as Array<{
+		id: number;
+		calendar_id: number;
+		profile_id: number | null;
+		start_ts: number;
+		end_ts: number;
+		all_day: number;
+		title: string | null;
+		location: string | null;
+		description_encrypted: Buffer | null;
+	}>;
+	return rows.map((r) => ({
+		id: r.id,
+		calendarId: r.calendar_id,
+		profileId: r.profile_id ?? undefined,
+		startTs: r.start_ts,
+		endTs: r.end_ts,
+		allDay: !!r.all_day,
+		title: r.title ?? '(untitled)',
+		location: r.location ?? undefined,
+		description: r.description_encrypted ? decryptString(r.description_encrypted) : undefined
+	}));
+}
+
+/** Lean synced events for display (no decrypted description). Returns [] when
+ *  the DB file doesn't exist yet, so page loads never create it. */
+export function getSyncedEventsLean(
+	from: number,
+	to: number
+): Array<{
+	id: number;
+	profileId?: number;
+	startTs: number;
+	endTs: number;
+	allDay: boolean;
+	title: string;
+	location?: string;
+}> {
+	if (!dbExists()) return [];
+	const rows = getDb()
+		.prepare(
+			`SELECT e.id, c.profile_id AS profile_id, e.start_ts, e.end_ts, e.all_day, e.title, e.location
+			 FROM events e JOIN calendars c ON c.id = e.calendar_id
+			 WHERE c.enabled = 1 AND e.start_ts < ? AND e.end_ts > ?
+			 ORDER BY e.start_ts`
+		)
+		.all(to, from) as Array<{
+		id: number;
+		profile_id: number | null;
+		start_ts: number;
+		end_ts: number;
+		all_day: number;
+		title: string | null;
+		location: string | null;
+	}>;
+	return rows.map((r) => ({
+		id: r.id,
+		profileId: r.profile_id ?? undefined,
+		startTs: r.start_ts,
+		endTs: r.end_ts,
+		allDay: !!r.all_day,
+		title: r.title ?? '(untitled)',
+		location: r.location ?? undefined
+	}));
+}
+
+// Re-export blob helpers for callers that need them.
+export { encrypt, decrypt };

@@ -119,6 +119,37 @@ class FamilyStore {
 		}
 	}
 
+	/**
+	 * Merge synced calendar events (from SQLite) into the store. Synced events
+	 * use ids offset by SYNCED_ID_BASE so they never clash with demo ids, and
+	 * are fully replaced on each apply (idempotent across navigations).
+	 */
+	applySyncedEvents(
+		events: Array<{
+			id: number;
+			profileId?: number;
+			startTs: number;
+			endTs: number;
+			allDay: boolean;
+			title: string;
+			location?: string;
+		}>
+	) {
+		const BASE = 1_000_000;
+		this.data.events = this.data.events.filter((e) => e.id < BASE);
+		for (const e of events) {
+			this.data.events.push({
+				id: BASE + e.id,
+				title: e.title,
+				start: new Date(e.startTs * 1000),
+				end: new Date(e.endTs * 1000),
+				allDay: e.allDay,
+				location: e.location,
+				profileIds: e.profileId ? [e.profileId] : []
+			});
+		}
+	}
+
 	/** Last `days` feelings for a profile, newest first. */
 	feelingHistory(profileId: number, days = 7): { date: string; feeling: FeelingEntry }[] {
 		const byDate = this.progress.feelings[profileId] ?? {};
