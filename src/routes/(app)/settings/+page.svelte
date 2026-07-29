@@ -5,6 +5,7 @@
 	import ProfileEditor from '$lib/components/ProfileEditor.svelte';
 	import GoogleConnect from '$lib/components/GoogleConnect.svelte';
 	import CalendarLinks from '$lib/components/CalendarLinks.svelte';
+	import StoragePanel from '$lib/components/StoragePanel.svelte';
 	import PinPad from '$lib/components/PinPad.svelte';
 	import { QrCode, Check, RefreshCw } from 'lucide-svelte';
 
@@ -449,6 +450,15 @@
 				</div>
 				{#if checkMsg}<p class="type-caption hint">{checkMsg}</p>{/if}
 			</div>
+		</section>
+
+		<!-- Storage -->
+		<section class="card">
+			<div class="cardhead">
+				<h2 class="type-heading">Data storage</h2>
+				<p class="type-caption sub">Keep personal data local on this device, or on a NAS folder.</p>
+			</div>
+			<StoragePanel />
 		</section>
 
 		<!-- Parental lock -->

@@ -21,10 +21,21 @@ import { defaultRoutinesForAge } from '$lib/kid/routineLibrary';
 import { dateKey } from '$lib/time';
 import type { FamilyData, FamilyEvent, Profile, Routine } from '$lib/types';
 
+export interface LocalEvent {
+	id: number;
+	title: string;
+	startTs: number;
+	endTs: number;
+	allDay: boolean;
+	location?: string;
+	profileIds: number[];
+}
+
 class FamilyStore {
 	data = $state<FamilyData>(demoFamily);
 	config = $state<AppConfig>(defaultConfig);
 	progress = $state<ProgressData>(emptyProgress());
+	localEvents = $state<LocalEvent[]>([]);
 
 	get profiles(): Profile[] {
 		return this.data.profiles;
@@ -124,10 +135,16 @@ class FamilyStore {
 		}
 	}
 
+	// Event id namespaces so different sources never clash:
+	//   demo:   < 1,000,000
+	//   synced: [1,000,000, 2,000,000)
+	//   local:  [2,000,000, 3,000,000)
+	static SYNCED_BASE = 1_000_000;
+	static LOCAL_BASE = 2_000_000;
+
 	/**
-	 * Merge synced calendar events (from SQLite) into the store. Synced events
-	 * use ids offset by SYNCED_ID_BASE so they never clash with demo ids, and
-	 * are fully replaced on each apply (idempotent across navigations).
+	 * Merge synced calendar events (from SQLite) into the store. Fully replaced
+	 * on each apply (idempotent); leaves demo + local events untouched.
 	 */
 	applySyncedEvents(
 		events: Array<{
@@ -140,17 +157,34 @@ class FamilyStore {
 			location?: string;
 		}>
 	) {
-		const BASE = 1_000_000;
-		this.data.events = this.data.events.filter((e) => e.id < BASE);
+		const B = FamilyStore.SYNCED_BASE;
+		this.data.events = this.data.events.filter((e) => e.id < B || e.id >= FamilyStore.LOCAL_BASE);
 		for (const e of events) {
 			this.data.events.push({
-				id: BASE + e.id,
+				id: B + e.id,
 				title: e.title,
 				start: new Date(e.startTs * 1000),
 				end: new Date(e.endTs * 1000),
 				allDay: e.allDay,
 				location: e.location,
 				profileIds: e.profileId ? [e.profileId] : []
+			});
+		}
+	}
+
+	/** Re-materialize local (user-created) events into data.events. */
+	private materializeLocalEvents() {
+		const B = FamilyStore.LOCAL_BASE;
+		this.data.events = this.data.events.filter((e) => e.id < B || e.id >= B + B);
+		for (const e of this.localEvents) {
+			this.data.events.push({
+				id: B + e.id,
+				title: e.title,
+				start: new Date(e.startTs * 1000),
+				end: new Date(e.endTs * 1000),
+				allDay: e.allDay,
+				location: e.location,
+				profileIds: e.profileIds
 			});
 		}
 	}
@@ -269,16 +303,53 @@ class FamilyStore {
 		if (it) it.completed = !it.completed;
 	}
 
-	/** Apply persisted meals + lists over the demo data. */
-	applyFamilyData(data: { meals: FamilyData['meals']; lists: FamilyData['lists'] } | null) {
+	/** Apply persisted meals + lists + local events over the demo data. */
+	applyFamilyData(
+		data: {
+			meals: FamilyData['meals'];
+			lists: FamilyData['lists'];
+			localEvents?: LocalEvent[];
+		} | null
+	) {
 		if (!data) return;
 		this.data.meals = data.meals;
 		this.data.lists = data.lists;
+		this.localEvents = data.localEvents ?? [];
+		this.materializeLocalEvents();
 	}
 
-	/** Snapshot meals + lists for persistence. */
+	/** Snapshot meals + lists + local events for persistence. */
 	familyDataSnapshot() {
-		return { meals: this.data.meals, lists: this.data.lists };
+		return {
+			meals: this.data.meals,
+			lists: this.data.lists,
+			localEvents: this.localEvents
+		};
+	}
+
+	/** Create a local (on-device) calendar event. */
+	addLocalEvent(e: Omit<LocalEvent, 'id'>): LocalEvent {
+		const id = this.localEvents.reduce((m, x) => Math.max(m, x.id), 0) + 1;
+		const ev = { ...e, id };
+		this.localEvents.push(ev);
+		this.materializeLocalEvents();
+		this.persistFamilyData();
+		return ev;
+	}
+
+	removeLocalEvent(localId: number) {
+		const i = this.localEvents.findIndex((x) => x.id === localId);
+		if (i >= 0) this.localEvents.splice(i, 1);
+		this.materializeLocalEvents();
+		this.persistFamilyData();
+	}
+
+	/** Whether an event id is a user-created local event (vs demo/synced). */
+	isLocalEventId(id: number): boolean {
+		return id >= FamilyStore.LOCAL_BASE && id < FamilyStore.LOCAL_BASE + FamilyStore.LOCAL_BASE;
+	}
+	localIdOf(eventId: number): number {
+		return eventId - FamilyStore.LOCAL_BASE;
 	}
 
 	private fdTimer?: ReturnType<typeof setTimeout>;

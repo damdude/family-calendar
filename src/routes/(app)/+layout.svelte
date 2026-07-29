@@ -5,6 +5,7 @@
 	import Screensaver from '$lib/components/Screensaver.svelte';
 	import { dragScroll } from '$lib/actions/dragScroll';
 	import { isWithinWindow } from '$lib/time';
+	import { invalidateAll } from '$app/navigation';
 	import type { LayoutData } from './$types';
 
 	let { data, children }: { data: LayoutData; children: import('svelte').Snippet } = $props();
@@ -16,6 +17,15 @@
 		family.applyProgress(data.progress);
 		family.applyFamilyData(data.familyData);
 		family.applySyncedEvents(data.syncedEvents);
+	});
+
+	// Live refresh: a phone quick-add publishes on /api/live → reload data.
+	$effect(() => {
+		const es = new EventSource('/api/live');
+		es.onmessage = (e) => {
+			if (e.data === 'refresh') invalidateAll();
+		};
+		return () => es.close();
 	});
 
 	// --- Screensaver / sleep mode ---

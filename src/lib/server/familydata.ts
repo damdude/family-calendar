@@ -32,9 +32,20 @@ const ListSchema = z.object({
 	items: z.array(ListItemSchema).max(500)
 });
 
+const LocalEventSchema = z.object({
+	id: z.number().int(),
+	title: z.string().max(120),
+	startTs: z.number().int(), // unix seconds
+	endTs: z.number().int(),
+	allDay: z.boolean(),
+	location: z.string().max(120).optional(),
+	profileIds: z.array(z.number().int()).max(12)
+});
+
 export const FamilyDataSchema = z.object({
 	meals: z.array(MealSchema).max(200),
-	lists: z.array(ListSchema).max(50)
+	lists: z.array(ListSchema).max(50),
+	localEvents: z.array(LocalEventSchema).max(500).default([])
 });
 
 export type FamilyDataPersist = z.infer<typeof FamilyDataSchema>;
@@ -55,4 +66,16 @@ export async function saveFamilyData(data: FamilyDataPersist): Promise<void> {
 	const tmp = `${FILE}.tmp`;
 	await fsp.writeFile(tmp, JSON.stringify(validated, null, 2), 'utf8');
 	await fsp.rename(tmp, FILE);
+}
+
+export type LocalEventInput = z.infer<typeof LocalEventSchema>;
+
+/** Append a local event server-side (used by phone quick-add). Assigns an id. */
+export async function appendLocalEvent(e: Omit<LocalEventInput, 'id'>): Promise<LocalEventInput> {
+	const data = (await loadFamilyData()) ?? { meals: [], lists: [], localEvents: [] };
+	const id = data.localEvents.reduce((m, x) => Math.max(m, x.id), 0) + 1;
+	const event = LocalEventSchema.parse({ ...e, id });
+	data.localEvents.push(event);
+	await saveFamilyData(data);
+	return event;
 }

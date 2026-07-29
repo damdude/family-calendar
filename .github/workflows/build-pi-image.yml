@@ -28,6 +28,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Register binfmt handlers so pi-gen's i386/armhf Docker stages run under
+      # emulation on the amd64 runner (fixes InvalidBaseImagePlatform).
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: all
+
       - name: Build image with pi-gen
         id: build
         uses: usimd/pi-gen-action@v1

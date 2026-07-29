@@ -8,8 +8,14 @@
 	let {
 		weekStart,
 		events,
-		days = 7
-	}: { weekStart: Date; events: FamilyEvent[]; days?: number } = $props();
+		days = 7,
+		onEventClick
+	}: {
+		weekStart: Date;
+		events: FamilyEvent[];
+		days?: number;
+		onEventClick?: (e: FamilyEvent) => void;
+	} = $props();
 
 	const startHour = $derived(family.config.view.dayStartHour);
 	const endHour = $derived(family.config.view.dayEndHour);
@@ -163,12 +169,18 @@
 						<div class="hourline" style:top="{((h - startHour) / span) * 100}%"></div>
 					{/each}
 					{#each layoutDay(i) as p (p.event.id)}
+						<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 						<div
 							class="event-pos"
+							class:clickable={!!onEventClick}
 							style:top="{p.topPct}%"
 							style:height="{p.heightPct}%"
 							style:left="calc({p.leftPct}% + 3px)"
 							style:width="calc({p.widthPct}% - 6px)"
+							role={onEventClick ? 'button' : undefined}
+							tabindex={onEventClick ? 0 : undefined}
+							onclick={() => onEventClick?.(p.event)}
+							onkeydown={(e) => e.key === 'Enter' && onEventClick?.(p.event)}
 						>
 							<EventCard event={p.event} />
 						</div>
@@ -302,5 +314,8 @@
 	.event-pos {
 		position: absolute;
 		min-height: 30px;
+	}
+	.event-pos.clickable {
+		cursor: pointer;
 	}
 </style>

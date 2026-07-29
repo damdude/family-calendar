@@ -1,11 +1,36 @@
 <script lang="ts">
 	import { family } from '$lib/stores/family.svelte';
+	import type { LocalEvent } from '$lib/stores/family.svelte';
+	import type { FamilyEvent } from '$lib/types';
 	import { startOfWeek } from '$lib/time';
 	import ProfilePill from '$lib/components/ProfilePill.svelte';
 	import WeekGrid from '$lib/components/WeekGrid.svelte';
-	import { ChevronLeft, ChevronRight, ChevronDown } from 'lucide-svelte';
+	import EventEditor from '$lib/components/EventEditor.svelte';
+	import QuickAddQr from '$lib/components/QuickAddQr.svelte';
+	import { ChevronLeft, ChevronRight, ChevronDown, Plus } from 'lucide-svelte';
 
 	let weekOffset = $state(0);
+
+	// Local-event editor + QR quick-add.
+	let editorOpen = $state(false);
+	let editing = $state<LocalEvent | null>(null);
+	let qrOpen = $state(false);
+
+	function openNew() {
+		editing = null;
+		editorOpen = true;
+	}
+	function onEventClick(e: FamilyEvent) {
+		// Only user-created local events are editable on the display.
+		if (family.readOnly || !family.isLocalEventId(e.id)) return;
+		const localId = family.localIdOf(e.id);
+		editing = family.localEvents.find((x) => x.id === localId) ?? null;
+		if (editing) editorOpen = true;
+	}
+	function closeEditor() {
+		editorOpen = false;
+		editing = null;
+	}
 
 	const weekStart = $derived.by(() => {
 		const base = startOfWeek(new Date(), family.config.view.weekStartsOn);
@@ -62,9 +87,52 @@
 	</div>
 
 	<div class="grid-wrap">
-		<WeekGrid {weekStart} events={family.data.events} days={7} />
+		<WeekGrid {weekStart} events={family.data.events} days={7} {onEventClick} />
 	</div>
 </div>
+
+{#if !family.readOnly}
+	<div class="fabs">
+		<button
+			class="fab qr"
+			type="button"
+			aria-label="Add from phone"
+			onclick={() => (qrOpen = true)}
+		>
+			<svg
+				width="22"
+				height="22"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+				aria-hidden="true"
+			>
+				<rect x="3" y="3" width="7" height="7" rx="1" /><rect
+					x="14"
+					y="3"
+					width="7"
+					height="7"
+					rx="1"
+				/><rect x="3" y="14" width="7" height="7" rx="1" /><path
+					d="M14 14h3v3M20 14v.01M14 20h.01M17 20h.01M20 17v3"
+				/>
+			</svg>
+		</button>
+		<button class="fab plus" type="button" aria-label="New event" onclick={openNew}>
+			<Plus size={26} strokeWidth={2.4} />
+		</button>
+	</div>
+{/if}
+
+{#if editorOpen}
+	<EventEditor existing={editing} onClose={closeEditor} onSaved={closeEditor} />
+{/if}
+{#if qrOpen}
+	<QuickAddQr onClose={() => (qrOpen = false)} />
+{/if}
 
 <style>
 	.week-view {
@@ -72,6 +140,38 @@
 		flex-direction: column;
 		height: 100%;
 		min-height: 0;
+	}
+	.fabs {
+		position: fixed;
+		right: var(--space-5);
+		bottom: var(--space-5);
+		z-index: 50;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: var(--space-3);
+	}
+	.fab {
+		display: grid;
+		place-items: center;
+		border-radius: var(--radius-pill);
+		box-shadow: var(--shadow-float);
+		transition: transform var(--dur-quick) var(--ease-out);
+	}
+	.fab:active {
+		transform: scale(0.94);
+	}
+	.fab.plus {
+		width: 60px;
+		height: 60px;
+		background: var(--color-text-primary);
+		color: var(--color-surface);
+	}
+	.fab.qr {
+		width: 46px;
+		height: 46px;
+		background: var(--color-surface);
+		color: var(--color-text-primary);
 	}
 	.grid-wrap {
 		flex: 1;

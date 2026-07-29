@@ -27,6 +27,8 @@ Thumbs.db
 
 # Local data & databases (stay on-device, encrypted at rest)
 /data
+# Storage-location pointer (local vs NAS)
+.data-location
 *.db
 *.db-journal
 *.db-wal
