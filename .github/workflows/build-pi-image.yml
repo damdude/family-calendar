@@ -24,6 +24,11 @@ on:
 jobs:
   build-image:
     runs-on: ubuntu-latest
+    env:
+      # pi-gen's 32-bit build uses a `FROM i386/debian` Docker stage. Modern
+      # BuildKit rejects that base image's platform (InvalidBaseImagePlatform);
+      # the legacy builder tolerates it. Force the legacy builder.
+      DOCKER_BUILDKIT: '0'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
