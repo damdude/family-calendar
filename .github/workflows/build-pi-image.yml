@@ -43,6 +43,10 @@ jobs:
       - name: Build image with pi-gen
         id: build
         uses: usimd/pi-gen-action@v1
+        env:
+          # Legacy builder for pi-gen's docker build: modern BuildKit fails the
+          # build on the harmless "git not found" provenance warning.
+          DOCKER_BUILDKIT: '0'
         with:
           image-name: family-calendar
           # Raspberry Pi OS Lite = stages 0–2, then our app stage.
