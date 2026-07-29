@@ -6,17 +6,23 @@
 	import { dragScroll } from '$lib/actions/dragScroll';
 	import { isWithinWindow } from '$lib/time';
 	import { invalidateAll } from '$app/navigation';
+	import { untrack } from 'svelte';
 	import type { LayoutData } from './$types';
 
 	let { data, children }: { data: LayoutData; children: import('svelte').Snippet } = $props();
 
-	// Apply persisted config (family name, profiles, feature flags, orientation)
-	// and kid progress (streaks, completions, feelings) onto the store.
+	// Apply persisted config/progress/family-data/synced-events onto the store.
+	// Depend ONLY on the load `data` props (read them here); the apply methods
+	// read+write store state, so wrap them in untrack() — otherwise the effect
+	// depends on what it mutates and loops forever (freezing the UI).
 	$effect(() => {
-		family.applyConfig(data.config);
-		family.applyProgress(data.progress);
-		family.applyFamilyData(data.familyData);
-		family.applySyncedEvents(data.syncedEvents);
+		const { config, progress, familyData, syncedEvents } = data;
+		untrack(() => {
+			family.applyConfig(config);
+			family.applyProgress(progress);
+			family.applyFamilyData(familyData);
+			family.applySyncedEvents(syncedEvents);
+		});
 	});
 
 	// Live refresh: a phone quick-add publishes on /api/live → reload data.

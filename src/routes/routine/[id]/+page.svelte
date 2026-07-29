@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { page } from '$app/state';
 	import { family } from '$lib/stores/family.svelte';
 	import { profileColorVar, profileTint } from '$lib/design/colors';
@@ -16,10 +17,14 @@
 	let { data }: { data: PageData } = $props();
 
 	// Hydrate the store from persisted config + progress (covers a direct load
-	// of this full-screen route, outside the (app) layout).
+	// of this full-screen route). untrack the mutations so the effect depends
+	// only on the load data, not the store state it writes (avoids a loop).
 	$effect(() => {
-		family.applyConfig(data.config);
-		family.applyProgress(data.progress);
+		const { config, progress } = data;
+		untrack(() => {
+			family.applyConfig(config);
+			family.applyProgress(progress);
+		});
 	});
 
 	const routineId = $derived(Number(page.params.id));
