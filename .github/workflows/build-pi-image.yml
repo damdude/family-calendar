@@ -1,84 +1,68 @@
 name: Build Raspberry Pi image
 
-# Builds a ready-to-flash Raspberry Pi OS Lite image with Family Calendar +
-# kiosk baked in. Trigger manually (Actions → Build Raspberry Pi image → Run)
-# or on a published release. The build runs pi-gen under ARM emulation and
-# takes ~30–60 min.
+# Builds a flashable 64-bit (arm64) Raspberry Pi OS Lite image with Family
+# Calendar + a Chromium/cage kiosk baked in. Run on demand (Actions tab) or on a
+# published release (the .img.xz is attached to the release).
 #
-# The default is a 32-bit (armhf) image so it boots on Pi 2, Pi 3 AND Pi 4.
+# 64-bit (arm64) covers Pi 5 / 4 / 400 / CM4 and also boots Pi 3 / Zero 2 W. A
+# 32-bit (armhf) image is intentionally NOT built: pi-gen's 32-bit stage is
+# unbuildable in CI (i386 base rejected by BuildKit) and a Chromium/Wayland
+# kiosk isn't viable on pre-64-bit boards anyway.
+#
+# Approach mirrors the sibling home-display appliance: a NATIVE arm64 runner
+# (no QEMU/binfmt emulation) + a pinned, current pi-gen release tag (up-to-date
+# Debian keyrings, so debootstrap doesn't fail on GPG NO_PUBKEY).
 
 on:
-  workflow_dispatch:
-    inputs:
-      password:
-        description: 'Password for the "pi" user (change this!)'
-        required: true
-        default: 'changeme'
-      hostname:
-        description: 'Device hostname (mDNS: <hostname>.local)'
-        required: false
-        default: 'familycalendar'
+  workflow_dispatch: {}
   release:
     types: [published]
 
+permissions:
+  contents: write # attach the image to the release
+
 jobs:
   build-image:
-    # ubuntu-24.04 (ubuntu-latest) ships a Docker/binfmt stack that breaks
-    # pi-gen's ARM emulation ("arch-test: arm64 not supported"). 22.04 works.
-    runs-on: ubuntu-22.04
-    env:
-      # pi-gen's 32-bit build uses a `FROM i386/debian` Docker stage. Modern
-      # BuildKit rejects that base image's platform (InvalidBaseImagePlatform);
-      # the legacy builder tolerates it. Force the legacy builder.
-      DOCKER_BUILDKIT: '0'
+    # Native ARM64 runner (free for public repos) → pi-gen builds the arm64
+    # rootfs natively, avoiding the emulation that fails on x86 runners.
+    runs-on: ubuntu-24.04-arm
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Register binfmt handlers so pi-gen's i386/armhf Docker stages run under
-      # emulation on the amd64 runner (fixes InvalidBaseImagePlatform).
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: all
-
-      - name: Build image with pi-gen
+      - name: Build image (arm64 / 64-bit)
         id: build
-        uses: usimd/pi-gen-action@v1
-        env:
-          # Legacy builder for pi-gen's docker build: modern BuildKit fails the
-          # build on the harmless "git not found" provenance warning.
-          DOCKER_BUILDKIT: '0'
+        uses: usimd/pi-gen-action@v1.11.0
         with:
-          image-name: family-calendar
-          # Raspberry Pi OS Lite = stages 0–2, then our app stage.
+          image-name: family-calendar-arm64
+          # Raspberry Pi OS Lite = stages 0–2, then our app + kiosk stage.
           stage-list: stage0 stage1 stage2 ./pi-gen/stage-family-calendar
           release: bookworm
-          # arm64 (64-bit) image → runs on Pi 3 and Pi 4.
-          # NOTE: the 32-bit ('master') branch is currently unbuildable in CI —
-          # its `FROM i386/debian` Docker stage is rejected by BuildKit on the
-          # amd64 runner (InvalidBaseImagePlatform). arm64 avoids that base
-          # entirely. Trade-off: arm64 does NOT boot on Pi 2 (ARMv7, 32-bit only).
-          pi-gen-version: arm64
-          hostname: ${{ github.event.inputs.hostname || 'familycalendar' }}
+          # Pin a real, current 64-bit Bookworm release tag — the `arm64` branch
+          # is stale and fails debootstrap GPG verification (NO_PUBKEY).
+          pi-gen-version: 2026-06-18-raspios-bookworm-arm64
+          hostname: familycalendar
           username: pi
-          password: ${{ github.event.inputs.password || 'changeme' }}
+          password: changeme # default — change after first login
           enable-ssh: 1
-          # emoji + build deps are installed by the stage's 00-packages.
+          disable-first-boot-user-rename: 1
           verbose-output: true
-          # Compress so the uploaded artifact is a flashable .img.xz.
           compression: xz
           compression-level: 6
+        env:
+          FC_REPO: https://github.com/${{ github.repository }}.git
+          FC_BRANCH: ${{ github.ref_name }}
 
-      - name: Upload image artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: family-calendar-pi-image
-          path: ${{ steps.build.outputs.image-path }}
-          if-no-files-found: error
-
-      - name: Attach image to release
+      - name: Attach image to the release
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
           files: ${{ steps.build.outputs.image-path }}
+
+      - name: Upload image as a workflow artifact
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: family-calendar-arm64
+          path: ${{ steps.build.outputs.image-path }}
+          retention-days: 14
