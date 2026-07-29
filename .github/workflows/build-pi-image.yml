@@ -23,7 +23,9 @@ on:
 
 jobs:
   build-image:
-    runs-on: ubuntu-latest
+    # ubuntu-24.04 (ubuntu-latest) ships a Docker/binfmt stack that breaks
+    # pi-gen's ARM emulation ("arch-test: arm64 not supported"). 22.04 works.
+    runs-on: ubuntu-22.04
     env:
       # pi-gen's 32-bit build uses a `FROM i386/debian` Docker stage. Modern
       # BuildKit rejects that base image's platform (InvalidBaseImagePlatform);
