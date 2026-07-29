@@ -36,15 +36,18 @@ jobs:
           # Raspberry Pi OS Lite = stages 0–2, then our app stage.
           stage-list: stage0 stage1 stage2 ./pi-gen/stage-family-calendar
           release: bookworm
-          # 32-bit userland → runs on Pi 2/3/4.
-          pi-gen-version: arm
+          # pi-gen's default branch builds the 32-bit (armhf) userland, which
+          # runs on Pi 2/3/4. (The 'arm64' branch would be 64-bit / Pi 3+ only.)
+          pi-gen-version: master
           hostname: ${{ github.event.inputs.hostname || 'familycalendar' }}
           username: pi
           password: ${{ github.event.inputs.password || 'changeme' }}
           enable-ssh: 1
           # emoji + build deps are installed by the stage's 00-packages.
           verbose-output: true
-          compression: none
+          # Compress so the uploaded artifact is a flashable .img.xz.
+          compression: xz
+          compression-level: 6
 
       - name: Upload image artifact
         uses: actions/upload-artifact@v4
