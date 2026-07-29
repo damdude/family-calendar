@@ -48,9 +48,12 @@ jobs:
           # Raspberry Pi OS Lite = stages 0–2, then our app stage.
           stage-list: stage0 stage1 stage2 ./pi-gen/stage-family-calendar
           release: bookworm
-          # pi-gen's default branch builds the 32-bit (armhf) userland, which
-          # runs on Pi 2/3/4. (The 'arm64' branch would be 64-bit / Pi 3+ only.)
-          pi-gen-version: master
+          # arm64 (64-bit) image → runs on Pi 3 and Pi 4.
+          # NOTE: the 32-bit ('master') branch is currently unbuildable in CI —
+          # its `FROM i386/debian` Docker stage is rejected by BuildKit on the
+          # amd64 runner (InvalidBaseImagePlatform). arm64 avoids that base
+          # entirely. Trade-off: arm64 does NOT boot on Pi 2 (ARMv7, 32-bit only).
+          pi-gen-version: arm64
           hostname: ${{ github.event.inputs.hostname || 'familycalendar' }}
           username: pi
           password: ${{ github.event.inputs.password || 'changeme' }}
