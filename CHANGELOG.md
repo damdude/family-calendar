@@ -45,8 +45,8 @@ development toward a 1.0 release.
   recurrence-expanded into the grid. Google OAuth remains an option.
 - **Prebuilt SD image via GitHub Actions** (`pi-gen` on a native arm64 runner):
   a 64-bit image (Pi 5 / 4 / 400 / CM4; also boots Pi 3 / Zero 2 W) with the app
-  + a Chromium/cage Wayland kiosk baked in; first boot runs the QR setup, then
-  self-updates from GitHub. See `docs/image.md`.
+  - a Chromium/cage Wayland kiosk baked in; first boot runs the QR setup, then
+    self-updates from GitHub. See `docs/image.md`.
 
 ### Notes
 
