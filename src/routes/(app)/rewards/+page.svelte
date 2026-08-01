@@ -10,6 +10,9 @@
 	const ladder = $derived(
 		family.data.rewards.filter((r) => r.active).sort((a, b) => a.starCost - b.starCost)
 	);
+
+	let justClaimed = $state('');
+	let toastTimer: ReturnType<typeof setTimeout>;
 </script>
 
 <div class="rewards-page">
@@ -18,13 +21,13 @@
 	<section class="stars-row">
 		{#each kids as kid (kid.id)}
 			{@const stars = family.starsFor(kid.id)}
-			<div class="kidcard">
+			<a class="kidcard" href="/rewards/{kid.id}">
 				<Avatar profile={kid} size={56} />
 				<div class="kidmeta">
 					<span class="type-body-lg name">{kid.name}</span>
 					<StarTally {stars} size="lg" />
 				</div>
-			</div>
+			</a>
 		{/each}
 	</section>
 
@@ -42,20 +45,36 @@
 						{#each kids as kid (kid.id)}
 							{@const stars = family.starsFor(kid.id)}
 							{@const canClaim = stars >= reward.starCost}
-							<span class="chip" class:can={canClaim}>
+							<button
+								type="button"
+								class="chip"
+								class:can={canClaim}
+								disabled={!canClaim || family.readOnly}
+								onclick={() => {
+									if (family.claimReward(reward.id, kid.id)) {
+										justClaimed = `${kid.name} claimed ${reward.name}!`;
+										clearTimeout(toastTimer);
+										toastTimer = setTimeout(() => (justClaimed = ''), 2600);
+									}
+								}}
+							>
 								<Avatar profile={kid} size={20} ring={false} />
 								{#if canClaim}
 									<span class="type-caption">Claim</span>
 								{:else}
 									<span class="type-caption">{reward.starCost - stars} to go</span>
 								{/if}
-							</span>
+							</button>
 						{/each}
 					</div>
 				</li>
 			{/each}
 		</ul>
 	</section>
+
+	{#if justClaimed}
+		<div class="toast" role="status">🎉 {justClaimed}</div>
+	{/if}
 </div>
 
 <style>
@@ -81,6 +100,14 @@
 		border-radius: var(--radius-lg);
 		background: var(--color-surface);
 		box-shadow: var(--shadow-card);
+		text-decoration: none;
+		transition:
+			transform 0.12s ease,
+			box-shadow 0.12s ease;
+	}
+	.kidcard:hover {
+		transform: translateY(-2px);
+		box-shadow: var(--shadow-float);
 	}
 	.kidmeta {
 		display: flex;
@@ -143,5 +170,25 @@
 	.chip.can {
 		background: color-mix(in srgb, var(--color-accent-success) 22%, white);
 		color: #10391f;
+		cursor: pointer;
+	}
+	.chip.can:hover:not(:disabled) {
+		background: color-mix(in srgb, var(--color-accent-success) 40%, white);
+	}
+	.chip:disabled {
+		cursor: default;
+	}
+	.toast {
+		position: fixed;
+		left: 50%;
+		bottom: var(--space-6);
+		transform: translateX(-50%);
+		z-index: 120;
+		padding: 12px 20px;
+		border-radius: var(--radius-pill);
+		background: var(--color-text-primary);
+		color: var(--color-surface);
+		font-weight: var(--weight-semibold);
+		box-shadow: var(--shadow-float);
 	}
 </style>

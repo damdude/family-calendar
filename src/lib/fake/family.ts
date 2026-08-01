@@ -383,6 +383,7 @@ export const demoFamily: FamilyData = {
 	routines,
 	rewards,
 	stars,
+	rewardClaims: [],
 	feelingsToday,
 	lists,
 	meals,

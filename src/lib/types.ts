@@ -99,6 +99,19 @@ export interface Reward {
 	icon: string;
 }
 
+/** A reward a child redeemed with their stars. */
+export interface RewardClaim {
+	id: number;
+	rewardId: number;
+	profileId: number;
+	/** Snapshot so history survives if the reward is later edited/removed. */
+	rewardName: string;
+	icon: string;
+	starCost: number;
+	/** Unix ms when claimed. */
+	ts: number;
+}
+
 export interface Feeling {
 	emoji: string;
 	label: string;
@@ -178,6 +191,7 @@ export interface FamilyData {
 	routines: Routine[];
 	rewards: Reward[];
 	stars: StarBalance[];
+	rewardClaims: RewardClaim[];
 	feelingsToday: FeelingLog[];
 	lists: CustomList[];
 	meals: Meal[];

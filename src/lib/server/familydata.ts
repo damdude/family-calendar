@@ -58,12 +58,29 @@ const RecipeSchema = z.object({
 	steps: z.array(z.string().max(500)).max(100)
 });
 
+const StarBalanceSchema = z.object({
+	profileId: z.number().int(),
+	stars: z.number().int().min(0)
+});
+
+const RewardClaimSchema = z.object({
+	id: z.number().int(),
+	rewardId: z.number().int(),
+	profileId: z.number().int(),
+	rewardName: z.string().max(120),
+	icon: z.string().max(8),
+	starCost: z.number().int().min(0),
+	ts: z.number().int()
+});
+
 export const FamilyDataSchema = z.object({
 	meals: z.array(MealSchema).max(200),
 	lists: z.array(ListSchema).max(50),
 	localEvents: z.array(LocalEventSchema).max(500).default([]),
 	tasks: z.array(TaskSchema).max(500).default([]),
-	recipes: z.array(RecipeSchema).max(200).default([])
+	recipes: z.array(RecipeSchema).max(200).default([]),
+	stars: z.array(StarBalanceSchema).max(50).default([]),
+	rewardClaims: z.array(RewardClaimSchema).max(1000).default([])
 });
 
 export type FamilyDataPersist = z.infer<typeof FamilyDataSchema>;
@@ -90,7 +107,15 @@ export type LocalEventInput = z.infer<typeof LocalEventSchema>;
 export type TaskInput = z.infer<typeof TaskSchema>;
 
 function emptyData(): FamilyDataPersist {
-	return { meals: [], lists: [], localEvents: [], tasks: [], recipes: [] };
+	return {
+		meals: [],
+		lists: [],
+		localEvents: [],
+		tasks: [],
+		recipes: [],
+		stars: [],
+		rewardClaims: []
+	};
 }
 
 /** Append a local event server-side (used by phone quick-add). Assigns an id. */

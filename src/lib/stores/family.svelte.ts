@@ -19,7 +19,7 @@ import {
 import { emptyProgress, type FeelingEntry, type ProgressData } from '$lib/kid/progress';
 import { defaultRoutinesForAge } from '$lib/kid/routineLibrary';
 import { dateKey } from '$lib/time';
-import type { FamilyData, FamilyEvent, Profile, Routine } from '$lib/types';
+import type { FamilyData, FamilyEvent, Profile, Reward, RewardClaim, Routine } from '$lib/types';
 
 export interface LocalEvent {
 	id: number;
@@ -303,7 +303,7 @@ class FamilyStore {
 		if (it) it.completed = !it.completed;
 	}
 
-	/** Apply persisted meals + lists + local events + tasks + recipes. */
+	/** Apply persisted meals + lists + local events + tasks + recipes + rewards. */
 	applyFamilyData(
 		data: {
 			meals: FamilyData['meals'];
@@ -311,6 +311,8 @@ class FamilyStore {
 			localEvents?: LocalEvent[];
 			tasks?: FamilyData['tasks'];
 			recipes?: FamilyData['recipes'];
+			stars?: FamilyData['stars'];
+			rewardClaims?: FamilyData['rewardClaims'];
 		} | null
 	) {
 		if (!data) return;
@@ -318,6 +320,9 @@ class FamilyStore {
 		this.data.lists = data.lists;
 		this.data.tasks = data.tasks ?? [];
 		this.data.recipes = data.recipes ?? [];
+		// Only override the demo star balances once the family has real ones.
+		if (data.stars && data.stars.length) this.data.stars = data.stars;
+		this.data.rewardClaims = data.rewardClaims ?? [];
 		this.localEvents = data.localEvents ?? [];
 		this.materializeLocalEvents();
 	}
@@ -329,8 +334,46 @@ class FamilyStore {
 			lists: this.data.lists,
 			localEvents: this.localEvents,
 			tasks: this.data.tasks,
-			recipes: this.data.recipes
+			recipes: this.data.recipes,
+			stars: this.data.stars,
+			rewardClaims: this.data.rewardClaims
 		};
+	}
+
+	// --- Rewards ---
+	reward(id: number): Reward | undefined {
+		return this.data.rewards.find((r) => r.id === id);
+	}
+	/** Rewards a child can currently afford, cheapest first. */
+	nextReward(profileId: number): Reward | undefined {
+		const stars = this.starsFor(profileId);
+		return this.data.rewards
+			.filter((r) => r.active && r.starCost > stars)
+			.sort((a, b) => a.starCost - b.starCost)[0];
+	}
+	claimsFor(profileId: number): RewardClaim[] {
+		return this.data.rewardClaims
+			.filter((c) => c.profileId === profileId)
+			.sort((a, b) => b.ts - a.ts);
+	}
+	/** Redeem a reward: deduct stars and record the claim. Returns success. */
+	claimReward(rewardId: number, profileId: number): boolean {
+		const reward = this.reward(rewardId);
+		if (!reward) return false;
+		const balance = this.data.stars.find((s) => s.profileId === profileId);
+		if (!balance || balance.stars < reward.starCost) return false;
+		balance.stars -= reward.starCost;
+		this.data.rewardClaims.push({
+			id: this.nextId(this.data.rewardClaims),
+			rewardId,
+			profileId,
+			rewardName: reward.name,
+			icon: reward.icon,
+			starCost: reward.starCost,
+			ts: Date.now()
+		});
+		this.persistFamilyData();
+		return true;
 	}
 
 	// --- Tasks ---
