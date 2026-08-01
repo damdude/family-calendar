@@ -28,7 +28,9 @@ if [ ! -d "${APP_DIR}/.git" ]; then
   git clone --depth 1 -b "${BRANCH}" "${REPO}" "${APP_DIR}"
 fi
 chown -R "${DASH_USER}:${DASH_USER}" "${APP_DIR}"
-sudo -u "${DASH_USER}" bash -lc "cd '${APP_DIR}' && npm ci --omit=dev && npm run build"
+# Full install (vite/svelte-kit are devDeps needed to build), build, then prune
+# dev deps so only the runtime tree (better-sqlite3, adapter output) ships.
+sudo -u "${DASH_USER}" bash -lc "cd '${APP_DIR}' && npm ci && npm run build && npm prune --omit=dev"
 [ -f "${APP_DIR}/.env" ] || { cp "${APP_DIR}/.env.example" "${APP_DIR}/.env"; chown "${DASH_USER}:${DASH_USER}" "${APP_DIR}/.env"; }
 
 # --- Server service (Node adapter → `node build`, port 5173) ---
