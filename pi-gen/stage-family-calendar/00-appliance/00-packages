@@ -1,0 +1,10 @@
+ca-certificates
+curl
+git
+jq
+labwc
+seatd
+wlr-randr
+chromium-browser
+fonts-noto-color-emoji
+dbus-user-session
