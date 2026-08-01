@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { family } from '$lib/stores/family.svelte';
+	import { screensaver } from '$lib/stores/screensaver.svelte';
 	import Sidebar from '$lib/components/Sidebar.svelte';
 	import TopBar from '$lib/components/TopBar.svelte';
 	import Screensaver from '$lib/components/Screensaver.svelte';
@@ -60,7 +61,10 @@
 	const idleActive = $derived(
 		sv.enabled && sv.idleMinutes > 0 && tick - lastActivity > sv.idleMinutes * 60_000
 	);
-	const screensaverActive = $derived(sv.enabled && (sleepActive || idleActive));
+	// "Sleep now" (forceSleep) always shows; scheduled/idle only when enabled.
+	const screensaverActive = $derived(
+		screensaver.forceSleep || (sv.enabled && (sleepActive || idleActive))
+	);
 </script>
 
 <div class="app" data-orientation={family.orientation}>
@@ -74,7 +78,13 @@
 </div>
 
 {#if screensaverActive}
-	<Screensaver mode={sv.mode} />
+	<Screensaver
+		mode={sv.mode}
+		ondismiss={() => {
+			screensaver.forceSleep = false;
+			lastActivity = Date.now();
+		}}
+	/>
 {/if}
 
 <style>

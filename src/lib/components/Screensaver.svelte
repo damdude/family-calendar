@@ -2,7 +2,7 @@
 	import { family } from '$lib/stores/family.svelte';
 	import { formatClock } from '$lib/time';
 
-	let { mode }: { mode: 'clock' | 'photos' } = $props();
+	let { mode, ondismiss }: { mode: 'clock' | 'photos'; ondismiss?: () => void } = $props();
 
 	// Live clock.
 	let now = $state(new Date());
@@ -42,7 +42,8 @@
 	const current = $derived(photoProfiles[photoIndex % Math.max(1, photoProfiles.length)]);
 </script>
 
-<div class="saver" class:photos={showPhotos}>
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div class="saver" class:photos={showPhotos} onpointerdown={() => ondismiss?.()}>
 	{#if showPhotos && current}
 		<img
 			class="bg"

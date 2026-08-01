@@ -42,10 +42,28 @@ const LocalEventSchema = z.object({
 	profileIds: z.array(z.number().int()).max(12)
 });
 
+const TaskSchema = z.object({
+	id: z.number().int(),
+	text: z.string().max(200),
+	done: z.boolean(),
+	profileId: z.number().int().optional(),
+	dueDate: z.string().optional() // YYYY-MM-DD
+});
+
+const RecipeSchema = z.object({
+	id: z.number().int(),
+	name: z.string().max(120),
+	emoji: z.string().max(8).default('🍽️'),
+	ingredients: z.array(z.string().max(200)).max(100),
+	steps: z.array(z.string().max(500)).max(100)
+});
+
 export const FamilyDataSchema = z.object({
 	meals: z.array(MealSchema).max(200),
 	lists: z.array(ListSchema).max(50),
-	localEvents: z.array(LocalEventSchema).max(500).default([])
+	localEvents: z.array(LocalEventSchema).max(500).default([]),
+	tasks: z.array(TaskSchema).max(500).default([]),
+	recipes: z.array(RecipeSchema).max(200).default([])
 });
 
 export type FamilyDataPersist = z.infer<typeof FamilyDataSchema>;
@@ -69,13 +87,39 @@ export async function saveFamilyData(data: FamilyDataPersist): Promise<void> {
 }
 
 export type LocalEventInput = z.infer<typeof LocalEventSchema>;
+export type TaskInput = z.infer<typeof TaskSchema>;
+
+function emptyData(): FamilyDataPersist {
+	return { meals: [], lists: [], localEvents: [], tasks: [], recipes: [] };
+}
 
 /** Append a local event server-side (used by phone quick-add). Assigns an id. */
 export async function appendLocalEvent(e: Omit<LocalEventInput, 'id'>): Promise<LocalEventInput> {
-	const data = (await loadFamilyData()) ?? { meals: [], lists: [], localEvents: [] };
+	const data = (await loadFamilyData()) ?? emptyData();
 	const id = data.localEvents.reduce((m, x) => Math.max(m, x.id), 0) + 1;
 	const event = LocalEventSchema.parse({ ...e, id });
 	data.localEvents.push(event);
 	await saveFamilyData(data);
 	return event;
+}
+
+/** Append a task server-side (phone quick-add). */
+export async function appendTask(t: Omit<TaskInput, 'id' | 'done'>): Promise<TaskInput> {
+	const data = (await loadFamilyData()) ?? emptyData();
+	const id = data.tasks.reduce((m, x) => Math.max(m, x.id), 0) + 1;
+	const task = TaskSchema.parse({ ...t, id, done: false });
+	data.tasks.push(task);
+	await saveFamilyData(data);
+	return task;
+}
+
+/** Append an item to a list by id (phone quick-add). Returns false if no list. */
+export async function appendListItem(listId: number, text: string): Promise<boolean> {
+	const data = (await loadFamilyData()) ?? emptyData();
+	const list = data.lists.find((l) => l.id === listId);
+	if (!list) return false;
+	const id = list.items.reduce((m, x) => Math.max(m, x.id), 0) + 1;
+	list.items.push({ id, text, completed: false });
+	await saveFamilyData(data);
+	return true;
 }

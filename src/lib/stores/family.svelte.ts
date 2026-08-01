@@ -303,28 +303,78 @@ class FamilyStore {
 		if (it) it.completed = !it.completed;
 	}
 
-	/** Apply persisted meals + lists + local events over the demo data. */
+	/** Apply persisted meals + lists + local events + tasks + recipes. */
 	applyFamilyData(
 		data: {
 			meals: FamilyData['meals'];
 			lists: FamilyData['lists'];
 			localEvents?: LocalEvent[];
+			tasks?: FamilyData['tasks'];
+			recipes?: FamilyData['recipes'];
 		} | null
 	) {
 		if (!data) return;
 		this.data.meals = data.meals;
 		this.data.lists = data.lists;
+		this.data.tasks = data.tasks ?? [];
+		this.data.recipes = data.recipes ?? [];
 		this.localEvents = data.localEvents ?? [];
 		this.materializeLocalEvents();
 	}
 
-	/** Snapshot meals + lists + local events for persistence. */
+	/** Snapshot the persistable family content. */
 	familyDataSnapshot() {
 		return {
 			meals: this.data.meals,
 			lists: this.data.lists,
-			localEvents: this.localEvents
+			localEvents: this.localEvents,
+			tasks: this.data.tasks,
+			recipes: this.data.recipes
 		};
+	}
+
+	// --- Tasks ---
+	tasksFor(profileId?: number): FamilyData['tasks'] {
+		return profileId === undefined
+			? this.data.tasks
+			: this.data.tasks.filter((t) => t.profileId === profileId);
+	}
+	addTask(text: string, profileId?: number, dueDate?: string) {
+		if (!text.trim()) return;
+		this.data.tasks.push({
+			id: this.nextId(this.data.tasks),
+			text: text.trim(),
+			done: false,
+			profileId,
+			dueDate
+		});
+		this.persistFamilyData();
+	}
+	toggleTask(id: number) {
+		const t = this.data.tasks.find((x) => x.id === id);
+		if (t) t.done = !t.done;
+		this.persistFamilyData();
+	}
+	removeTask(id: number) {
+		const i = this.data.tasks.findIndex((x) => x.id === id);
+		if (i >= 0) this.data.tasks.splice(i, 1);
+		this.persistFamilyData();
+	}
+
+	// --- Recipes ---
+	addRecipe(r: Omit<FamilyData['recipes'][number], 'id'>) {
+		this.data.recipes.push({ ...r, id: this.nextId(this.data.recipes) });
+		this.persistFamilyData();
+	}
+	updateRecipe(id: number, r: Omit<FamilyData['recipes'][number], 'id'>) {
+		const i = this.data.recipes.findIndex((x) => x.id === id);
+		if (i >= 0) this.data.recipes[i] = { ...r, id };
+		this.persistFamilyData();
+	}
+	removeRecipe(id: number) {
+		const i = this.data.recipes.findIndex((x) => x.id === id);
+		if (i >= 0) this.data.recipes.splice(i, 1);
+		this.persistFamilyData();
 	}
 
 	/** Create a local (on-device) calendar event. */

@@ -328,6 +328,50 @@ const meals: Meal[] = [
 	meal(6, 'dinner', 'Sunday Roast', '🍖')
 ];
 
+// --- Tasks + recipes ------------------------------------------------------
+
+const tasks: FamilyData['tasks'] = [
+	{ id: 1, text: 'Take out the recycling', done: false, profileId: 2 },
+	{ id: 2, text: 'Sign permission slip', done: false, profileId: 1 },
+	{ id: 3, text: 'Water the plants', done: true, profileId: 3 },
+	{ id: 4, text: 'Book car service', done: false, profileId: 2 },
+	{ id: 5, text: 'Tidy playroom', done: false, profileId: 4 }
+];
+
+const recipes: FamilyData['recipes'] = [
+	{
+		id: 1,
+		name: 'Homemade Pizza',
+		emoji: '🍕',
+		ingredients: ['Pizza dough', 'Tomato sauce', 'Mozzarella', 'Basil', 'Olive oil'],
+		steps: [
+			'Preheat oven to 250°C.',
+			'Roll out the dough and spread the sauce.',
+			'Add cheese and toppings.',
+			'Bake 10–12 min until golden.',
+			'Finish with fresh basil.'
+		]
+	},
+	{
+		id: 2,
+		name: 'Taco Night',
+		emoji: '🌮',
+		ingredients: ['Tortillas', 'Ground beef', 'Taco seasoning', 'Lettuce', 'Cheese', 'Salsa'],
+		steps: ['Brown the beef with seasoning.', 'Warm the tortillas.', 'Assemble with toppings.']
+	},
+	{
+		id: 3,
+		name: 'Pancakes',
+		emoji: '🥞',
+		ingredients: ['Flour', 'Milk', 'Egg', 'Baking powder', 'Butter', 'Maple syrup'],
+		steps: [
+			'Whisk the batter.',
+			'Cook on a buttered pan until bubbly.',
+			'Flip and serve with syrup.'
+		]
+	}
+];
+
 // --- Assembled dataset ----------------------------------------------------
 
 export const demoFamily: FamilyData = {
@@ -342,5 +386,7 @@ export const demoFamily: FamilyData = {
 	feelingsToday,
 	lists,
 	meals,
+	tasks,
+	recipes,
 	weather: { tempF: 68, condition: 'Partly Cloudy', icon: '⛅' }
 };

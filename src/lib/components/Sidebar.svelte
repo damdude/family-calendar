@@ -36,12 +36,12 @@
 			match: ['/profile', '/routine']
 		},
 		{ label: 'Lists', href: '/lists', icon: ClipboardList, feature: 'lists' },
-		{ label: 'Tasks', href: '/tasks', icon: SquareCheckBig, feature: 'tasks', soon: true },
+		{ label: 'Tasks', href: '/tasks', icon: SquareCheckBig, feature: 'tasks' },
 		{ label: 'Rewards', href: '/rewards', icon: Star, feature: 'rewards' },
 		{ label: 'Meals', href: '/meals', icon: Utensils, feature: 'meals' },
-		{ label: 'Recipes', href: '/recipes', icon: ChefHat, feature: 'recipes', soon: true },
-		{ label: 'Photos', href: '/photos', icon: Image, feature: 'photos', soon: true },
-		{ label: 'Sleep', href: '/sleep', icon: Moon, feature: 'sleep', soon: true },
+		{ label: 'Recipes', href: '/recipes', icon: ChefHat, feature: 'recipes' },
+		{ label: 'Photos', href: '/photos', icon: Image, feature: 'photos' },
+		{ label: 'Sleep', href: '/sleep', icon: Moon, feature: 'sleep' },
 		{ label: 'Settings', href: '/settings', icon: Settings }
 	];
 

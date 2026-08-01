@@ -129,6 +129,22 @@ export interface CustomList {
 	items: ListItem[];
 }
 
+export interface Task {
+	id: number;
+	text: string;
+	done: boolean;
+	profileId?: number;
+	dueDate?: string; // YYYY-MM-DD
+}
+
+export interface Recipe {
+	id: number;
+	name: string;
+	emoji: string;
+	ingredients: string[];
+	steps: string[];
+}
+
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 
 export interface Meal {
@@ -165,5 +181,7 @@ export interface FamilyData {
 	feelingsToday: FeelingLog[];
 	lists: CustomList[];
 	meals: Meal[];
+	tasks: Task[];
+	recipes: Recipe[];
 	weather: Weather;
 }
