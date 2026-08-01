@@ -136,6 +136,15 @@
 							persist();
 						}}>Photos</button
 					>
+					<button
+						type="button"
+						class="seg"
+						class:on={family.config.screensaver.mode === 'vestaboard'}
+						onclick={() => {
+							family.config.screensaver.mode = 'vestaboard';
+							persist();
+						}}>Vestaboard</button
+					>
 				</div>
 			</div>
 			<div class="row">
@@ -156,6 +165,88 @@
 			</div>
 		</div>
 	</section>
+
+	{#if family.config.screensaver.mode === 'vestaboard'}
+		{@const vb = family.config.screensaver.vestaboard}
+		<section class="card">
+			<div class="cardhead">
+				<h2 class="type-heading">Vestaboard messages</h2>
+				<p class="type-caption sub">
+					Split-flap board shown when the screen is idle. Add greetings like “Welcome home” or
+					“Happy Birthday Enaya”.
+				</p>
+			</div>
+
+			<div class="msgs">
+				{#each vb.messages as _msg, i (i)}
+					<div class="msgrow">
+						<input
+							class="msgin"
+							type="text"
+							maxlength="120"
+							placeholder="Message…"
+							bind:value={vb.messages[i]}
+							onchange={persist}
+						/>
+						<button
+							type="button"
+							class="msgdel"
+							aria-label="Remove message"
+							onclick={() => {
+								vb.messages.splice(i, 1);
+								persist();
+							}}>✕</button
+						>
+					</div>
+				{/each}
+				<button
+					type="button"
+					class="addmsg"
+					onclick={() => {
+						vb.messages.push('');
+						persist();
+					}}>+ Add message</button
+				>
+			</div>
+
+			<div class="rowset">
+				{#each [['showWeather', 'Weather'], ['showEvents', 'Upcoming events'], ['showKids', 'Kids & streaks'], ['showJokes', 'Joke of the day'], ['showNews', 'Headlines from Sites of Interest']] as [key, label] (key)}
+					<div class="row">
+						<span class="type-label">{label}</span>
+						<button
+							type="button"
+							class="switch"
+							class:on={vb[key as keyof typeof vb]}
+							role="switch"
+							aria-checked={vb[key as keyof typeof vb] as boolean}
+							aria-label={label}
+							onclick={() => {
+								// @ts-expect-error indexed boolean toggle
+								vb[key] = !vb[key];
+								persist();
+							}}><span class="knob"></span></button
+						>
+					</div>
+				{/each}
+				<div class="row">
+					<span class="type-label">Seconds per board</span>
+					<div class="segmented">
+						{#each [8, 12, 20, 30] as s (s)}
+							<button
+								type="button"
+								class="seg"
+								class:on={vb.holdSeconds === s}
+								onclick={() => {
+									vb.holdSeconds = s;
+									persist();
+								}}>{s}s</button
+							>
+						{/each}
+					</div>
+				</div>
+			</div>
+		</section>
+	{/if}
 </div>
 
 <style>
@@ -282,5 +373,42 @@
 	}
 	.dash {
 		color: var(--color-text-tertiary);
+	}
+	.msgs {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-2);
+	}
+	.msgrow {
+		display: flex;
+		gap: var(--space-2);
+		align-items: center;
+	}
+	.msgin {
+		flex: 1;
+		padding: 10px 12px;
+		border-radius: var(--radius-md);
+		border: 1px solid var(--color-border-subtle);
+		background: var(--color-surface);
+		color: var(--color-text-primary);
+	}
+	.msgdel {
+		width: 34px;
+		height: 34px;
+		flex: none;
+		border-radius: var(--radius-pill);
+		color: var(--color-text-tertiary);
+	}
+	.msgdel:hover {
+		color: var(--color-accent-warning);
+	}
+	.addmsg {
+		align-self: flex-start;
+		padding: 8px 14px;
+		border-radius: var(--radius-pill);
+		background: var(--color-surface-elevated);
+		color: var(--color-text-primary);
+		font-weight: var(--weight-medium);
+		font-size: var(--text-sm);
 	}
 </style>

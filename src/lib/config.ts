@@ -59,13 +59,27 @@ export interface SleepWindow {
 	enabled: boolean;
 }
 
-export type ScreensaverMode = 'clock' | 'photos';
+export type ScreensaverMode = 'clock' | 'photos' | 'vestaboard';
+
+/** Split-flap "Vestaboard" idle display settings. */
+export interface VestaboardPrefs {
+	/** Rotating custom messages (welcome, happy birthday, …). */
+	messages: string[];
+	showWeather: boolean;
+	showEvents: boolean;
+	showJokes: boolean;
+	showKids: boolean;
+	showNews: boolean;
+	/** Seconds each board is held before flipping to the next. */
+	holdSeconds: number;
+}
 
 export interface ScreensaverPrefs {
 	enabled: boolean;
 	mode: ScreensaverMode;
 	/** Minutes of inactivity before the screensaver appears (0 = only in sleep window). */
 	idleMinutes: number;
+	vestaboard: VestaboardPrefs;
 }
 
 export interface KioskPrefs {
@@ -150,7 +164,16 @@ export const defaultConfig: AppConfig = {
 	screensaver: {
 		enabled: true,
 		mode: 'clock',
-		idleMinutes: 10
+		idleMinutes: 10,
+		vestaboard: {
+			messages: [],
+			showWeather: true,
+			showEvents: true,
+			showJokes: true,
+			showKids: true,
+			showNews: true,
+			holdSeconds: 12
+		}
 	},
 	kiosk: {
 		readOnly: false,

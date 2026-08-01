@@ -72,11 +72,26 @@ const SleepWindowSchema = z
 	})
 	.prefault({});
 
+const VestaboardSchema = z
+	.object({
+		/** Rotating custom messages (welcome, happy birthday, …). */
+		messages: z.array(z.string().max(120)).max(20).default([]),
+		showWeather: z.boolean().default(true),
+		showEvents: z.boolean().default(true),
+		showJokes: z.boolean().default(true),
+		showKids: z.boolean().default(true),
+		showNews: z.boolean().default(true),
+		/** Seconds each board is held before flipping to the next. */
+		holdSeconds: z.number().int().min(4).max(120).default(12)
+	})
+	.prefault({});
+
 const ScreensaverSchema = z
 	.object({
 		enabled: z.boolean().default(true),
-		mode: z.enum(['clock', 'photos']).default('clock'),
-		idleMinutes: z.number().int().min(0).max(240).default(10)
+		mode: z.enum(['clock', 'photos', 'vestaboard']).default('clock'),
+		idleMinutes: z.number().int().min(0).max(240).default(10),
+		vestaboard: VestaboardSchema
 	})
 	.prefault({});
 

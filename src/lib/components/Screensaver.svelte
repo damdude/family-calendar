@@ -1,8 +1,10 @@
 <script lang="ts">
 	import { family } from '$lib/stores/family.svelte';
 	import { formatClock } from '$lib/time';
+	import Vestaboard from './Vestaboard.svelte';
 
-	let { mode, ondismiss }: { mode: 'clock' | 'photos'; ondismiss?: () => void } = $props();
+	let { mode, ondismiss }: { mode: 'clock' | 'photos' | 'vestaboard'; ondismiss?: () => void } =
+		$props();
 
 	// Live clock.
 	let now = $state(new Date());
@@ -42,36 +44,40 @@
 	const current = $derived(photoProfiles[photoIndex % Math.max(1, photoProfiles.length)]);
 </script>
 
-<!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="saver" class:photos={showPhotos} onpointerdown={() => ondismiss?.()}>
-	{#if showPhotos && current}
-		<img
-			class="bg"
-			src="/media/avatar/{current.id}?v={current.photoUpdatedAt}"
-			alt=""
-			aria-hidden="true"
-		/>
-		<div class="scrim"></div>
-		<div class="overlay">
-			<time class="clock-sm">{timeStr}</time>
-			<span class="name-sm">{current.name}</span>
-		</div>
-	{:else}
-		<div class="clockface">
-			<time class="clock">{timeStr}</time>
-			<p class="date">{dateStr}</p>
-			<div class="info">
-				<span class="chip">{family.data.weather.icon} {family.data.weather.tempF}°</span>
-				{#if bestStreak > 0}<span class="chip">🔥 {bestStreak}-day streak</span>{/if}
+{#if mode === 'vestaboard'}
+	<Vestaboard {ondismiss} />
+{:else}
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<div class="saver" class:photos={showPhotos} onpointerdown={() => ondismiss?.()}>
+		{#if showPhotos && current}
+			<img
+				class="bg"
+				src="/media/avatar/{current.id}?v={current.photoUpdatedAt}"
+				alt=""
+				aria-hidden="true"
+			/>
+			<div class="scrim"></div>
+			<div class="overlay">
+				<time class="clock-sm">{timeStr}</time>
+				<span class="name-sm">{current.name}</span>
 			</div>
-			{#if nextEvent}
-				<p class="next">
-					Next: <strong>{nextEvent.title}</strong> · {evtTime(nextEvent.start)}
-				</p>
-			{/if}
-		</div>
-	{/if}
-</div>
+		{:else}
+			<div class="clockface">
+				<time class="clock">{timeStr}</time>
+				<p class="date">{dateStr}</p>
+				<div class="info">
+					<span class="chip">{family.data.weather.icon} {family.data.weather.tempF}°</span>
+					{#if bestStreak > 0}<span class="chip">🔥 {bestStreak}-day streak</span>{/if}
+				</div>
+				{#if nextEvent}
+					<p class="next">
+						Next: <strong>{nextEvent.title}</strong> · {evtTime(nextEvent.start)}
+					</p>
+				{/if}
+			</div>
+		{/if}
+	</div>
+{/if}
 
 <style>
 	.saver {
