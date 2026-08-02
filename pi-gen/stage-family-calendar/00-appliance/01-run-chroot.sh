@@ -37,7 +37,9 @@ sudo -u "${DASH_USER}" bash -lc "cd '${APP_DIR}' && npm ci && npm run build && n
 cat > /etc/systemd/system/family-calendar.service <<UNIT
 [Unit]
 Description=Family Calendar dashboard server
-After=network-online.target remote-fs.target
+# Start promptly even when offline (first-boot Wi-Fi onboarding shows on the TV);
+# only order after remote-fs so a NAS-backed data dir is mounted first.
+After=remote-fs.target
 Wants=network-online.target
 
 [Service]
@@ -94,6 +96,40 @@ chmod +x "${APP_DIR}/scripts/update.sh" 2>/dev/null || true
 install -m 755 "${APP_DIR}/scripts/nas-mount.sh" /usr/local/bin/fc-nas-mount 2>/dev/null || true
 mkdir -p /mnt/family-calendar
 
+# --- First-boot Wi-Fi onboarding (Balena wifi-connect: hotspot + captive portal) ---
+WIFI_CONNECT_VERSION=v4.11.84
+WC_TARBALL="wifi-connect-aarch64-unknown-linux-gnu.tar.gz"
+WC_BASE="https://github.com/balena-os/wifi-connect/releases/download/${WIFI_CONNECT_VERSION}"
+mkdir -p /usr/local/share/wifi-connect/ui
+if curl -fsSL -o /tmp/wifi-connect.tar.gz "${WC_BASE}/${WC_TARBALL}" \
+  && curl -fsSL -o /tmp/wifi-connect-ui.tar.gz "${WC_BASE}/wifi-connect-ui.tar.gz"; then
+  tar -xzf /tmp/wifi-connect.tar.gz -C /tmp
+  install -m 755 /tmp/wifi-connect /usr/local/sbin/wifi-connect
+  tar -xzf /tmp/wifi-connect-ui.tar.gz -C /usr/local/share/wifi-connect/ui
+  rm -f /tmp/wifi-connect.tar.gz /tmp/wifi-connect-ui.tar.gz /tmp/wifi-connect
+  echo "==> wifi-connect ${WIFI_CONNECT_VERSION} installed"
+else
+  echo "!! wifi-connect download failed — Wi-Fi onboarding will be unavailable" >&2
+fi
+install -m 755 "${APP_DIR}/scripts/wifi-setup.sh" /usr/local/bin/fc-wifi-setup 2>/dev/null || true
+
+cat > /etc/systemd/system/family-calendar-wifi.service <<UNIT
+[Unit]
+Description=Family Calendar first-boot Wi-Fi onboarding (captive portal)
+After=NetworkManager.service
+Wants=NetworkManager.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/fc-wifi-setup
+Restart=on-failure
+RestartSec=15
+SyslogIdentifier=family-calendar-wifi
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
 # --- Passwordless sudo for service control (Settings restart / OTA / migrate) ---
 cat > /etc/sudoers.d/family-calendar <<SUDO
 ${DASH_USER} ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart family-calendar, \
@@ -141,6 +177,8 @@ usermod -aG seat,video,input,render "${DASH_USER}" 2>/dev/null || true
 
 # --- Enable everything ---
 systemctl enable seatd.service >/dev/null 2>&1 || true
+systemctl enable NetworkManager.service >/dev/null 2>&1 || true
+systemctl enable family-calendar-wifi.service >/dev/null 2>&1 || true
 systemctl enable family-calendar.service >/dev/null 2>&1 || true
 systemctl enable family-calendar-kiosk.service >/dev/null 2>&1 || true
 systemctl enable family-calendar-update.timer >/dev/null 2>&1 || true

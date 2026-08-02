@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
+	import { goto, invalidateAll } from '$app/navigation';
 	import type { PageData } from './$types';
 	import type { SetupDraft, KioskEvent } from '$lib/setup/types';
 	import { profileTint } from '$lib/design/colors';
@@ -12,7 +12,24 @@
 	let paired = $state(false);
 	let complete = $state(false);
 
+	// Phase 1 (offline): poll until the Pi joins the home network, then reload so
+	// the pairing QR uses the freshly-assigned LAN address.
 	$effect(() => {
+		if (data.online) return;
+		const id = setInterval(async () => {
+			try {
+				const r = await fetch('/api/net/status');
+				if (r.ok && (await r.json()).online) invalidateAll();
+			} catch {
+				/* still offline */
+			}
+		}, 3000);
+		return () => clearInterval(id);
+	});
+
+	// Phase 2 (online): listen for the phone completing the wizard.
+	$effect(() => {
+		if (!data.online) return;
 		const es = new EventSource(`/setup/events?token=${data.token}`);
 		es.onmessage = (e) => {
 			const msg: KioskEvent = JSON.parse(e.data);
@@ -34,76 +51,123 @@
 <div class="setup">
 	<Confetti active={complete} />
 
-	<div class="left">
-		<div class="brandrow">
-			<span class="logo">🗓️</span>
-			<div>
-				<h1 class="type-title-lg">Family Calendar</h1>
-				<p class="type-body-lg sub">Let's get you set up</p>
-			</div>
-		</div>
-
-		<div class="qrcard">
-			<div class="qr">
-				<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-				{@html data.qrSvg}
-			</div>
-			<div class="scan">
-				<p class="type-heading"><Smartphone size={20} /> Scan with your phone</p>
-				<p class="type-body sub">Point your camera at the code to open the setup wizard.</p>
-			</div>
-		</div>
-
-		<div class="fallback">
-			<p class="type-label"><Wifi size={16} /> Or type this on your phone's browser:</p>
-			<code class="url">{data.mdnsUrl}</code>
-			<code class="url alt">{data.pairUrl}</code>
-		</div>
-
-		{#if data.alreadyComplete}
-			<p class="type-caption note">
-				This device is already set up — completing the wizard will reconfigure it.
-			</p>
-		{/if}
-	</div>
-
-	<div class="right">
-		<div class="preview">
-			<span class="type-label previewlbl">Live preview</span>
-			{#if complete}
-				<div class="state">
-					<span class="big type-title">🎉 You're all set!</span>
-					<span class="type-body-lg sub">Opening your dashboard…</span>
+	{#if !data.online}
+		<!-- Phase 1: get the Pi onto Wi-Fi via its own setup hotspot -->
+		<div class="left">
+			<div class="brandrow">
+				<span class="logo">🗓️</span>
+				<div>
+					<h1 class="type-title-lg">Family Calendar</h1>
+					<p class="type-body-lg sub">Step 1 of 2 — connect me to Wi-Fi</p>
 				</div>
-			{:else if !hasContent}
+			</div>
+
+			<div class="qrcard">
+				<div class="qr">
+					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+					{@html data.wifiQrSvg}
+				</div>
+				<div class="scan">
+					<p class="type-heading"><Wifi size={20} /> Join my Wi-Fi hotspot</p>
+					<p class="type-body sub">
+						Scan this with your phone camera and tap <strong>Join “{data.apSsid}”</strong>. A setup
+						page opens automatically — pick your home Wi-Fi and enter its password.
+					</p>
+				</div>
+			</div>
+
+			<div class="fallback">
+				<p class="type-label"><Smartphone size={16} /> No scan? On your phone:</p>
+				<ol class="steps">
+					<li>Open <strong>Settings → Wi-Fi</strong></li>
+					<li>Join the network <strong>“{data.apSsid}”</strong></li>
+					<li>Wait for the “Sign in” page, then choose your home Wi-Fi</li>
+				</ol>
+			</div>
+		</div>
+
+		<div class="right">
+			<div class="preview">
+				<span class="type-label previewlbl">Status</span>
 				<div class="state waiting">
 					<span class="dotpulse"></span>
-					<span class="type-body-lg sub">
-						{paired ? 'Connected! Fill in the wizard on your phone…' : 'Waiting for your phone…'}
-					</span>
+					<span class="type-body-lg sub">Waiting to join your Wi-Fi…</span>
+					<span class="type-caption sub">This screen continues on its own once I'm online.</span>
 				</div>
-			{:else if draft}
-				<div class="previewbody">
-					<h2 class="type-title-lg fam">{draft.family.name || 'Your Family'}</h2>
-					{#if draft.profiles.length}
-						<div class="pills">
-							{#each draft.profiles as p (p.id)}
-								<span class="ppill" style:background={profileTint(p.color, 34)}>
-									<span class="pav" style:background={profileTint(p.color, 55)}
-										>{p.avatarEmoji}</span
-									>
-									<span class="type-label">{p.name}</span>
-									<span class="type-caption age">{p.age}</span>
-								</span>
-							{/each}
-						</div>
-					{:else}
-						<p class="type-body sub">Add people on your phone and they'll appear here.</p>
-					{/if}
+			</div>
+		</div>
+	{:else}
+		<div class="left">
+			<div class="brandrow">
+				<span class="logo">🗓️</span>
+				<div>
+					<h1 class="type-title-lg">Family Calendar</h1>
+					<p class="type-body-lg sub">Let's get you set up</p>
 				</div>
+			</div>
+
+			<div class="qrcard">
+				<div class="qr">
+					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+					{@html data.qrSvg}
+				</div>
+				<div class="scan">
+					<p class="type-heading"><Smartphone size={20} /> Scan with your phone</p>
+					<p class="type-body sub">Point your camera at the code to open the setup wizard.</p>
+				</div>
+			</div>
+
+			<div class="fallback">
+				<p class="type-label"><Wifi size={16} /> Or type this on your phone's browser:</p>
+				<code class="url">{data.mdnsUrl}</code>
+				<code class="url alt">{data.pairUrl}</code>
+			</div>
+
+			{#if data.alreadyComplete}
+				<p class="type-caption note">
+					This device is already set up — completing the wizard will reconfigure it.
+				</p>
 			{/if}
 		</div>
-	</div>
+
+		<div class="right">
+			<div class="preview">
+				<span class="type-label previewlbl">Live preview</span>
+				{#if complete}
+					<div class="state">
+						<span class="big type-title">🎉 You're all set!</span>
+						<span class="type-body-lg sub">Opening your dashboard…</span>
+					</div>
+				{:else if !hasContent}
+					<div class="state waiting">
+						<span class="dotpulse"></span>
+						<span class="type-body-lg sub">
+							{paired ? 'Connected! Fill in the wizard on your phone…' : 'Waiting for your phone…'}
+						</span>
+					</div>
+				{:else if draft}
+					<div class="previewbody">
+						<h2 class="type-title-lg fam">{draft.family.name || 'Your Family'}</h2>
+						{#if draft.profiles.length}
+							<div class="pills">
+								{#each draft.profiles as p (p.id)}
+									<span class="ppill" style:background={profileTint(p.color, 34)}>
+										<span class="pav" style:background={profileTint(p.color, 55)}
+											>{p.avatarEmoji}</span
+										>
+										<span class="type-label">{p.name}</span>
+										<span class="type-caption age">{p.age}</span>
+									</span>
+								{/each}
+							</div>
+						{:else}
+							<p class="type-body sub">Add people on your phone and they'll appear here.</p>
+						{/if}
+					</div>
+				{/if}
+			</div>
+		</div>
+	{/if}
 </div>
 
 <style>
@@ -180,6 +244,18 @@
 	}
 	.url.alt {
 		color: var(--color-text-tertiary);
+	}
+	.steps {
+		margin: 0;
+		padding-left: 1.3em;
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		color: var(--color-text-secondary);
+		font-size: var(--text-base);
+	}
+	.steps strong {
+		color: var(--color-text-primary);
 	}
 	.note {
 		color: var(--color-accent-warning);

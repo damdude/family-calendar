@@ -11,3 +11,6 @@ dbus-user-session
 cifs-utils
 smbclient
 avahi-utils
+network-manager
+rfkill
+iw
