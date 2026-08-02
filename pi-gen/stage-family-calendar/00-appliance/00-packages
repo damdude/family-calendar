@@ -12,5 +12,8 @@ cifs-utils
 smbclient
 avahi-utils
 network-manager
+wpasupplicant
+dnsmasq-base
+wireless-regdb
 rfkill
 iw

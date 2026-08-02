@@ -9,6 +9,14 @@ AP_SSID="FamilyCalendar Setup"
 WC_BIN=/usr/local/sbin/wifi-connect
 WC_UI=/usr/local/share/wifi-connect/ui
 
+# dhcpcd fighting NetworkManager for wlan0 is a classic cause of "AP never
+# comes up" — belt-and-braces even though Bookworm defaults to NetworkManager.
+if systemctl is-active --quiet dhcpcd 2>/dev/null; then
+  echo "wifi-setup: stopping dhcpcd (conflicts with NetworkManager on wlan0)"
+  systemctl stop dhcpcd 2>/dev/null || true
+  systemctl disable dhcpcd 2>/dev/null || true
+fi
+
 # Wi-Fi ships soft-blocked on a headless Pi until a regulatory domain is set,
 # which stops the AP from starting. Unblock and set a conservative default
 # (US = 2.4GHz ch 1-11, legal in most regions); once the family joins their own
@@ -22,6 +30,17 @@ for _ in $(seq 1 30); do
   nmcli -t -f RUNNING general 2>/dev/null | grep -q running && break
   sleep 1
 done
+
+# Wait for NM to actually see a wifi device (brcmfmac firmware load can lag
+# a couple seconds after boot) — max ~20s.
+for _ in $(seq 1 20); do
+  nmcli -t -f DEVICE,TYPE device 2>/dev/null | grep -q ':wifi$' && break
+  sleep 1
+done
+
+# Log state once for journalctl — the fastest way to diagnose a bad boot.
+echo "wifi-setup: rfkill: $(rfkill list wifi 2>&1 | tr '\n' ' ')"
+echo "wifi-setup: nmcli device: $(nmcli -t -f DEVICE,TYPE,STATE device 2>&1 | tr '\n' ' ')"
 
 # Already on a real network (Ethernet or previously-saved Wi-Fi)? Nothing to do.
 state="$(nmcli -t -f CONNECTIVITY general 2>/dev/null || echo unknown)"
