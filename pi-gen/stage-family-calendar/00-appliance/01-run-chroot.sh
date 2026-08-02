@@ -37,7 +37,7 @@ sudo -u "${DASH_USER}" bash -lc "cd '${APP_DIR}' && npm ci && npm run build && n
 cat > /etc/systemd/system/family-calendar.service <<UNIT
 [Unit]
 Description=Family Calendar dashboard server
-After=network-online.target
+After=network-online.target remote-fs.target
 Wants=network-online.target
 
 [Service]
@@ -90,12 +90,17 @@ install -m 644 "${APP_DIR}/deploy/family-calendar-update.service" /etc/systemd/s
 install -m 644 "${APP_DIR}/deploy/family-calendar-update.timer" /etc/systemd/system/ 2>/dev/null || true
 chmod +x "${APP_DIR}/scripts/update.sh" 2>/dev/null || true
 
+# --- NAS mount helper (privileged; called by the app to mount SMB shares) ---
+install -m 755 "${APP_DIR}/scripts/nas-mount.sh" /usr/local/bin/fc-nas-mount 2>/dev/null || true
+mkdir -p /mnt/family-calendar
+
 # --- Passwordless sudo for service control (Settings restart / OTA / migrate) ---
 cat > /etc/sudoers.d/family-calendar <<SUDO
 ${DASH_USER} ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart family-calendar, \
   /usr/bin/systemctl restart family-calendar-kiosk, \
   /usr/bin/systemctl start family-calendar-update.service, \
   /usr/bin/systemctl start --no-block family-calendar-update.service, \
+  /usr/local/bin/fc-nas-mount, \
   /usr/bin/systemctl reboot, /sbin/reboot
 SUDO
 chmod 440 /etc/sudoers.d/family-calendar

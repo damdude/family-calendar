@@ -8,3 +8,6 @@ wlr-randr
 chromium-browser
 fonts-noto-color-emoji
 dbus-user-session
+cifs-utils
+smbclient
+avahi-utils

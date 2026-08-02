@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { HardDrive, Server, ArrowRightLeft } from 'lucide-svelte';
+	import { HardDrive, Server, ArrowRightLeft, Wifi, Folder, Lock } from 'lucide-svelte';
 
 	interface Disk {
 		total: number;
@@ -12,12 +12,35 @@
 		localPath: string;
 		disk: Disk | null;
 	}
+	interface NasServer {
+		name: string;
+		host: string;
+		address?: string;
+	}
+	interface NasShare {
+		name: string;
+		comment?: string;
+	}
 
 	let info = $state<Info | null>(null);
 	let nasPath = $state('');
 	let checkResult = $state<{ ok: boolean; error?: string; disk: Disk | null } | null>(null);
 	let busy = $state(false);
 	let msg = $state('');
+	let showAdvanced = $state(false);
+
+	// --- Network (SMB) browse flow ---
+	let scanning = $state(false);
+	let servers = $state<NasServer[]>([]);
+	let scanned = $state(false);
+	let host = $state('');
+	let nasUser = $state('');
+	let nasPass = $state('');
+	let loadingShares = $state(false);
+	let shares = $state<NasShare[]>([]);
+	let sharesErr = $state('');
+	let selectedShare = $state('');
+	let mounting = $state(false);
 
 	async function load() {
 		const r = await fetch('/api/storage');
@@ -45,6 +68,68 @@
 			checkResult = await r.json();
 		} finally {
 			busy = false;
+		}
+	}
+
+	async function scan() {
+		scanning = true;
+		try {
+			const r = await fetch('/api/storage/nas/discover', { method: 'POST' });
+			const res = await r.json().catch(() => ({ servers: [] }));
+			servers = res.servers ?? [];
+			scanned = true;
+		} finally {
+			scanning = false;
+		}
+	}
+
+	async function browseShares() {
+		if (!host.trim()) return;
+		loadingShares = true;
+		sharesErr = '';
+		shares = [];
+		selectedShare = '';
+		try {
+			const r = await fetch('/api/storage/nas/shares', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ host: host.trim(), username: nasUser.trim(), password: nasPass })
+			});
+			const res = await r.json().catch(() => ({ ok: false }));
+			if (res.ok) shares = res.shares ?? [];
+			else sharesErr = res.error ?? 'Could not list shares.';
+		} finally {
+			loadingShares = false;
+		}
+	}
+
+	async function useShare() {
+		if (!selectedShare) return;
+		mounting = true;
+		msg = '';
+		try {
+			const r = await fetch('/api/storage/nas/mount', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({
+					host: host.trim(),
+					share: selectedShare,
+					username: nasUser.trim(),
+					password: nasPass
+				})
+			});
+			const res = await r.json().catch(() => ({}));
+			if (r.ok && res.ok) {
+				msg = res.restartRequired
+					? 'Mounted and data copied. The device will use the NAS after its next restart.'
+					: 'Mounted and set as storage.';
+				nasPass = '';
+				await load();
+			} else {
+				msg = res.error ?? 'Could not mount the share.';
+			}
+		} finally {
+			mounting = false;
 		}
 	}
 
@@ -95,42 +180,133 @@
 
 		{#if info.mode === 'local'}
 			<div class="nasform">
-				<p class="type-label"><Server size={15} /> Move data to a NAS folder</p>
-				<p class="type-caption sub">
-					Mount your NAS share on the device first (e.g. via <code>/etc/fstab</code>), then give the
-					folder path.
-				</p>
+				<p class="type-label"><Server size={15} /> Store data on a network drive (NAS)</p>
+
+				<!-- Step 1: find servers -->
+				<button type="button" class="btn ghost" disabled={scanning} onclick={scan}>
+					<Wifi size={16} />
+					{scanning ? 'Scanning…' : 'Scan the network'}
+				</button>
+				{#if scanned && servers.length === 0}
+					<p class="type-caption sub">
+						No servers found automatically — type your NAS name or IP below.
+					</p>
+				{/if}
+				{#if servers.length}
+					<div class="serverlist">
+						{#each servers as s (s.host)}
+							<button
+								type="button"
+								class="server"
+								class:on={host === s.host}
+								onclick={() => {
+									host = s.host;
+									shares = [];
+									selectedShare = '';
+								}}
+							>
+								<Server size={16} />
+								<span class="sname">{s.name}</span>
+								<span class="type-caption sub">{s.address ?? s.host}</span>
+							</button>
+						{/each}
+					</div>
+				{/if}
+
+				<!-- Step 2: server + credentials -->
+				<label class="type-caption sub" for="nas-host">Server name or IP</label>
+				<input id="nas-host" class="in" type="text" placeholder="my-nas.local" bind:value={host} />
 				<div class="row">
 					<input
 						class="in"
 						type="text"
-						placeholder="/mnt/nas/family-calendar"
-						bind:value={nasPath}
+						placeholder="Username"
+						bind:value={nasUser}
+						autocomplete="off"
 					/>
-					<button
-						type="button"
-						class="btn ghost"
-						disabled={busy || !nasPath.trim()}
-						onclick={checkNas}>Check</button
-					>
+					<input
+						class="in"
+						type="password"
+						placeholder="Password"
+						bind:value={nasPass}
+						autocomplete="off"
+					/>
 				</div>
-				{#if checkResult}
-					{#if checkResult.ok}
-						<p class="type-caption ok">
-							✓ Writable{checkResult.disk ? ` · ${gb(checkResult.disk.free)} free` : ''}
-						</p>
-					{:else}
-						<p class="type-caption err">✗ {checkResult.error}</p>
-					{/if}
-				{/if}
 				<button
 					type="button"
-					class="btn primary"
-					disabled={busy || !checkResult?.ok}
-					onclick={() => migrate('nas')}
+					class="btn ghost"
+					disabled={loadingShares || !host.trim()}
+					onclick={browseShares}
 				>
-					<ArrowRightLeft size={16} /> Move to NAS
+					<Lock size={15} />
+					{loadingShares ? 'Connecting…' : 'Show shares'}
 				</button>
+				{#if sharesErr}<p class="type-caption err">✗ {sharesErr}</p>{/if}
+
+				<!-- Step 3: pick a share -->
+				{#if shares.length}
+					<div class="serverlist">
+						{#each shares as sh (sh.name)}
+							<button
+								type="button"
+								class="server"
+								class:on={selectedShare === sh.name}
+								onclick={() => (selectedShare = sh.name)}
+							>
+								<Folder size={16} />
+								<span class="sname">{sh.name}</span>
+								{#if sh.comment}<span class="type-caption sub">{sh.comment}</span>{/if}
+							</button>
+						{/each}
+					</div>
+					<button
+						type="button"
+						class="btn primary"
+						disabled={mounting || !selectedShare}
+						onclick={useShare}
+					>
+						<ArrowRightLeft size={16} />
+						{mounting ? 'Mounting…' : 'Use this share for storage'}
+					</button>
+				{/if}
+
+				<!-- Advanced: point at an already-mounted folder -->
+				<button type="button" class="linkish" onclick={() => (showAdvanced = !showAdvanced)}>
+					{showAdvanced ? 'Hide' : 'Advanced:'} use an already-mounted folder
+				</button>
+				{#if showAdvanced}
+					<div class="row">
+						<input
+							class="in"
+							type="text"
+							placeholder="/mnt/nas/family-calendar"
+							bind:value={nasPath}
+						/>
+						<button
+							type="button"
+							class="btn ghost"
+							disabled={busy || !nasPath.trim()}
+							onclick={checkNas}>Check</button
+						>
+					</div>
+					{#if checkResult}
+						{#if checkResult.ok}
+							<p class="type-caption ok">
+								✓ Writable{checkResult.disk ? ` · ${gb(checkResult.disk.free)} free` : ''}
+							</p>
+						{:else}
+							<p class="type-caption err">✗ {checkResult.error}</p>
+						{/if}
+					{/if}
+					<button
+						type="button"
+						class="btn primary"
+						disabled={busy || !checkResult?.ok}
+						onclick={() => migrate('nas')}
+					>
+						<ArrowRightLeft size={16} /> Move to this folder
+					</button>
+				{/if}
 			</div>
 		{:else}
 			<button type="button" class="btn ghost" disabled={busy} onclick={() => migrate('local')}>
@@ -226,6 +402,35 @@
 	}
 	.btn:disabled {
 		opacity: 0.45;
+	}
+	.serverlist {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+	}
+	.server {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 10px 12px;
+		border-radius: var(--radius-md);
+		background: var(--color-surface-elevated);
+		text-align: left;
+		width: 100%;
+	}
+	.server.on {
+		box-shadow: inset 0 0 0 2px var(--color-profile-blue);
+	}
+	.sname {
+		font-weight: var(--weight-semibold);
+		color: var(--color-text-primary);
+	}
+	.linkish {
+		align-self: flex-start;
+		color: var(--color-text-secondary);
+		font-size: var(--text-sm);
+		text-decoration: underline;
+		padding: 4px 0;
 	}
 	.ok {
 		color: var(--color-accent-success);
