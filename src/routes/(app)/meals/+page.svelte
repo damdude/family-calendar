@@ -3,7 +3,7 @@
 	import type { MealType } from '$lib/types';
 	import { startOfWeek, weekColumns } from '$lib/time';
 	import { autoEmojiFor, CUISINES, FOOD_EMOJIS, type Dish } from '$lib/meals';
-	import { Plus, X, Trash2 } from 'lucide-svelte';
+	import { Plus, X, Trash2, BookOpen, Pencil } from 'lucide-svelte';
 
 	const weekStart = $derived(startOfWeek(new Date(), family.config.view.weekStartsOn));
 	const columns = $derived(weekColumns(weekStart, 7));
@@ -97,10 +97,26 @@
 				{@const m = mealAt(col.date, type)}
 				<div class="cell" class:today={col.isToday}>
 					{#if m}
-						<button class="filled" type="button" onclick={() => openEditor(key, type)}>
-							<span class="emoji">{m.emoji}</span>
-							<span class="name type-caption">{m.name}</span>
-						</button>
+						{#if m.recipeId}
+							<a class="filled" href="/recipes?recipe={m.recipeId}">
+								<span class="emoji">{m.emoji}</span>
+								<span class="name type-caption">{m.name}</span>
+								<span class="reciperibbon"><BookOpen size={11} /> Recipe</span>
+							</a>
+							{#if !family.readOnly}
+								<button
+									class="editcell"
+									type="button"
+									aria-label="Change meal"
+									onclick={() => openEditor(key, type)}><Pencil size={12} /></button
+								>
+							{/if}
+						{:else}
+							<button class="filled" type="button" onclick={() => openEditor(key, type)}>
+								<span class="emoji">{m.emoji}</span>
+								<span class="name type-caption">{m.name}</span>
+							</button>
+						{/if}
 					{:else if !family.readOnly}
 						<button
 							class="add pressable"
@@ -267,6 +283,32 @@
 		width: 100%;
 		height: 100%;
 		justify-content: center;
+		text-decoration: none;
+	}
+	.reciperibbon {
+		display: inline-flex;
+		align-items: center;
+		gap: 3px;
+		font-size: 0.62rem;
+		color: var(--color-accent-warning);
+		font-weight: var(--weight-semibold);
+	}
+	.editcell {
+		position: absolute;
+		top: 4px;
+		right: 4px;
+		display: grid;
+		place-items: center;
+		width: 22px;
+		height: 22px;
+		border-radius: var(--radius-pill);
+		color: var(--color-text-tertiary);
+		background: var(--color-surface-elevated);
+		opacity: 0;
+		transition: opacity var(--dur-quick) var(--ease-out);
+	}
+	.cell:hover .editcell {
+		opacity: 1;
 	}
 	.cell.today {
 		box-shadow:

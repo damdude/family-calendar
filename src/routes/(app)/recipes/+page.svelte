@@ -1,162 +1,426 @@
 <script lang="ts">
 	import { family } from '$lib/stores/family.svelte';
-	import type { Recipe } from '$lib/types';
-	import { Plus, X, Trash2, ChefHat } from 'lucide-svelte';
+	import type { Recipe, MealType } from '$lib/types';
+	import { RECIPE_CATALOG, RECIPE_CATEGORIES, type CatalogRecipe } from '$lib/recipeCatalog';
+	import { page } from '$app/state';
+	import { Plus, X, Trash2, ChefHat, Link2, CalendarPlus, ExternalLink } from 'lucide-svelte';
 
-	const recipes = $derived(family.data.recipes);
+	type Scraped = {
+		name: string;
+		image?: string;
+		ingredients: string[];
+		steps: string[];
+		sourceUrl: string;
+	};
 
-	let viewing = $state<Recipe | null>(null);
+	const savedRecipes = $derived(family.data.recipes);
+
+	let tab = $state<'browse' | 'mine'>('browse');
+	let activeCat = $state<string>(RECIPE_CATEGORIES[0]);
+	const catalogInCat = $derived(RECIPE_CATALOG.filter((r) => r.category === activeCat));
+
+	// --- Detail viewer (catalog OR saved) ---
+	let viewCatalog = $state<CatalogRecipe | null>(null);
+	let viewSaved = $state<Recipe | null>(null);
+	let fetched = $state<Scraped | null>(null);
+	let loading = $state(false);
+	let fetchErr = $state('');
+	let savedFromView = $state<Recipe | null>(null);
+
+	const viewOpen = $derived(viewCatalog !== null || viewSaved !== null);
+
+	function openCatalog(r: CatalogRecipe) {
+		viewCatalog = r;
+		viewSaved = null;
+		fetched = null;
+		fetchErr = '';
+		savedFromView = family.recipeByUrl(r.sourceUrl) ?? null;
+		if (savedFromView) {
+			fetched = {
+				name: savedFromView.name,
+				image: savedFromView.image,
+				ingredients: savedFromView.ingredients,
+				steps: savedFromView.steps,
+				sourceUrl: r.sourceUrl
+			};
+		}
+	}
+	function openSaved(r: Recipe) {
+		viewSaved = r;
+		viewCatalog = null;
+		fetched = {
+			name: r.name,
+			image: r.image,
+			ingredients: r.ingredients,
+			steps: r.steps,
+			sourceUrl: r.sourceUrl ?? ''
+		};
+		savedFromView = r;
+		fetchErr = '';
+	}
+	function closeView() {
+		viewCatalog = null;
+		viewSaved = null;
+		fetched = null;
+		savedFromView = null;
+	}
+
+	async function getFullRecipe() {
+		if (!viewCatalog) return;
+		loading = true;
+		fetchErr = '';
+		try {
+			const res = await fetch('/api/recipes/import', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ url: viewCatalog.sourceUrl })
+			});
+			if (!res.ok) throw new Error();
+			fetched = await res.json();
+		} catch {
+			fetchErr =
+				"Couldn't fetch the full recipe (offline or the site blocked it). The link still works below.";
+		} finally {
+			loading = false;
+		}
+	}
+
+	function saveCurrent(): Recipe | null {
+		if (savedFromView) return savedFromView;
+		if (!fetched && !viewCatalog) return null;
+		const base = viewCatalog;
+		const rec = family.addRecipe({
+			// Prefer the catalog's clean name over the page's SEO-y JSON-LD title.
+			name: base?.name || fetched?.name || 'Recipe',
+			emoji: base?.emoji || '🍽️',
+			ingredients: fetched?.ingredients ?? [],
+			steps: fetched?.steps ?? [],
+			sourceUrl: base?.sourceUrl ?? fetched?.sourceUrl,
+			image: fetched?.image,
+			cuisine: base?.cuisine,
+			category: base?.category
+		});
+		savedFromView = rec;
+		return rec;
+	}
+
+	// --- Plan to a day ---
+	let planOpen = $state(false);
+	let planDate = $state(todayKey());
+	let planType = $state<MealType>('dinner');
+	let planned = $state('');
+	function todayKey() {
+		const d = new Date();
+		return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+	}
+	function doPlan() {
+		const rec = viewSaved ?? saveCurrent();
+		if (!rec) return;
+		family.planRecipe(planDate, planType, rec);
+		planned = `Planned for ${planType} on ${planDate}`;
+		planOpen = false;
+		setTimeout(() => (planned = ''), 2600);
+	}
+
+	// --- Import by URL ---
+	let importUrl = $state('');
+	let importing = $state(false);
+	let importErr = $state('');
+	async function importByUrl() {
+		if (!importUrl.trim()) return;
+		importing = true;
+		importErr = '';
+		try {
+			const res = await fetch('/api/recipes/import', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ url: importUrl.trim() })
+			});
+			if (!res.ok) throw new Error();
+			const r: Scraped = await res.json();
+			const rec = family.addRecipe({
+				name: r.name,
+				emoji: '🍽️',
+				ingredients: r.ingredients,
+				steps: r.steps,
+				sourceUrl: r.sourceUrl,
+				image: r.image
+			});
+			importUrl = '';
+			tab = 'mine';
+			openSaved(rec);
+		} catch {
+			importErr = "Couldn't read a recipe from that link.";
+		} finally {
+			importing = false;
+		}
+	}
+
+	// --- Manual create/edit ---
 	let editing = $state<Recipe | null>(null);
 	let creating = $state(false);
-
-	// Editor fields
-	let name = $state('');
-	let emoji = $state('🍽️');
-	let ingredientsText = $state('');
-	let stepsText = $state('');
-
+	let mName = $state('');
+	let mEmoji = $state('🍽️');
+	let mIng = $state('');
+	let mSteps = $state('');
+	const editorOpen = $derived(creating || editing !== null);
 	function openCreate() {
 		creating = true;
 		editing = null;
-		name = '';
-		emoji = '🍽️';
-		ingredientsText = '';
-		stepsText = '';
+		mName = '';
+		mEmoji = '🍽️';
+		mIng = '';
+		mSteps = '';
 	}
 	function openEdit(r: Recipe) {
 		editing = r;
 		creating = false;
-		name = r.name;
-		emoji = r.emoji;
-		ingredientsText = r.ingredients.join('\n');
-		stepsText = r.steps.join('\n');
-		viewing = null;
+		mName = r.name;
+		mEmoji = r.emoji;
+		mIng = r.ingredients.join('\n');
+		mSteps = r.steps.join('\n');
+		closeView();
 	}
-	function closeEditor() {
-		creating = false;
-		editing = null;
-	}
-	const editorOpen = $derived(creating || editing !== null);
-
-	function save() {
-		if (!name.trim()) return;
+	function saveManual() {
+		if (!mName.trim()) return;
 		const payload = {
-			name: name.trim(),
-			emoji: emoji.trim() || '🍽️',
-			ingredients: ingredientsText
+			name: mName.trim(),
+			emoji: mEmoji.trim() || '🍽️',
+			ingredients: mIng
 				.split('\n')
 				.map((s) => s.trim())
 				.filter(Boolean),
-			steps: stepsText
+			steps: mSteps
 				.split('\n')
 				.map((s) => s.trim())
 				.filter(Boolean)
 		};
-		if (editing) family.updateRecipe(editing.id, payload);
+		if (editing) family.updateRecipe(editing.id, { ...editing, ...payload });
 		else family.addRecipe(payload);
-		closeEditor();
+		creating = false;
+		editing = null;
 	}
-	function del() {
+	function delManual() {
 		if (editing) family.removeRecipe(editing.id);
-		closeEditor();
+		creating = false;
+		editing = null;
 	}
+
+	// Deep-link: /recipes?recipe=<id> (from a planned meal day).
+	$effect(() => {
+		const id = Number(page.url.searchParams.get('recipe'));
+		if (id) {
+			const r = family.data.recipes.find((x) => x.id === id);
+			if (r) {
+				tab = 'mine';
+				openSaved(r);
+			}
+		}
+	});
 </script>
 
 <div class="recipes-page">
 	<div class="pagehead">
 		<h1 class="type-title page-title">Recipes</h1>
-		{#if !family.readOnly}
-			<button type="button" class="new" onclick={openCreate}><Plus size={18} /> New recipe</button>
-		{/if}
+		<div class="tabs">
+			<button type="button" class="tab" class:on={tab === 'browse'} onclick={() => (tab = 'browse')}
+				>Browse</button
+			>
+			<button type="button" class="tab" class:on={tab === 'mine'} onclick={() => (tab = 'mine')}
+				>My recipes {#if savedRecipes.length}<span class="badge">{savedRecipes.length}</span
+					>{/if}</button
+			>
+		</div>
 	</div>
 
-	{#if recipes.length === 0}
-		<p class="type-body empty"><ChefHat size={18} /> No recipes yet.</p>
-	{/if}
-
-	<div class="grid">
-		{#each recipes as r (r.id)}
-			<button type="button" class="card" onclick={() => (viewing = r)}>
-				<span class="emoji">{r.emoji}</span>
-				<span class="name type-body-lg">{r.name}</span>
-				<span class="meta type-caption"
-					>{r.ingredients.length} ingredients · {r.steps.length} steps</span
+	{#if tab === 'browse'}
+		<div class="cats">
+			{#each RECIPE_CATEGORIES as c (c)}
+				<button type="button" class="cat" class:on={activeCat === c} onclick={() => (activeCat = c)}
+					>{c}</button
 				>
-			</button>
-		{/each}
-	</div>
+			{/each}
+		</div>
+		<div class="grid">
+			{#each catalogInCat as r (r.sourceUrl)}
+				<button type="button" class="card" onclick={() => openCatalog(r)}>
+					<span class="emoji">{r.emoji}</span>
+					<span class="name type-body-lg">{r.name}</span>
+					<span class="cuisine type-caption">{r.cuisine}</span>
+					<span class="blurb type-caption">{r.blurb}</span>
+				</button>
+			{/each}
+		</div>
+	{:else}
+		<div class="importbar">
+			<Link2 size={18} />
+			<input
+				class="in"
+				type="url"
+				placeholder="Paste a recipe link to import…"
+				bind:value={importUrl}
+				onkeydown={(e) => e.key === 'Enter' && importByUrl()}
+			/>
+			<button type="button" class="importbtn" disabled={importing} onclick={importByUrl}
+				>{importing ? 'Reading…' : 'Import'}</button
+			>
+			{#if !family.readOnly}
+				<button type="button" class="new" onclick={openCreate}><Plus size={16} /> New</button>
+			{/if}
+		</div>
+		{#if importErr}<p class="err type-caption">{importErr}</p>{/if}
+
+		{#if savedRecipes.length === 0}
+			<p class="type-body empty">
+				<ChefHat size={18} /> No saved recipes yet — browse or import one.
+			</p>
+		{/if}
+		<div class="grid">
+			{#each savedRecipes as r (r.id)}
+				<button type="button" class="card" onclick={() => openSaved(r)}>
+					<span class="emoji">{r.emoji}</span>
+					<span class="name type-body-lg">{r.name}</span>
+					<span class="meta type-caption"
+						>{r.ingredients.length} ingredients · {r.steps.length} steps</span
+					>
+				</button>
+			{/each}
+		</div>
+	{/if}
 </div>
 
-<!-- View modal -->
-{#if viewing}
+<!-- Detail viewer -->
+{#if viewOpen}
+	{@const cat = viewCatalog}
+	{@const srcHref = cat?.sourceUrl || viewSaved?.sourceUrl}
 	<div
 		class="scrim"
 		role="button"
 		tabindex="-1"
 		aria-label="Close"
-		onclick={() => (viewing = null)}
-		onkeydown={(e) => e.key === 'Escape' && (viewing = null)}
+		onclick={closeView}
+		onkeydown={(e) => e.key === 'Escape' && closeView()}
 	></div>
 	<div class="modal" role="dialog" aria-modal="true">
 		<header class="mhead">
-			<h2 class="type-title">{viewing.emoji} {viewing.name}</h2>
-			<button type="button" class="close" aria-label="Close" onclick={() => (viewing = null)}
+			<h2 class="type-title">{(fetched?.name ?? cat?.name) || viewSaved?.name}</h2>
+			<button type="button" class="close" aria-label="Close" onclick={closeView}
 				><X size={20} /></button
 			>
 		</header>
-		<h3 class="type-heading">Ingredients</h3>
-		<ul class="ing">
-			{#each viewing.ingredients as i (i)}<li class="type-body">{i}</li>{/each}
-		</ul>
-		<h3 class="type-heading">Steps</h3>
-		<ol class="steps">
-			{#each viewing.steps as s (s)}<li class="type-body">{s}</li>{/each}
-		</ol>
-		{#if !family.readOnly}
-			<button type="button" class="editbtn" onclick={() => viewing && openEdit(viewing)}
-				>Edit</button
-			>
+
+		{#if fetched?.image}
+			<img class="hero" src={fetched.image} alt="" referrerpolicy="no-referrer" />
 		{/if}
+		{#if cat}<p class="type-body sub">{cat.blurb}</p>{/if}
+
+		{#if loading}
+			<p class="type-body sub">Fetching the full recipe…</p>
+		{:else if fetched && (fetched.ingredients.length || fetched.steps.length)}
+			{#if fetched.ingredients.length}
+				<h3 class="type-heading">Ingredients</h3>
+				<ul class="ing">
+					{#each fetched.ingredients as i, idx (idx)}<li class="type-body">{i}</li>{/each}
+				</ul>
+			{/if}
+			{#if fetched.steps.length}
+				<h3 class="type-heading">Steps</h3>
+				<ol class="steps">
+					{#each fetched.steps as s, idx (idx)}<li class="type-body">{s}</li>{/each}
+				</ol>
+			{/if}
+		{:else if cat}
+			<button type="button" class="primary" onclick={getFullRecipe}>Get full recipe</button>
+		{/if}
+		{#if fetchErr}<p class="err type-caption">{fetchErr}</p>{/if}
+
+		{#if planOpen}
+			<div class="planbox">
+				<div class="planrow">
+					<input class="in" type="date" bind:value={planDate} />
+					<select class="in" bind:value={planType}>
+						<option value="breakfast">Breakfast</option>
+						<option value="lunch">Lunch</option>
+						<option value="dinner">Dinner</option>
+						<option value="snack">Snack</option>
+					</select>
+				</div>
+				<button type="button" class="primary" onclick={doPlan}>Add to plan</button>
+			</div>
+		{/if}
+
+		<footer class="vfoot">
+			{#if srcHref}
+				<a class="srclink" href={srcHref} target="_blank" rel="noreferrer"
+					><ExternalLink size={15} /> Source</a
+				>
+			{/if}
+			<div class="spacer"></div>
+			{#if viewSaved && !family.readOnly}
+				<button type="button" class="ghost" onclick={() => viewSaved && openEdit(viewSaved)}
+					>Edit</button
+				>
+			{:else if cat && !savedFromView && !family.readOnly}
+				<button type="button" class="ghost" onclick={saveCurrent}>Save</button>
+			{/if}
+			{#if !family.readOnly}
+				<button type="button" class="primary" onclick={() => (planOpen = !planOpen)}
+					><CalendarPlus size={16} /> Plan a day</button
+				>
+			{/if}
+		</footer>
 	</div>
 {/if}
 
-<!-- Editor modal -->
+<!-- Manual editor -->
 {#if editorOpen}
 	<div
 		class="scrim"
 		role="button"
 		tabindex="-1"
 		aria-label="Close"
-		onclick={closeEditor}
-		onkeydown={(e) => e.key === 'Escape' && closeEditor()}
+		onclick={() => {
+			creating = false;
+			editing = null;
+		}}
+		onkeydown={(e) => e.key === 'Escape' && (creating = false)}
 	></div>
 	<div class="modal" role="dialog" aria-modal="true">
 		<header class="mhead">
 			<h2 class="type-title">{editing ? 'Edit recipe' : 'New recipe'}</h2>
-			<button type="button" class="close" aria-label="Close" onclick={closeEditor}
-				><X size={20} /></button
+			<button
+				type="button"
+				class="close"
+				aria-label="Close"
+				onclick={() => {
+					creating = false;
+					editing = null;
+				}}><X size={20} /></button
 			>
 		</header>
 		<div class="row">
-			<input class="in emoji-in" type="text" bind:value={emoji} maxlength="4" aria-label="Emoji" />
-			<input class="in" type="text" placeholder="Recipe name" bind:value={name} maxlength="120" />
+			<input class="in emoji-in" type="text" bind:value={mEmoji} maxlength="4" aria-label="Emoji" />
+			<input class="in" type="text" placeholder="Recipe name" bind:value={mName} maxlength="120" />
 		</div>
 		<label class="field"
 			><span class="type-label lbl">Ingredients (one per line)</span>
-			<textarea class="in ta" rows="5" bind:value={ingredientsText}></textarea></label
+			<textarea class="in ta" rows="5" bind:value={mIng}></textarea></label
 		>
 		<label class="field"
 			><span class="type-label lbl">Steps (one per line)</span>
-			<textarea class="in ta" rows="6" bind:value={stepsText}></textarea></label
+			<textarea class="in ta" rows="6" bind:value={mSteps}></textarea></label
 		>
-		<footer class="foot">
-			{#if editing}<button type="button" class="dangerbtn" onclick={del}
+		<footer class="vfoot">
+			{#if editing}<button type="button" class="danger" onclick={delManual}
 					><Trash2 size={16} /> Delete</button
-				>{:else}<span></span>{/if}
-			<button type="button" class="savebtn" onclick={save}>Save</button>
+				>{/if}
+			<div class="spacer"></div>
+			<button type="button" class="primary" onclick={saveManual}>Save</button>
 		</footer>
 	</div>
 {/if}
+
+{#if planned}<div class="toast" role="status">📅 {planned}</div>{/if}
 
 <style>
 	.recipes-page {
@@ -169,31 +433,61 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
+		flex-wrap: wrap;
+		gap: var(--space-3);
 	}
 	.page-title {
 		color: var(--color-text-primary);
 	}
-	.new,
-	.editbtn,
-	.savebtn {
-		display: inline-flex;
-		align-items: center;
-		gap: 6px;
-		padding: 9px 16px;
+	.tabs {
+		display: flex;
+		gap: 4px;
+		padding: 3px;
+		background: var(--color-surface-elevated);
 		border-radius: var(--radius-pill);
+	}
+	.tab {
+		padding: 7px 16px;
+		border-radius: var(--radius-pill);
+		color: var(--color-text-secondary);
+		font-weight: var(--weight-medium);
+		display: inline-flex;
+		gap: 6px;
+		align-items: center;
+	}
+	.tab.on {
+		background: var(--color-surface);
+		color: var(--color-text-primary);
+		box-shadow: var(--shadow-card);
+	}
+	.badge {
 		background: var(--color-text-primary);
 		color: var(--color-surface);
-		font-weight: var(--weight-semibold);
+		border-radius: var(--radius-pill);
+		font-size: var(--text-xs);
+		padding: 0 7px;
+		line-height: 1.5;
 	}
-	.empty {
+	.cats {
 		display: flex;
-		align-items: center;
 		gap: 8px;
+		flex-wrap: wrap;
+	}
+	.cat {
+		padding: 8px 14px;
+		border-radius: var(--radius-pill);
+		background: var(--color-surface-elevated);
 		color: var(--color-text-secondary);
+		font-weight: var(--weight-medium);
+		font-size: var(--text-sm);
+	}
+	.cat.on {
+		background: var(--color-text-primary);
+		color: var(--color-surface);
 	}
 	.grid {
 		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+		grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
 		gap: var(--space-3);
 	}
 	.card {
@@ -207,20 +501,77 @@
 		box-shadow: var(--shadow-card);
 		text-align: left;
 	}
+	.card:hover {
+		box-shadow: var(--shadow-float);
+	}
 	.card .emoji {
 		font-size: 2rem;
 	}
 	.name {
 		color: var(--color-text-primary);
 	}
+	.cuisine {
+		color: var(--color-accent-warning);
+		font-weight: var(--weight-semibold);
+	}
+	.blurb,
 	.meta {
 		color: var(--color-text-tertiary);
+	}
+	.importbar {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
+		flex-wrap: wrap;
+	}
+	.importbar :global(svg) {
+		color: var(--color-text-tertiary);
+		flex: none;
+	}
+	.in {
+		padding: 10px 12px;
+		border-radius: var(--radius-md);
+		border: 1px solid var(--color-border-subtle);
+		background: var(--color-surface);
+		color: var(--color-text-primary);
+		font-size: var(--text-base);
+	}
+	.importbar .in {
+		flex: 1;
+		min-width: 180px;
+	}
+	.importbtn,
+	.new {
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+		padding: 10px 16px;
+		border-radius: var(--radius-pill);
+		background: var(--color-text-primary);
+		color: var(--color-surface);
+		font-weight: var(--weight-semibold);
+	}
+	.importbtn:disabled {
+		opacity: 0.5;
+	}
+	.new {
+		background: var(--color-surface-elevated);
+		color: var(--color-text-primary);
+	}
+	.empty {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		color: var(--color-text-secondary);
+	}
+	.err {
+		color: var(--color-accent-warning);
 	}
 	.scrim {
 		position: fixed;
 		inset: 0;
 		z-index: 150;
-		background: rgba(20, 20, 20, 0.35);
+		background: rgba(20, 20, 20, 0.4);
 		backdrop-filter: blur(2px);
 	}
 	.modal {
@@ -229,8 +580,8 @@
 		left: 50%;
 		top: 50%;
 		transform: translate(-50%, -50%);
-		width: min(480px, calc(100vw - 32px));
-		max-height: 88vh;
+		width: min(560px, calc(100vw - 24px));
+		max-height: 90vh;
 		overflow-y: auto;
 		background: var(--color-surface);
 		border-radius: var(--radius-xl);
@@ -242,15 +593,29 @@
 	}
 	.mhead {
 		display: flex;
-		align-items: center;
+		align-items: flex-start;
 		justify-content: space-between;
+		gap: var(--space-3);
+	}
+	.mhead h2 {
+		color: var(--color-text-primary);
 	}
 	.close {
 		display: grid;
 		place-items: center;
 		width: 36px;
 		height: 36px;
+		flex: none;
 		border-radius: var(--radius-pill);
+		color: var(--color-text-secondary);
+	}
+	.hero {
+		width: 100%;
+		max-height: 220px;
+		object-fit: cover;
+		border-radius: var(--radius-md);
+	}
+	.sub {
 		color: var(--color-text-secondary);
 	}
 	.ing,
@@ -259,8 +624,67 @@
 		padding-left: 1.2em;
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		gap: 5px;
 		color: var(--color-text-secondary);
+	}
+	.planbox {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-2);
+		padding: var(--space-3);
+		border-radius: var(--radius-md);
+		background: var(--color-surface-elevated);
+	}
+	.planrow {
+		display: flex;
+		gap: var(--space-2);
+	}
+	.planrow .in {
+		flex: 1;
+	}
+	.vfoot {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
+		margin-top: var(--space-2);
+	}
+	.spacer {
+		flex: 1;
+	}
+	.srclink {
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+		color: var(--color-text-secondary);
+		font-size: var(--text-sm);
+		text-decoration: none;
+	}
+	.primary {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 9px 16px;
+		border-radius: var(--radius-pill);
+		background: var(--color-text-primary);
+		color: var(--color-surface);
+		font-weight: var(--weight-semibold);
+	}
+	.ghost {
+		padding: 9px 16px;
+		border-radius: var(--radius-pill);
+		background: var(--color-surface-elevated);
+		color: var(--color-text-primary);
+		font-weight: var(--weight-semibold);
+	}
+	.danger {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 9px 16px;
+		border-radius: var(--radius-pill);
+		background: color-mix(in srgb, var(--color-accent-warning) 15%, var(--color-surface));
+		color: var(--color-accent-warning);
+		font-weight: var(--weight-semibold);
 	}
 	.field {
 		display: flex;
@@ -274,13 +698,7 @@
 		display: flex;
 		gap: var(--space-2);
 	}
-	.in {
-		padding: 11px 13px;
-		border-radius: var(--radius-md);
-		border: 1px solid var(--color-border-subtle);
-		background: var(--color-surface);
-		color: var(--color-text-primary);
-		font-size: var(--text-base);
+	.row .in {
 		flex: 1;
 	}
 	.emoji-in {
@@ -290,21 +708,19 @@
 	.ta {
 		resize: vertical;
 		font-family: inherit;
+		width: 100%;
 	}
-	.foot {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		margin-top: var(--space-2);
-	}
-	.dangerbtn {
-		display: inline-flex;
-		align-items: center;
-		gap: 6px;
-		padding: 9px 16px;
+	.toast {
+		position: fixed;
+		left: 50%;
+		bottom: var(--space-6);
+		transform: translateX(-50%);
+		z-index: 200;
+		padding: 12px 20px;
 		border-radius: var(--radius-pill);
-		background: color-mix(in srgb, var(--color-accent-warning) 15%, white);
-		color: var(--color-accent-warning);
+		background: var(--color-text-primary);
+		color: var(--color-surface);
 		font-weight: var(--weight-semibold);
+		box-shadow: var(--shadow-float);
 	}
 </style>

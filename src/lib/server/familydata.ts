@@ -14,7 +14,8 @@ const MealSchema = z.object({
 	date: z.string(),
 	mealType: z.enum(['breakfast', 'lunch', 'dinner', 'snack']),
 	name: z.string().max(120),
-	emoji: z.string().max(8)
+	emoji: z.string().max(8),
+	recipeId: z.number().int().optional()
 });
 
 const ListItemSchema = z.object({
@@ -54,8 +55,12 @@ const RecipeSchema = z.object({
 	id: z.number().int(),
 	name: z.string().max(120),
 	emoji: z.string().max(8).default('🍽️'),
-	ingredients: z.array(z.string().max(200)).max(100),
-	steps: z.array(z.string().max(500)).max(100)
+	ingredients: z.array(z.string().max(300)).max(100),
+	steps: z.array(z.string().max(1000)).max(100),
+	sourceUrl: z.string().max(500).optional(),
+	image: z.string().max(1000).optional(),
+	cuisine: z.string().max(40).optional(),
+	category: z.string().max(40).optional()
 });
 
 const StarBalanceSchema = z.object({

@@ -19,7 +19,15 @@ import {
 import { emptyProgress, type FeelingEntry, type ProgressData } from '$lib/kid/progress';
 import { defaultRoutinesForAge } from '$lib/kid/routineLibrary';
 import { dateKey } from '$lib/time';
-import type { FamilyData, FamilyEvent, Profile, Reward, RewardClaim, Routine } from '$lib/types';
+import type {
+	FamilyData,
+	FamilyEvent,
+	Profile,
+	Recipe,
+	Reward,
+	RewardClaim,
+	Routine
+} from '$lib/types';
 
 export interface LocalEvent {
 	id: number;
@@ -405,9 +413,15 @@ class FamilyStore {
 	}
 
 	// --- Recipes ---
-	addRecipe(r: Omit<FamilyData['recipes'][number], 'id'>) {
-		this.data.recipes.push({ ...r, id: this.nextId(this.data.recipes) });
+	addRecipe(r: Omit<FamilyData['recipes'][number], 'id'>): Recipe {
+		const recipe = { ...r, id: this.nextId(this.data.recipes) };
+		this.data.recipes.push(recipe);
 		this.persistFamilyData();
+		return recipe;
+	}
+	/** Find a saved recipe with the same source URL (avoid re-importing). */
+	recipeByUrl(url: string): Recipe | undefined {
+		return this.data.recipes.find((r) => r.sourceUrl && r.sourceUrl === url);
 	}
 	updateRecipe(id: number, r: Omit<FamilyData['recipes'][number], 'id'>) {
 		const i = this.data.recipes.findIndex((x) => x.id === id);
@@ -486,12 +500,13 @@ class FamilyStore {
 		});
 	}
 
-	/** Set (or clear) the meal for a date + type. */
+	/** Set (or clear) the meal for a date + type. Optionally link a recipe. */
 	setMeal(
 		date: string,
 		mealType: FamilyData['meals'][number]['mealType'],
 		name: string,
-		emoji: string
+		emoji: string,
+		recipeId?: number
 	) {
 		const existing = this.data.meals.find((m) => m.date === date && m.mealType === mealType);
 		if (!name.trim()) {
@@ -501,15 +516,23 @@ class FamilyStore {
 		if (existing) {
 			existing.name = name.trim();
 			existing.emoji = emoji;
+			existing.recipeId = recipeId;
 		} else {
 			this.data.meals.push({
 				id: this.nextId(this.data.meals),
 				date,
 				mealType,
 				name: name.trim(),
-				emoji
+				emoji,
+				recipeId
 			});
 		}
+	}
+
+	/** Plan a saved recipe onto a specific day + meal slot. */
+	planRecipe(date: string, mealType: FamilyData['meals'][number]['mealType'], recipe: Recipe) {
+		this.setMeal(date, mealType, recipe.name, recipe.emoji, recipe.id);
+		this.persistFamilyData();
 	}
 }
 

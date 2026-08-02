@@ -156,6 +156,11 @@ export interface Recipe {
 	emoji: string;
 	ingredients: string[];
 	steps: string[];
+	/** Optional metadata when imported from the web / a catalog. */
+	sourceUrl?: string;
+	image?: string;
+	cuisine?: string;
+	category?: string;
 }
 
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
@@ -166,6 +171,8 @@ export interface Meal {
 	mealType: MealType;
 	name: string;
 	emoji: string;
+	/** Set when the meal was planned from a recipe → tap the day to view it. */
+	recipeId?: number;
 }
 
 export interface Weather {
