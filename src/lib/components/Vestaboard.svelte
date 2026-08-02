@@ -256,24 +256,25 @@
 		background: #111114;
 		display: flex;
 		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		gap: clamp(12px, 3vh, 32px);
-		padding: clamp(12px, 4vw, 48px);
+		align-items: stretch;
+		justify-content: stretch;
+		gap: clamp(6px, 1.4vh, 20px);
+		padding: clamp(10px, 2.2vmin, 28px);
 		overflow: hidden;
 	}
 	.board {
+		flex: 1;
+		min-height: 0;
 		display: grid;
 		grid-template-columns: repeat(22, 1fr);
-		gap: clamp(2px, 0.4vw, 6px);
+		grid-template-rows: repeat(6, 1fr);
+		gap: clamp(2px, 0.5vmin, 8px);
 		width: 100%;
-		max-width: min(1400px, 96vw);
-		aspect-ratio: 22 / 6.6;
-		padding: clamp(8px, 1.4vw, 20px);
+		padding: clamp(6px, 1vmin, 16px);
 		background: #000;
-		border-radius: clamp(8px, 1.2vw, 18px);
+		border-radius: clamp(8px, 1.4vmin, 22px);
 		box-shadow:
-			0 0 0 2px var(--accent, transparent),
+			0 0 0 3px var(--accent, transparent),
 			0 24px 60px rgba(0, 0, 0, 0.6);
 	}
 	.flap {
@@ -281,9 +282,10 @@
 		display: grid;
 		place-items: center;
 		background: linear-gradient(#2a2a30, #202025 49%, #1a1a1e 50%, #232329);
-		border-radius: 3px;
-		aspect-ratio: 3 / 4;
+		border-radius: clamp(2px, 0.5vmin, 5px);
 		overflow: hidden;
+		min-width: 0;
+		min-height: 0;
 		font-family: 'DM Mono', 'SF Mono', ui-monospace, 'Courier New', monospace;
 		box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.6);
 	}
@@ -298,7 +300,7 @@
 		background: rgba(0, 0, 0, 0.75);
 	}
 	.face {
-		font-size: clamp(0.7rem, 2.6vw, 2.6rem);
+		font-size: clamp(1rem, 6.2vmin, 9rem);
 		font-weight: 600;
 		color: #f3ede0;
 		line-height: 1;

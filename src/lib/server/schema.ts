@@ -89,7 +89,9 @@ const VestaboardSchema = z
 const ScreensaverSchema = z
 	.object({
 		enabled: z.boolean().default(true),
-		mode: z.enum(['clock', 'photos', 'vestaboard']).default('clock'),
+		// Vestaboard is now its own full-screen mode (not a screensaver style);
+		// coerce any legacy stored value back to 'clock'.
+		mode: z.enum(['clock', 'photos']).catch('clock').default('clock'),
 		idleMinutes: z.number().int().min(0).max(240).default(10),
 		vestaboard: VestaboardSchema
 	})

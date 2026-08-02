@@ -59,9 +59,9 @@ export interface SleepWindow {
 	enabled: boolean;
 }
 
-export type ScreensaverMode = 'clock' | 'photos' | 'vestaboard';
+export type ScreensaverMode = 'clock' | 'photos';
 
-/** Split-flap "Vestaboard" idle display settings. */
+/** Split-flap "Vestaboard" board settings (its own full-screen mode). */
 export interface VestaboardPrefs {
 	/** Rotating custom messages (welcome, happy birthday, …). */
 	messages: string[];

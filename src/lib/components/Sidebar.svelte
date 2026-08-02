@@ -11,6 +11,7 @@
 		ChefHat,
 		Image,
 		Moon,
+		LayoutGrid,
 		Settings,
 		type Icon as IconType
 	} from 'lucide-svelte';
@@ -42,6 +43,7 @@
 		{ label: 'Recipes', href: '/recipes', icon: ChefHat, feature: 'recipes' },
 		{ label: 'Photos', href: '/photos', icon: Image, feature: 'photos' },
 		{ label: 'Sleep', href: '/sleep', icon: Moon, feature: 'sleep' },
+		{ label: 'Board', href: '/vestaboard', icon: LayoutGrid },
 		{ label: 'Settings', href: '/settings', icon: Settings }
 	];
 
