@@ -14,7 +14,12 @@ name: Build Raspberry Pi image
 # Debian keyrings, so debootstrap doesn't fail on GPG NO_PUBKEY).
 
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      debug_ssh_pubkey:
+        description: 'Optional SSH public key for temporary remote-debug access (pi user, key-only auth). Leave blank for a normal build.'
+        required: false
+        type: string
   release:
     types: [published]
 
@@ -52,6 +57,7 @@ jobs:
         env:
           FC_REPO: https://github.com/${{ github.repository }}.git
           FC_BRANCH: ${{ github.ref_name }}
+          FC_DEBUG_SSH_PUBKEY: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_ssh_pubkey || '' }}
 
       - name: Attach image to the release
         if: github.event_name == 'release'

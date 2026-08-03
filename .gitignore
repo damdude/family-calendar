@@ -24,6 +24,8 @@ Thumbs.db
 !.env.test
 /secrets
 /config/*.local.json
+# Debug SSH keypair (temporary remote-debug access to a dev's own Pi)
+/.debug-keys
 
 # Local data & databases (stay on-device, encrypted at rest)
 /data

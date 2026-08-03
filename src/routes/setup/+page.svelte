@@ -27,6 +27,35 @@
 		return () => clearInterval(id);
 	});
 
+	// Phase 1 debug panel: a static, fixed-size snapshot of Wi-Fi bring-up state
+	// (systemd, rfkill, nmcli, recent log lines) — the only way to see what the
+	// Pi is doing when it has no network for SSH/logs to reach. Refreshes in
+	// place so a screenshot always shows the latest lines without scrolling.
+	let debugLog = $state('');
+	let debugAt = $state<number | null>(null);
+	$effect(() => {
+		if (data.online) return;
+		let cancelled = false;
+		const poll = async () => {
+			try {
+				const r = await fetch('/api/net/debug');
+				if (r.ok && !cancelled) {
+					const d = await r.json();
+					debugLog = d.log;
+					debugAt = d.at;
+				}
+			} catch {
+				/* leave last snapshot on screen */
+			}
+		};
+		poll();
+		const id = setInterval(poll, 4000);
+		return () => {
+			cancelled = true;
+			clearInterval(id);
+		};
+	});
+
 	// Phase 2 (online): listen for the phone completing the wizard.
 	$effect(() => {
 		if (!data.online) return;
@@ -94,6 +123,16 @@
 					<span class="type-body-lg sub">Waiting to join your Wi-Fi…</span>
 					<span class="type-caption sub">This screen continues on its own once I'm online.</span>
 				</div>
+			</div>
+
+			<div class="debugbox">
+				<div class="debughead">
+					<span class="type-label">Debug info</span>
+					{#if debugAt}
+						<span class="type-caption sub">updated {new Date(debugAt).toLocaleTimeString()}</span>
+					{/if}
+				</div>
+				<pre class="debuglog">{debugLog || 'Waiting for diagnostics…'}</pre>
 			</div>
 		</div>
 	{:else}
@@ -274,6 +313,41 @@
 		box-shadow: var(--shadow-float);
 		border: 1px solid rgba(255, 255, 255, 0.5);
 		justify-content: center;
+	}
+	.debugbox {
+		flex: none;
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		padding: var(--space-3) var(--space-4);
+		border-radius: var(--radius-lg);
+		background: #14161a;
+		box-shadow: var(--shadow-card);
+	}
+	.debughead {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: var(--space-2);
+	}
+	.debughead .type-label {
+		color: #d7dbe0;
+	}
+	.debughead .sub {
+		color: #7d8590;
+	}
+	/* Fixed height + internal scroll: never grows past the screen, and a
+	   screenshot always shows the latest lines regardless of log length. */
+	.debuglog {
+		margin: 0;
+		height: 150px;
+		overflow-y: auto;
+		font-family: ui-monospace, 'SF Mono', 'Courier New', monospace;
+		font-size: 0.72rem;
+		line-height: 1.5;
+		color: #a7f3c8;
+		white-space: pre-wrap;
+		word-break: break-word;
 	}
 	.previewlbl {
 		color: var(--color-text-tertiary);
