@@ -33,28 +33,6 @@ chown -R "${DASH_USER}:${DASH_USER}" "${APP_DIR}"
 sudo -u "${DASH_USER}" bash -lc "cd '${APP_DIR}' && npm ci && npm run build && npm prune --omit=dev"
 [ -f "${APP_DIR}/.env" ] || { cp "${APP_DIR}/.env.example" "${APP_DIR}/.env"; chown "${DASH_USER}:${DASH_USER}" "${APP_DIR}/.env"; }
 
-# --- Temporary remote-debug SSH access (key-only; no password auth) ---
-# Lets a developer diagnose first-boot networking issues (no other way to get
-# a shell once Chromium owns the display and there's no Wi-Fi yet). Safe:
-# password auth is disabled, so only whoever holds the matching private key
-# (kept out of the repo, .gitignore'd) can log in.
-if [ -n "${FC_DEBUG_SSH_PUBKEY:-}" ]; then
-  install -d -m 700 -o "${DASH_USER}" -g "${DASH_USER}" "${USER_HOME}/.ssh"
-  echo "${FC_DEBUG_SSH_PUBKEY}" > "${USER_HOME}/.ssh/authorized_keys"
-  chmod 600 "${USER_HOME}/.ssh/authorized_keys"
-  chown "${DASH_USER}:${DASH_USER}" "${USER_HOME}/.ssh/authorized_keys"
-
-  install -d -m 755 /etc/ssh/sshd_config.d
-  cat > /etc/ssh/sshd_config.d/family-calendar-debug.conf <<'SSHCFG'
-PasswordAuthentication no
-PermitRootLogin no
-KbdInteractiveAuthentication no
-SSHCFG
-  echo "==> debug SSH key installed for ${DASH_USER}"
-else
-  echo "==> FC_DEBUG_SSH_PUBKEY not set — SSH left at distro defaults"
-fi
-
 # --- Server service (Node adapter → `node build`, port 5173) ---
 cat > /etc/systemd/system/family-calendar.service <<UNIT
 [Unit]

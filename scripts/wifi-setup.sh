@@ -31,10 +31,20 @@ for _ in $(seq 1 30); do
   sleep 1
 done
 
-# Wait for NM to actually see a wifi device (brcmfmac firmware load can lag
-# a couple seconds after boot) — max ~20s.
+# NetworkManager tracks its OWN software radio switch, separate from rfkill,
+# persisted across boots (/var/lib/NetworkManager state). Raspberry Pi OS's
+# base image ships this OFF by default (normally flipped on by the desktop's
+# first-run country-selection wizard, which never runs on this headless kiosk)
+# — confirmed via `nmcli radio wifi` showing "disabled" even with rfkill clear.
+# Without this, wlan0 stays stuck in the "unavailable" state forever and every
+# AddAndActivateConnection call for the AP fails ("device is not available").
+nmcli radio wifi on 2>/dev/null || true
+
+# Wait for NM to actually see a wifi device AND leave the "unavailable" state
+# (brcmfmac firmware load + the radio-on above can both take a moment) — max ~20s.
 for _ in $(seq 1 20); do
-  nmcli -t -f DEVICE,TYPE device 2>/dev/null | grep -q ':wifi$' && break
+  st="$(nmcli -t -f DEVICE,TYPE,STATE device 2>/dev/null | awk -F: '$2=="wifi"{print $3}')"
+  [ -n "$st" ] && [ "$st" != "unavailable" ] && break
   sleep 1
 done
 
