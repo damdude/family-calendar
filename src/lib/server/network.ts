@@ -47,6 +47,44 @@ function run(cmd: string, args: string[], timeoutMs = 5000): Promise<string | nu
 }
 
 /**
+ * Is our own setup hotspot currently up? While wifi-connect hosts the AP,
+ * wlan0 is "connected" and NetworkManager reports connectivity as "limited" —
+ * which would otherwise look like a real network and flip the setup screen to
+ * the pairing step, showing a QR pointing at the AP's own 192.168.42.1 gateway
+ * (unreachable from anywhere but the hotspot itself). Detect AP mode so
+ * onboarding is never mistaken for being online.
+ */
+export async function isSetupApActive(): Promise<boolean> {
+	const active = await run('nmcli', ['-t', '-f', 'NAME,TYPE', 'connection', 'show', '--active']);
+	if (!active) return false;
+	// Terse output is NAME:TYPE; a connection name may itself contain an escaped
+	// colon, so split on the LAST separator.
+	const wifiNames = active
+		.split('\n')
+		.map((line) => {
+			const i = line.lastIndexOf(':');
+			return i < 0
+				? null
+				: { name: line.slice(0, i).replace(/\\:/g, ':'), type: line.slice(i + 1) };
+		})
+		.filter((x): x is { name: string; type: string } => !!x && x.type === '802-11-wireless')
+		.map((x) => x.name);
+
+	for (const name of wifiNames) {
+		const mode = await run('nmcli', [
+			'-t',
+			'-f',
+			'802-11-wireless.mode',
+			'connection',
+			'show',
+			name
+		]);
+		if (mode && mode.trim().toLowerCase().endsWith(':ap')) return true;
+	}
+	return false;
+}
+
+/**
  * Is the Pi on a usable network (home Wi-Fi or Ethernet)? "limited" counts —
  * setup pairing only needs the phone and Pi on the same LAN, not the internet.
  * Returns true when NetworkManager isn't present (dev machine) so we never wrap
@@ -56,7 +94,9 @@ export async function isOnline(): Promise<boolean> {
 	const out = await run('nmcli', ['-t', '-f', 'CONNECTIVITY', 'general']);
 	if (out === null) return true; // no nmcli → assume online (dev / non-Pi)
 	const state = out.trim().toLowerCase();
-	return state === 'full' || state === 'limited';
+	if (state !== 'full' && state !== 'limited') return false;
+	// Hosting the setup hotspot is onboarding, not being online.
+	return !(await isSetupApActive());
 }
 
 /** Run a shell command, always returning combined stdout+stderr (never throws). */

@@ -12,16 +12,21 @@
 	let paired = $state(false);
 	let complete = $state(false);
 
-	// Phase 1 (offline): poll until the Pi joins the home network, then reload so
-	// the pairing QR uses the freshly-assigned LAN address.
+	// Watch connectivity in BOTH directions and reload whenever it flips, so the
+	// screen always self-corrects: offline → online swaps the join-hotspot QR for
+	// a pairing QR carrying the freshly-assigned LAN address, and online → offline
+	// (e.g. the hotspot restarting) returns to the join step instead of stranding
+	// the display on a stale, unreachable URL.
 	$effect(() => {
-		if (data.online) return;
+		const wasOnline = data.online;
 		const id = setInterval(async () => {
 			try {
 				const r = await fetch('/api/net/status');
-				if (r.ok && (await r.json()).online) invalidateAll();
+				if (!r.ok) return;
+				const { online } = await r.json();
+				if (online !== wasOnline) invalidateAll();
 			} catch {
-				/* still offline */
+				/* transient — keep the current screen */
 			}
 		}, 3000);
 		return () => clearInterval(id);
