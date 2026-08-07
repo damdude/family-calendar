@@ -36,6 +36,20 @@ export const SetupDraftSchema = z.object({
 	profiles: z.array(ProfileDraftSchema).max(12)
 });
 
+/**
+ * The persisted config's family field, before the wizard has necessarily run —
+ * unlike FamilyDraftSchema (what the wizard submits, where a name IS required),
+ * this has to accept "" because config.json can legitimately be saved mid-setup
+ * with no family name yet (e.g. picking TV/touch mode saves before the wizard
+ * ever runs). `setupComplete` is the real "is this fully configured" flag, not
+ * a non-empty name.
+ */
+const PersistedFamilySchema = z.object({
+	name: z.string().trim().max(60),
+	timezone: z.string().min(1).max(64),
+	weekStartsOn: z.union([z.literal(0), z.literal(1)])
+});
+
 // --- Persisted app config ---
 
 const FeatureFlagsSchema = z
@@ -141,7 +155,7 @@ export const PersistedConfigSchema = z.object({
 	displayMode: z.enum(['tv', 'touch']).nullable().default(null),
 	/** The family chose "set up Wi-Fi later". */
 	wifiSkipped: z.boolean().default(false),
-	family: FamilyDraftSchema.default({ name: '', timezone: 'UTC', weekStartsOn: 1 }),
+	family: PersistedFamilySchema.default({ name: '', timezone: 'UTC', weekStartsOn: 1 }),
 	profiles: z.array(PersistedProfileSchema).default([]),
 	app: AppConfigSchema
 });
