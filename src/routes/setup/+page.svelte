@@ -7,7 +7,8 @@
 	import ModePicker from '$lib/components/ModePicker.svelte';
 	import WifiPicker from '$lib/components/WifiPicker.svelte';
 	import GoogleConnect from '$lib/components/GoogleConnect.svelte';
-	import { Smartphone, Wifi, CalendarDays, ArrowLeft } from 'lucide-svelte';
+	import TouchFamilySetup from '$lib/components/TouchFamilySetup.svelte';
+	import { Smartphone, Wifi, CalendarDays, ArrowLeft, WifiOff } from 'lucide-svelte';
 
 	let { data }: { data: PageData } = $props();
 
@@ -52,13 +53,39 @@
 	const isTouch = $derived(data.displayMode === 'touch');
 	// Wi-Fi step is done when we're online, or the family chose to skip it.
 	const needsWifi = $derived(!needsMode && !data.online && !data.wifiSkipped);
+	const pastWifiStep = $derived(!needsMode && !needsWifi);
+	// TV, Wi-Fi skipped, and genuinely still offline: there is no network for a
+	// phone to reach this device over, so the pairing QR (which needs one) can't
+	// be shown — it would just display a dead URL. Touch mode has no such gap:
+	// it never needed a phone in the first place.
+	const showOfflineCantPair = $derived(pastWifiStep && !isTouch && !data.online);
+
+	async function retryWifi() {
+		await fetch('/api/display-mode', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ wifiSkipped: false })
+		}).catch(() => {});
+		invalidateAll();
+	}
+
+	function touchSetupComplete(familyName: string) {
+		completedFamilyName = familyName;
+		complete = true;
+		setTimeout(() => goto('/'), 2600);
+	}
+	let completedFamilyName = $state('');
 
 	// Watch connectivity in BOTH directions and reload whenever it flips, so the
 	// screen always self-corrects: offline → online swaps the join-hotspot QR for
 	// a pairing QR carrying the freshly-assigned LAN address, and online → offline
 	// (e.g. the hotspot restarting) returns to the join step instead of stranding
-	// the display on a stale, unreachable URL.
+	// the display on a stale, unreachable URL. Only relevant while a network
+	// change could still change what's on screen — not once touch's on-screen
+	// setup or TV's real pairing screen are already showing.
 	$effect(() => {
+		if (needsMode) return;
+		if (pastWifiStep && !showOfflineCantPair) return;
 		const wasOnline = data.online;
 		const id = setInterval(async () => {
 			try {
@@ -102,9 +129,10 @@
 		};
 	});
 
-	// Pairing step: listen for the phone completing the wizard.
+	// Pairing step: listen for the phone completing the wizard. Touch mode
+	// completes locally (touchSetupComplete) — there's no phone in that flow.
 	$effect(() => {
-		if (needsMode || needsWifi) return;
+		if (needsMode || needsWifi || isTouch) return;
 		const es = new EventSource(`/setup/events?token=${data.token}`);
 		es.onmessage = (e) => {
 			const msg: KioskEvent = JSON.parse(e.data);
@@ -122,6 +150,8 @@
 
 	const hasContent = $derived(!!draft && (draft.family.name || draft.profiles.length > 0));
 </script>
+
+<Confetti active={complete} />
 
 {#if needsMode}
 	<!-- Step 0: TV or touchscreen — everything downstream depends on it. -->
@@ -144,160 +174,189 @@
 		</div>
 		<button type="button" class="skip" onclick={skipWifi}>Set up Wi-Fi later</button>
 	</div>
-{:else}
+{:else if needsWifi}
+	<!-- TV: no touch here, so hand Wi-Fi off to a phone via the hotspot. Still
+	     offer "back": this may be a touch-capable screen someone chose TV mode
+	     for, and they should be able to reconsider. -->
 	<div class="setup">
-		<Confetti active={complete} />
-
-		{#if needsWifi}
-			<!-- TV: no touch here, so hand Wi-Fi off to a phone via the hotspot. Still
-			     offer "back": this may be a touch-capable screen someone chose TV mode
-			     for, and they should be able to reconsider. -->
-			<div class="left">
-				<button type="button" class="stepback" onclick={backToModePicker}>
-					<ArrowLeft size={16} /> Change screen type
-				</button>
-				<div class="brandrow">
-					<span class="logo">🗓️</span>
-					<div>
-						<h1 class="type-title-lg">Family Calendar</h1>
-						<p class="type-body-lg sub">Step 1 of 2 — connect me to Wi-Fi</p>
-					</div>
-				</div>
-
-				<div class="qrcard">
-					<div class="qr">
-						<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-						{@html data.wifiQrSvg}
-					</div>
-					<div class="scan">
-						<p class="type-heading"><Wifi size={20} /> Join my Wi-Fi hotspot</p>
-						<p class="type-body sub">
-							Scan this with your phone camera and tap <strong>Join “{data.apSsid}”</strong>. A
-							setup page opens automatically — pick your home Wi-Fi and enter its password.
-						</p>
-					</div>
-				</div>
-
-				<div class="fallback">
-					<p class="type-label"><Smartphone size={16} /> No scan? On your phone:</p>
-					<ol class="steps">
-						<li>Open <strong>Settings → Wi-Fi</strong></li>
-						<li>Join the network <strong>“{data.apSsid}”</strong></li>
-						<li>Wait for the “Sign in” page, then choose your home Wi-Fi</li>
-					</ol>
-				</div>
-
-				<button type="button" class="skip" onclick={skipWifi}>Set up Wi-Fi later</button>
-			</div>
-
-			<div class="right">
-				<div class="preview">
-					<span class="type-label previewlbl">Status</span>
-					<div class="state waiting">
-						<span class="dotpulse"></span>
-						<span class="type-body-lg sub">Waiting to join your Wi-Fi…</span>
-						<span class="type-caption sub">This screen continues on its own once I'm online.</span>
-					</div>
-				</div>
-
-				<div class="debugbox">
-					<div class="debughead">
-						<span class="type-label">Debug info</span>
-						{#if debugAt}
-							<span class="type-caption sub">updated {new Date(debugAt).toLocaleTimeString()}</span>
-						{/if}
-					</div>
-					<pre class="debuglog">{debugLog || 'Waiting for diagnostics…'}</pre>
+		<div class="left">
+			<button type="button" class="stepback" onclick={backToModePicker}>
+				<ArrowLeft size={16} /> Change screen type
+			</button>
+			<div class="brandrow">
+				<span class="logo">🗓️</span>
+				<div>
+					<h1 class="type-title-lg">Family Calendar</h1>
+					<p class="type-body-lg sub">Step 1 of 2 — connect me to Wi-Fi</p>
 				</div>
 			</div>
-		{:else}
-			<div class="left">
-				<button type="button" class="stepback" onclick={backToModePicker}>
-					<ArrowLeft size={16} /> Change screen type
-				</button>
-				<div class="brandrow">
-					<span class="logo">🗓️</span>
-					<div>
-						<h1 class="type-title-lg">Family Calendar</h1>
-						<p class="type-body-lg sub">Let's get you set up</p>
-					</div>
-				</div>
 
-				<div class="qrcard">
-					<div class="qr">
-						<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-						{@html data.qrSvg}
-					</div>
-					<div class="scan">
-						<p class="type-heading"><Smartphone size={20} /> Scan with your phone</p>
-						<p class="type-body sub">Point your camera at the code to open the setup wizard.</p>
-					</div>
+			<div class="qrcard">
+				<div class="qr">
+					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+					{@html data.wifiQrSvg}
 				</div>
-
-				<div class="fallback">
-					<p class="type-label"><Wifi size={16} /> Or type this on your phone's browser:</p>
-					<code class="url">{data.mdnsUrl}</code>
-					<code class="url alt">{data.pairUrl}</code>
-				</div>
-
-				<!-- Sign in to Google here rather than pasting a share link. Uses the
-			     device flow: a short code is shown, approved on a phone/laptop —
-			     no Google password is ever typed into this appliance. -->
-				<div class="gcard">
-					<p class="type-label"><CalendarDays size={16} /> Google Calendar (optional)</p>
-					<p class="type-caption sub">
-						Sign in to pull in your existing calendars. You can also do this later in Settings.
+				<div class="scan">
+					<p class="type-heading"><Wifi size={20} /> Join my Wi-Fi hotspot</p>
+					<p class="type-body sub">
+						Scan this with your phone camera and tap <strong>Join “{data.apSsid}”</strong>. A setup
+						page opens automatically — pick your home Wi-Fi and enter its password.
 					</p>
-					<GoogleConnect />
 				</div>
-
-				{#if data.alreadyComplete}
-					<p class="type-caption note">
-						This device is already set up — completing the wizard will reconfigure it.
-					</p>
-				{/if}
 			</div>
 
-			<div class="right">
-				<div class="preview">
-					<span class="type-label previewlbl">Live preview</span>
-					{#if complete}
-						<div class="state">
-							<span class="big type-title">🎉 You're all set!</span>
-							<span class="type-body-lg sub">Opening your dashboard…</span>
-						</div>
-					{:else if !hasContent}
-						<div class="state waiting">
-							<span class="dotpulse"></span>
-							<span class="type-body-lg sub">
-								{paired
-									? 'Connected! Fill in the wizard on your phone…'
-									: 'Waiting for your phone…'}
-							</span>
-						</div>
-					{:else if draft}
-						<div class="previewbody">
-							<h2 class="type-title-lg fam">{draft.family.name || 'Your Family'}</h2>
-							{#if draft.profiles.length}
-								<div class="pills">
-									{#each draft.profiles as p (p.id)}
-										<span class="ppill" style:background={profileTint(p.color, 34)}>
-											<span class="pav" style:background={profileTint(p.color, 55)}
-												>{p.avatarEmoji}</span
-											>
-											<span class="type-label">{p.name}</span>
-											<span class="type-caption age">{p.age}</span>
-										</span>
-									{/each}
-								</div>
-							{:else}
-								<p class="type-body sub">Add people on your phone and they'll appear here.</p>
-							{/if}
-						</div>
+			<div class="fallback">
+				<p class="type-label"><Smartphone size={16} /> No scan? On your phone:</p>
+				<ol class="steps">
+					<li>Open <strong>Settings → Wi-Fi</strong></li>
+					<li>Join the network <strong>“{data.apSsid}”</strong></li>
+					<li>Wait for the “Sign in” page, then choose your home Wi-Fi</li>
+				</ol>
+			</div>
+
+			<button type="button" class="skip" onclick={skipWifi}>Set up Wi-Fi later</button>
+		</div>
+
+		<div class="right">
+			<div class="preview">
+				<span class="type-label previewlbl">Status</span>
+				<div class="state waiting">
+					<span class="dotpulse"></span>
+					<span class="type-body-lg sub">Waiting to join your Wi-Fi…</span>
+					<span class="type-caption sub">This screen continues on its own once I'm online.</span>
+				</div>
+			</div>
+
+			<div class="debugbox">
+				<div class="debughead">
+					<span class="type-label">Debug info</span>
+					{#if debugAt}
+						<span class="type-caption sub">updated {new Date(debugAt).toLocaleTimeString()}</span>
 					{/if}
 				</div>
+				<pre class="debuglog">{debugLog || 'Waiting for diagnostics…'}</pre>
 			</div>
+		</div>
+	</div>
+{:else if isTouch}
+	<!-- Touch: family + profiles entered right here, no phone involved. -->
+	<div class="touchwifi">
+		{#if complete}
+			<div class="donecard">
+				<span class="big type-title">🎉 You're all set!</span>
+				<p class="type-body-lg sub">Opening {completedFamilyName || 'your'} dashboard…</p>
+			</div>
+		{:else}
+			<button type="button" class="stepback" onclick={backToModePicker}>
+				<ArrowLeft size={16} /> Change screen type
+			</button>
+			<TouchFamilySetup token={data.token} oncomplete={touchSetupComplete} />
 		{/if}
+	</div>
+{:else if data.online}
+	<!-- TV, online: hand family + profile entry to a phone. -->
+	<div class="setup">
+		<div class="left">
+			<button type="button" class="stepback" onclick={backToModePicker}>
+				<ArrowLeft size={16} /> Change screen type
+			</button>
+			<div class="brandrow">
+				<span class="logo">🗓️</span>
+				<div>
+					<h1 class="type-title-lg">Family Calendar</h1>
+					<p class="type-body-lg sub">Let's get you set up</p>
+				</div>
+			</div>
+
+			<div class="qrcard">
+				<div class="qr">
+					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+					{@html data.qrSvg}
+				</div>
+				<div class="scan">
+					<p class="type-heading"><Smartphone size={20} /> Scan with your phone</p>
+					<p class="type-body sub">Point your camera at the code to open the setup wizard.</p>
+				</div>
+			</div>
+
+			<div class="fallback">
+				<p class="type-label"><Wifi size={16} /> Or type this on your phone's browser:</p>
+				<code class="url">{data.mdnsUrl}</code>
+				<code class="url alt">{data.pairUrl}</code>
+			</div>
+
+			<!-- Sign in to Google here rather than pasting a share link. Uses the
+			     device flow: a short code is shown, approved on a phone/laptop —
+			     no Google password is ever typed into this appliance. -->
+			<div class="gcard">
+				<p class="type-label"><CalendarDays size={16} /> Google Calendar (optional)</p>
+				<p class="type-caption sub">
+					Sign in to pull in your existing calendars. You can also do this later in Settings.
+				</p>
+				<GoogleConnect />
+			</div>
+
+			{#if data.alreadyComplete}
+				<p class="type-caption note">
+					This device is already set up — completing the wizard will reconfigure it.
+				</p>
+			{/if}
+		</div>
+
+		<div class="right">
+			<div class="preview">
+				<span class="type-label previewlbl">Live preview</span>
+				{#if complete}
+					<div class="state">
+						<span class="big type-title">🎉 You're all set!</span>
+						<span class="type-body-lg sub">Opening your dashboard…</span>
+					</div>
+				{:else if !hasContent}
+					<div class="state waiting">
+						<span class="dotpulse"></span>
+						<span class="type-body-lg sub">
+							{paired ? 'Connected! Fill in the wizard on your phone…' : 'Waiting for your phone…'}
+						</span>
+					</div>
+				{:else if draft}
+					<div class="previewbody">
+						<h2 class="type-title-lg fam">{draft.family.name || 'Your Family'}</h2>
+						{#if draft.profiles.length}
+							<div class="pills">
+								{#each draft.profiles as p (p.id)}
+									<span class="ppill" style:background={profileTint(p.color, 34)}>
+										<span class="pav" style:background={profileTint(p.color, 55)}
+											>{p.avatarEmoji}</span
+										>
+										<span class="type-label">{p.name}</span>
+										<span class="type-caption age">{p.age}</span>
+									</span>
+								{/each}
+							</div>
+						{:else}
+							<p class="type-body sub">Add people on your phone and they'll appear here.</p>
+						{/if}
+					</div>
+				{/if}
+			</div>
+		</div>
+	</div>
+{:else}
+	<!-- TV, Wi-Fi skipped, still genuinely offline: no network exists for a
+	     phone to reach this device over, so there is no QR that could work. -->
+	<div class="touchwifi">
+		<button type="button" class="stepback" onclick={backToModePicker}>
+			<ArrowLeft size={16} /> Change screen type
+		</button>
+		<div class="offlinecard">
+			<WifiOff size={44} />
+			<h1 class="type-title">No Wi-Fi yet</h1>
+			<p class="type-body-lg sub">
+				A phone can only reach this display once it's on your network — and there's nothing to scan
+				without one.
+			</p>
+			<button type="button" class="btn primary" onclick={retryWifi}>Set up Wi-Fi now</button>
+		</div>
 	</div>
 {/if}
 
@@ -318,6 +377,35 @@
 		border-radius: var(--radius-xl);
 		background: var(--color-surface);
 		box-shadow: var(--shadow-float);
+	}
+	.donecard,
+	.offlinecard {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: var(--space-3);
+		width: min(480px, 100%);
+		padding: clamp(24px, 4vmin, 44px);
+		border-radius: var(--radius-xl);
+		background: var(--color-surface);
+		box-shadow: var(--shadow-float);
+		text-align: center;
+	}
+	.offlinecard :global(svg) {
+		color: var(--color-text-tertiary);
+	}
+	.btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 14px 26px;
+		border-radius: var(--radius-pill);
+		font-weight: var(--weight-semibold);
+		font-size: var(--text-lg);
+	}
+	.btn.primary {
+		background: var(--color-text-primary);
+		color: var(--color-surface);
 	}
 	.gcard {
 		display: flex;
