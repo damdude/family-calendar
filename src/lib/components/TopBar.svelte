@@ -18,11 +18,9 @@
 <header class="topbar">
 	<h1 class="family type-title-lg">{family.data.familyName}</h1>
 	<div class="right">
-		{#if mirror.role !== 'controller'}
-			<a class="pair" href="/pair" class:live={mirror.role === 'display' && mirror.connected}>
-				<Smartphone size={18} />
-				<span>{mirror.role === 'display' ? 'Phone paired' : 'Use phone'}</span>
-			</a>
+		<!-- Pairing QR now lives in PhoneMirrorPanel (always-on for TV, icon for touch). -->
+		{#if mirror.role === 'display' && mirror.connected}
+			<span class="pair live"><Smartphone size={18} /> Phone paired</span>
 		{/if}
 		<time class="clock type-title-lg">{clock}</time>
 		<WeatherChip weather={family.data.weather} />

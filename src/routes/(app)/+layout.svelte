@@ -4,6 +4,7 @@
 	import Sidebar from '$lib/components/Sidebar.svelte';
 	import TopBar from '$lib/components/TopBar.svelte';
 	import Screensaver from '$lib/components/Screensaver.svelte';
+	import PhoneMirrorPanel from '$lib/components/PhoneMirrorPanel.svelte';
 	import { dragScroll } from '$lib/actions/dragScroll';
 	import { isWithinWindow } from '$lib/time';
 	import { invalidateAll } from '$app/navigation';
@@ -76,6 +77,11 @@
 		</main>
 	</div>
 </div>
+
+<!-- Full QR on a TV (the only way in), a small icon on a touchscreen. -->
+{#if !screensaverActive}
+	<PhoneMirrorPanel />
+{/if}
 
 {#if screensaverActive}
 	<Screensaver

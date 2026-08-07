@@ -135,6 +135,36 @@
 	{#if locked}
 		<PinPad title="Settings locked" subtitle="Enter the parental PIN" onComplete={tryUnlock} />
 	{:else}
+		<!-- Screen type (chosen on first boot; changeable here as promised there) -->
+		<section class="card">
+			<div class="cardhead">
+				<h2 class="type-heading">Screen type</h2>
+				<p class="type-caption sub">
+					Touchscreens get on-screen input; TVs show a permanent QR to control this screen from a
+					phone.
+				</p>
+			</div>
+			<div class="orient">
+				{#each [{ v: 'tv', label: 'TV / Monitor' }, { v: 'touch', label: 'Touchscreen' }] as opt (opt.v)}
+					<button
+						type="button"
+						class="orientbtn pressable"
+						class:on={(family.displayMode ?? 'tv') === opt.v}
+						onclick={async () => {
+							family.displayMode = opt.v as 'tv' | 'touch';
+							await fetch('/api/display-mode', {
+								method: 'POST',
+								headers: { 'content-type': 'application/json' },
+								body: JSON.stringify({ displayMode: opt.v })
+							}).catch(() => {});
+						}}
+					>
+						<span class="type-label">{opt.label}</span>
+					</button>
+				{/each}
+			</div>
+		</section>
+
 		<!-- Orientation -->
 		<section class="card">
 			<div class="cardhead">

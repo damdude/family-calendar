@@ -128,8 +128,21 @@ export interface PersistedProfileMeta {
 	avatarEmoji: string;
 	photoUpdatedAt?: number;
 }
+/**
+ * How this device is used. Chosen on the very first boot, before anything else,
+ * because it changes how the rest of setup is driven:
+ *  - 'tv'    — no touch input: Wi-Fi and data entry happen from a phone (QR).
+ *  - 'touch' — a touchscreen: everything can be done on the device itself.
+ * `null` means the choice hasn't been made yet.
+ */
+export type DisplayMode = 'tv' | 'touch';
+
 export interface PersistedConfigShape {
 	setupComplete: boolean;
+	/** null until the first-boot mode picker runs. */
+	displayMode: DisplayMode | null;
+	/** The family chose "set up Wi-Fi later" — don't block setup on it. */
+	wifiSkipped: boolean;
 	family: PersistedFamily;
 	profiles: PersistedProfileMeta[];
 	app: AppConfig;

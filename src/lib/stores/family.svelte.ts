@@ -13,6 +13,7 @@ import { demoFamily } from '$lib/fake/family';
 import {
 	defaultConfig,
 	type AppConfig,
+	type DisplayMode,
 	type Orientation,
 	type PersistedConfigShape
 } from '$lib/config';
@@ -44,6 +45,15 @@ class FamilyStore {
 	config = $state<AppConfig>(defaultConfig);
 	progress = $state<ProgressData>(emptyProgress());
 	localEvents = $state<LocalEvent[]>([]);
+	/** 'tv' (no touch — drive from a phone) or 'touch'; null before first boot's pick. */
+	displayMode = $state<DisplayMode | null>(null);
+	/** Family chose to set up Wi-Fi later. */
+	wifiSkipped = $state(false);
+
+	/** Touch devices get on-screen input; TV devices are driven from a phone. */
+	get isTouch(): boolean {
+		return this.displayMode === 'touch';
+	}
 
 	get profiles(): Profile[] {
 		return this.data.profiles;
@@ -67,6 +77,8 @@ class FamilyStore {
 	 */
 	applyConfig(cfg: PersistedConfigShape) {
 		this.config = cfg.app;
+		this.displayMode = cfg.displayMode ?? null;
+		this.wifiSkipped = !!cfg.wifiSkipped;
 		if (!cfg.setupComplete) return;
 		if (cfg.family.name) this.data.familyName = cfg.family.name;
 		this.data.weekStartsOn = cfg.family.weekStartsOn;
@@ -285,6 +297,8 @@ class FamilyStore {
 	toPersisted(): PersistedConfigShape {
 		return {
 			setupComplete: true,
+			displayMode: this.displayMode,
+			wifiSkipped: this.wifiSkipped,
 			family: {
 				name: this.data.familyName,
 				timezone: this.data.timezone,

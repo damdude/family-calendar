@@ -99,6 +99,101 @@ export async function isOnline(): Promise<boolean> {
 	return !(await isSetupApActive());
 }
 
+export interface WifiNetwork {
+	ssid: string;
+	/** 0-100 */
+	signal: number;
+	secured: boolean;
+	/** Currently connected to this one. */
+	active: boolean;
+}
+
+/**
+ * Nearby Wi-Fi networks, for the on-screen picker in touch mode. Strongest
+ * first, de-duplicated by SSID (a mesh shows the same name several times) and
+ * with hidden/blank SSIDs dropped. Empty when nmcli isn't available.
+ */
+export async function scanWifi(): Promise<WifiNetwork[]> {
+	// Ask for a rescan so the list isn't stale; ignore failure (it's advisory).
+	await run('nmcli', ['device', 'wifi', 'rescan'], 12000);
+	const out = await run(
+		'nmcli',
+		['-t', '-f', 'IN-USE,SSID,SIGNAL,SECURITY', 'device', 'wifi', 'list'],
+		12000
+	);
+	if (!out) return [];
+
+	const best = new Map<string, WifiNetwork>();
+	for (const line of out.split('\n')) {
+		if (!line.trim()) continue;
+		// Terse output escapes literal colons as "\:" — split on unescaped ones.
+		const parts = line.split(/(?<!\\):/).map((p) => p.replace(/\\:/g, ':'));
+		if (parts.length < 4) continue;
+		const [inUse, ssid, signalRaw, security] = parts;
+		if (!ssid || ssid === '--') continue;
+		const net: WifiNetwork = {
+			ssid,
+			signal: Number(signalRaw) || 0,
+			secured: !!security && security !== '' && security !== '--',
+			active: inUse.trim() === '*'
+		};
+		const prev = best.get(ssid);
+		if (!prev || net.signal > prev.signal)
+			best.set(ssid, prev ? { ...net, active: prev.active || net.active } : net);
+	}
+	return [...best.values()].sort((a, b) => b.signal - a.signal);
+}
+
+/**
+ * Join a Wi-Fi network via the privileged helper. The password travels over
+ * stdin into a root-only NetworkManager keyfile — never as a process argument.
+ */
+export async function joinWifi(
+	ssid: string,
+	password: string
+): Promise<{ ok: boolean; error?: string }> {
+	return new Promise((resolve) => {
+		let child;
+		try {
+			child = spawn('sudo', ['/usr/local/bin/fc-wifi-join', ssid], {
+				stdio: ['pipe', 'pipe', 'pipe']
+			});
+		} catch {
+			return resolve({ ok: false, error: 'Wi-Fi join helper unavailable on this host.' });
+		}
+		let err = '';
+		let done = false;
+		const finish = (v: { ok: boolean; error?: string }) => {
+			if (!done) {
+				done = true;
+				resolve(v);
+			}
+		};
+		const timer = setTimeout(() => {
+			child.kill('SIGKILL');
+			finish({ ok: false, error: 'Timed out joining the network.' });
+		}, 60_000);
+		child.stderr.on('data', (d) => (err += d.toString()));
+		child.on('error', () => {
+			clearTimeout(timer);
+			finish({ ok: false, error: 'Wi-Fi join helper unavailable on this host.' });
+		});
+		child.on('close', (code) => {
+			clearTimeout(timer);
+			if (code === 0) return finish({ ok: true });
+			const msg =
+				/secrets were required|no secrets|802-1x|invalid.*password|Passwords? or encryption keys/i.test(
+					err
+				)
+					? 'That password was rejected. Please check it and try again.'
+					: err.trim().split('\n').pop() || 'Could not join that network.';
+			finish({ ok: false, error: msg });
+		});
+		child.stdin.write(password + '\n');
+		child.stdin.end();
+	});
+}
+
 /** Run a shell command, always returning combined stdout+stderr (never throws). */
 function runCapture(cmd: string, timeoutMs = 4000): Promise<string> {
 	return new Promise((resolve) => {

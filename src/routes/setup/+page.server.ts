@@ -46,6 +46,8 @@ export const load: PageServerLoad = async ({ url }) => {
 		online,
 		apSsid: SETUP_AP_SSID,
 		wifiQrSvg,
+		displayMode: config.displayMode,
+		wifiSkipped: config.wifiSkipped,
 		alreadyComplete: config.setupComplete
 	};
 };

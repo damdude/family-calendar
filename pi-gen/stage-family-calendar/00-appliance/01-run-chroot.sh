@@ -112,6 +112,8 @@ else
   echo "!! wifi-connect download failed — Wi-Fi onboarding will be unavailable" >&2
 fi
 install -m 755 "${APP_DIR}/scripts/wifi-setup.sh" /usr/local/bin/fc-wifi-setup 2>/dev/null || true
+# Joins a network chosen on-screen in touch mode (password arrives on stdin).
+install -m 755 "${APP_DIR}/scripts/wifi-join.sh" /usr/local/bin/fc-wifi-join 2>/dev/null || true
 
 cat > /etc/systemd/system/family-calendar-wifi.service <<UNIT
 [Unit]
@@ -137,6 +139,7 @@ ${DASH_USER} ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart family-calendar, \
   /usr/bin/systemctl start family-calendar-update.service, \
   /usr/bin/systemctl start --no-block family-calendar-update.service, \
   /usr/local/bin/fc-nas-mount, \
+  /usr/local/bin/fc-wifi-join, \
   /usr/bin/systemctl reboot, /sbin/reboot
 SUDO
 chmod 440 /etc/sudoers.d/family-calendar

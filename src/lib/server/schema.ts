@@ -137,6 +137,10 @@ export const PersistedProfileSchema = z.object({
 
 export const PersistedConfigSchema = z.object({
 	setupComplete: z.boolean().default(false),
+	/** 'tv' | 'touch', null until the first-boot mode picker runs. */
+	displayMode: z.enum(['tv', 'touch']).nullable().default(null),
+	/** The family chose "set up Wi-Fi later". */
+	wifiSkipped: z.boolean().default(false),
 	family: FamilyDraftSchema.default({ name: '', timezone: 'UTC', weekStartsOn: 1 }),
 	profiles: z.array(PersistedProfileSchema).default([]),
 	app: AppConfigSchema

@@ -4,8 +4,15 @@
  * The TV shows a QR; a phone that scans it becomes the *controller*. As the
  * phone navigates the app, it POSTs its current path here and the TV (the
  * *display*) — subscribed over SSE — follows to the same screen. One family =
- * one TV, but we key by pairing token so a stale phone can't drive the display.
+ * one TV, but we key by token so a stale phone can't drive the display.
+ *
+ * Mirror tokens are owned here rather than borrowed from the setup-pairing
+ * store: on a TV the QR is on screen permanently, so a 10-minute pairing TTL
+ * would silently stop anyone scanning it later in the day. A channel lives as
+ * long as the display holds its SSE subscription, plus an idle grace period.
  */
+
+import crypto from 'node:crypto';
 
 type Listener = (path: string) => void;
 
@@ -34,6 +41,19 @@ function channel(token: string): Channel {
 		channels.set(token, ch);
 	}
 	return ch;
+}
+
+/** Issue a token for a fresh mirror channel (the QR the TV displays). */
+export function createMirrorToken(): string {
+	prune();
+	const token = crypto.randomBytes(16).toString('base64url');
+	channel(token); // register so nav can validate it
+	return token;
+}
+
+/** Is this a live mirror channel? Guards the controller's nav endpoint. */
+export function isMirrorToken(token: string): boolean {
+	return channels.has(token);
 }
 
 /** The controller pushes its current path; broadcast to the display(s). */
