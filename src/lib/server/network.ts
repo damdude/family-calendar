@@ -91,6 +91,11 @@ export async function isSetupApActive(): Promise<boolean> {
  * a normal browser in the hotspot flow.
  */
 export async function isOnline(): Promise<boolean> {
+	// Dev/testing escape hatch: lets the first-boot Wi-Fi step be exercised on a
+	// laptop, which is otherwise always "online" and so always skips it. Opt-in
+	// only — unset (the normal case, including every image build) changes nothing.
+	if (process.env.FC_FORCE_OFFLINE === '1') return false;
+
 	const out = await run('nmcli', ['-t', '-f', 'CONNECTIVITY', 'general']);
 	if (out === null) return true; // no nmcli → assume online (dev / non-Pi)
 	const state = out.trim().toLowerCase();

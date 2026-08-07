@@ -12,8 +12,10 @@ export const POST: RequestHandler = async ({ request }) => {
 	const config = await loadConfig();
 
 	if (body.displayMode !== undefined) {
-		if (body.displayMode !== 'tv' && body.displayMode !== 'touch') {
-			error(400, 'displayMode must be "tv" or "touch"');
+		// null is allowed deliberately: it's how "back" returns to the mode picker
+		// from a later setup step.
+		if (body.displayMode !== 'tv' && body.displayMode !== 'touch' && body.displayMode !== null) {
+			error(400, 'displayMode must be "tv", "touch", or null');
 		}
 		config.displayMode = body.displayMode;
 	}

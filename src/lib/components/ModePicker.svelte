@@ -14,6 +14,8 @@
 	const TIMEOUT_SECONDS = 30;
 	let remaining = $state(TIMEOUT_SECONDS);
 	let choosing = $state(false);
+	/** Someone is clearly present — stop counting down and let them decide. */
+	let cancelled = $state(false);
 
 	function choose(mode: 'tv' | 'touch') {
 		if (choosing) return;
@@ -22,6 +24,9 @@
 	}
 
 	$effect(() => {
+		// Depending on `cancelled` means setting it tears the interval down, rather
+		// than leaving it running to fire a choice nobody asked for.
+		if (cancelled) return;
 		const id = setInterval(() => {
 			remaining -= 1;
 			if (remaining <= 0) {
@@ -35,7 +40,7 @@
 	// Any tap or key means someone can interact — stop the auto-confirm so they
 	// aren't rushed into the wrong mode.
 	function cancelTimer() {
-		remaining = -1;
+		cancelled = true;
 	}
 </script>
 
@@ -57,7 +62,7 @@
 			<span class="type-body sub">
 				No touch. You'll set things up from your phone by scanning a QR code.
 			</span>
-			{#if remaining > 0}
+			{#if !cancelled && remaining > 0}
 				<span class="auto">Continuing automatically in {remaining}s</span>
 			{:else}
 				<span class="auto muted">Recommended for TVs</span>

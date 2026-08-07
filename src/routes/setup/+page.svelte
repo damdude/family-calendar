@@ -7,7 +7,7 @@
 	import ModePicker from '$lib/components/ModePicker.svelte';
 	import WifiPicker from '$lib/components/WifiPicker.svelte';
 	import GoogleConnect from '$lib/components/GoogleConnect.svelte';
-	import { Smartphone, Wifi, CalendarDays } from 'lucide-svelte';
+	import { Smartphone, Wifi, CalendarDays, ArrowLeft } from 'lucide-svelte';
 
 	let { data }: { data: PageData } = $props();
 
@@ -32,6 +32,18 @@
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
 			body: JSON.stringify({ wifiSkipped: true })
+		}).catch(() => {});
+		invalidateAll();
+	}
+
+	// Back to the mode picker from any later step. Nothing else is undone —
+	// Wi-Fi that's already joined stays joined, so re-picking a mode just falls
+	// straight through to whatever step comes next (no re-work, no data loss).
+	async function backToModePicker() {
+		await fetch('/api/display-mode', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ displayMode: null })
 		}).catch(() => {});
 		invalidateAll();
 	}
@@ -117,6 +129,9 @@
 {:else if needsWifi && isTouch}
 	<!-- Touch: pick the network right here, no phone involved. -->
 	<div class="touchwifi">
+		<button type="button" class="stepback" onclick={backToModePicker}>
+			<ArrowLeft size={16} /> Change screen type
+		</button>
 		<header class="brandrow">
 			<span class="logo">🗓️</span>
 			<div>
@@ -134,8 +149,13 @@
 		<Confetti active={complete} />
 
 		{#if needsWifi}
-			<!-- TV: no touch here, so hand Wi-Fi off to a phone via the hotspot. -->
+			<!-- TV: no touch here, so hand Wi-Fi off to a phone via the hotspot. Still
+			     offer "back": this may be a touch-capable screen someone chose TV mode
+			     for, and they should be able to reconsider. -->
 			<div class="left">
+				<button type="button" class="stepback" onclick={backToModePicker}>
+					<ArrowLeft size={16} /> Change screen type
+				</button>
 				<div class="brandrow">
 					<span class="logo">🗓️</span>
 					<div>
@@ -192,6 +212,9 @@
 			</div>
 		{:else}
 			<div class="left">
+				<button type="button" class="stepback" onclick={backToModePicker}>
+					<ArrowLeft size={16} /> Change screen type
+				</button>
 				<div class="brandrow">
 					<span class="logo">🗓️</span>
 					<div>
@@ -313,6 +336,18 @@
 	}
 	.gcard .sub {
 		color: var(--color-text-secondary);
+	}
+	.stepback {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		align-self: flex-start;
+		padding: 8px 14px;
+		border-radius: var(--radius-pill);
+		background: var(--color-surface-elevated);
+		color: var(--color-text-secondary);
+		font-weight: var(--weight-medium);
+		font-size: var(--text-sm);
 	}
 	.skip {
 		align-self: center;
