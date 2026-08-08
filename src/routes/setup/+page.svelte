@@ -1,20 +1,27 @@
 <script lang="ts">
 	import { goto, invalidateAll } from '$app/navigation';
 	import type { PageData } from './$types';
-	import type { SetupDraft, KioskEvent } from '$lib/setup/types';
-	import { profileTint } from '$lib/design/colors';
+	import type { KioskEvent } from '$lib/setup/types';
 	import Confetti from '$lib/components/Confetti.svelte';
 	import ModePicker from '$lib/components/ModePicker.svelte';
 	import WifiPicker from '$lib/components/WifiPicker.svelte';
-	import GoogleConnect from '$lib/components/GoogleConnect.svelte';
 	import TouchFamilySetup from '$lib/components/TouchFamilySetup.svelte';
-	import { Smartphone, Wifi, CalendarDays, ArrowLeft, WifiOff } from 'lucide-svelte';
+	import { Smartphone, Wifi, ArrowLeft, WifiOff, RefreshCw, CheckCircle2 } from 'lucide-svelte';
 
 	let { data }: { data: PageData } = $props();
 
-	let draft = $state<SetupDraft | null>(null);
-	let paired = $state(false);
 	let complete = $state(false);
+
+	/** Ask the Pi to restart its onboarding service, forcing a fresh AP
+	 *  broadcast. The only recovery path when the hotspot failed, hung, or a
+	 *  join attempt left it stuck — silently best-effort since this screen's
+	 *  own polling will reflect whatever happens next regardless. */
+	async function restartApBroadcast() {
+		restartingAp = true;
+		await fetch('/api/net/wifi/restart-ap', { method: 'POST' }).catch(() => {});
+		setTimeout(() => (restartingAp = false), 3000);
+	}
+	let restartingAp = $state(false);
 
 	// --- Step 0: TV or touchscreen? ---------------------------------------
 	// Nothing else can be presented sensibly until we know whether this screen
@@ -25,6 +32,14 @@
 			headers: { 'content-type': 'application/json' },
 			body: JSON.stringify({ displayMode: mode })
 		}).catch(() => {});
+		// Re-picking TV while Wi-Fi isn't sorted yet should force a fresh AP
+		// broadcast — the most common reason to come back here is a stuck or
+		// failed hotspot, and this is the only recovery path on a touch-capable
+		// screen someone has set to TV mode (a true TV has no way to tap
+		// anything at all, so this can only ever be reached via touch).
+		if (mode === 'tv' && !data.online && !data.wifiSkipped) {
+			fetch('/api/net/wifi/restart-ap', { method: 'POST' }).catch(() => {});
+		}
 		invalidateAll();
 	}
 
@@ -76,6 +91,12 @@
 	}
 	let completedFamilyName = $state('');
 
+	// A brief "Connected!" confirmation the moment Wi-Fi actually joins — the
+	// screen swapping straight to the pairing QR with no acknowledgement read
+	// as "nothing happened" even though it had worked. Sticks around for a few
+	// seconds on the very next (pairing) screen, then clears itself.
+	let justConnectedWifi = $state(false);
+
 	// Watch connectivity in BOTH directions and reload whenever it flips, so the
 	// screen always self-corrects: offline → online swaps the join-hotspot QR for
 	// a pairing QR carrying the freshly-assigned LAN address, and online → offline
@@ -92,12 +113,22 @@
 				const r = await fetch('/api/net/status');
 				if (!r.ok) return;
 				const { online } = await r.json();
-				if (online !== wasOnline) invalidateAll();
+				if (online !== wasOnline) {
+					if (online && !wasOnline) justConnectedWifi = true;
+					invalidateAll();
+				}
 			} catch {
 				/* transient — keep the current screen */
 			}
 		}, 3000);
 		return () => clearInterval(id);
+	});
+
+	// The "Connected!" banner is a moment, not a permanent fixture.
+	$effect(() => {
+		if (!justConnectedWifi) return;
+		const id = setTimeout(() => (justConnectedWifi = false), 6000);
+		return () => clearTimeout(id);
 	});
 
 	// Phase 1 debug panel: a static, fixed-size snapshot of Wi-Fi bring-up state
@@ -131,15 +162,14 @@
 
 	// Pairing step: listen for the phone completing the wizard. Touch mode
 	// completes locally (touchSetupComplete) — there's no phone in that flow.
+	// No live-preview to update here anymore — see the screen simplification
+	// below — so 'complete' is the only message this side still cares about.
 	$effect(() => {
 		if (needsMode || needsWifi || isTouch) return;
 		const es = new EventSource(`/setup/events?token=${data.token}`);
 		es.onmessage = (e) => {
 			const msg: KioskEvent = JSON.parse(e.data);
-			if (msg.type === 'draft') {
-				draft = msg.draft;
-				paired = true;
-			} else if (msg.type === 'complete') {
+			if (msg.type === 'complete') {
 				complete = true;
 				es.close();
 				setTimeout(() => goto('/'), 2600);
@@ -147,8 +177,6 @@
 		};
 		return () => es.close();
 	});
-
-	const hasContent = $derived(!!draft && (draft.family.name || draft.profiles.length > 0));
 </script>
 
 <Confetti active={complete} />
@@ -212,9 +240,26 @@
 					<li>Join the network <strong>“{data.apSsid}”</strong></li>
 					<li>Wait for the “Sign in” page, then choose your home Wi-Fi</li>
 				</ol>
+				<p class="type-caption sub">
+					After you enter your Wi-Fi password, your phone may look stuck on “Applying settings” —
+					that's expected. This screen's own hotspot disappears the moment it joins your home
+					network, so your phone just loses touch with it. This display keeps going on its own; you
+					can close that page.
+				</p>
 			</div>
 
-			<button type="button" class="skip" onclick={skipWifi}>Set up Wi-Fi later</button>
+			<div class="retryrow">
+				<button type="button" class="skip" onclick={skipWifi}>Set up Wi-Fi later</button>
+				<button
+					type="button"
+					class="restartap"
+					onclick={restartApBroadcast}
+					disabled={restartingAp}
+				>
+					<RefreshCw size={15} class={restartingAp ? 'spin' : ''} />
+					{restartingAp ? 'Restarting…' : 'Hotspot not showing up? Restart it'}
+				</button>
+			</div>
 		</div>
 
 		<div class="right">
@@ -255,91 +300,56 @@
 	</div>
 {:else if data.online}
 	<!-- TV, online: hand family + profile entry to a phone. -->
-	<div class="setup">
-		<div class="left">
-			<button type="button" class="stepback" onclick={backToModePicker}>
-				<ArrowLeft size={16} /> Change screen type
-			</button>
-			<div class="brandrow">
-				<span class="logo">🗓️</span>
-				<div>
-					<h1 class="type-title-lg">Family Calendar</h1>
-					<p class="type-body-lg sub">Let's get you set up</p>
-				</div>
+	<div class="touchwifi">
+		<button type="button" class="stepback" onclick={backToModePicker}>
+			<ArrowLeft size={16} /> Change screen type
+		</button>
+
+		{#if complete}
+			<div class="donecard">
+				<span class="big type-title">🎉 You're all set!</span>
+				<p class="type-body-lg sub">Opening your dashboard…</p>
 			</div>
-
-			<div class="qrcard">
-				<div class="qr">
-					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-					{@html data.qrSvg}
-				</div>
-				<div class="scan">
-					<p class="type-heading"><Smartphone size={20} /> Scan with your phone</p>
-					<p class="type-body sub">Point your camera at the code to open the setup wizard.</p>
-				</div>
-			</div>
-
-			<div class="fallback">
-				<p class="type-label"><Wifi size={16} /> Or type this on your phone's browser:</p>
-				<code class="url">{data.mdnsUrl}</code>
-				<code class="url alt">{data.pairUrl}</code>
-			</div>
-
-			<!-- Sign in to Google here rather than pasting a share link. Uses the
-			     device flow: a short code is shown, approved on a phone/laptop —
-			     no Google password is ever typed into this appliance. -->
-			<div class="gcard">
-				<p class="type-label"><CalendarDays size={16} /> Google Calendar (optional)</p>
-				<p class="type-caption sub">
-					Sign in to pull in your existing calendars. You can also do this later in Settings.
-				</p>
-				<GoogleConnect />
-			</div>
-
-			{#if data.alreadyComplete}
-				<p class="type-caption note">
-					This device is already set up — completing the wizard will reconfigure it.
-				</p>
-			{/if}
-		</div>
-
-		<div class="right">
-			<div class="preview">
-				<span class="type-label previewlbl">Live preview</span>
-				{#if complete}
-					<div class="state">
-						<span class="big type-title">🎉 You're all set!</span>
-						<span class="type-body-lg sub">Opening your dashboard…</span>
-					</div>
-				{:else if !hasContent}
-					<div class="state waiting">
-						<span class="dotpulse"></span>
-						<span class="type-body-lg sub">
-							{paired ? 'Connected! Fill in the wizard on your phone…' : 'Waiting for your phone…'}
-						</span>
-					</div>
-				{:else if draft}
-					<div class="previewbody">
-						<h2 class="type-title-lg fam">{draft.family.name || 'Your Family'}</h2>
-						{#if draft.profiles.length}
-							<div class="pills">
-								{#each draft.profiles as p (p.id)}
-									<span class="ppill" style:background={profileTint(p.color, 34)}>
-										<span class="pav" style:background={profileTint(p.color, 55)}
-											>{p.avatarEmoji}</span
-										>
-										<span class="type-label">{p.name}</span>
-										<span class="type-caption age">{p.age}</span>
-									</span>
-								{/each}
-							</div>
-						{:else}
-							<p class="type-body sub">Add people on your phone and they'll appear here.</p>
-						{/if}
+		{:else}
+			<div class="paircard">
+				{#if justConnectedWifi}
+					<div class="connectedbanner">
+						<CheckCircle2 size={18} />
+						<span class="type-label">Connected to Wi-Fi!</span>
 					</div>
 				{/if}
+
+				<div class="brandrow">
+					<span class="logo">🗓️</span>
+					<div>
+						<h1 class="type-title-lg">Family Calendar</h1>
+						<p class="type-body-lg sub">Let's get you set up</p>
+					</div>
+				</div>
+
+				<div class="qrcard">
+					<div class="qr">
+						<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+						{@html data.qrSvg}
+					</div>
+					<div class="scan">
+						<p class="type-heading"><Smartphone size={20} /> Scan with your phone</p>
+						<p class="type-body sub">Point your camera at the code to open the setup wizard.</p>
+					</div>
+				</div>
+
+				<div class="fallback">
+					<p class="type-label"><Wifi size={16} /> Or type this on your phone's browser:</p>
+					<code class="url">{data.mdnsUrl}</code>
+				</div>
+
+				{#if data.alreadyComplete}
+					<p class="type-caption note">
+						This device is already set up — completing the wizard will reconfigure it.
+					</p>
+				{/if}
 			</div>
-		</div>
+		{/if}
 	</div>
 {:else}
 	<!-- TV, Wi-Fi skipped, still genuinely offline: no network exists for a
@@ -407,23 +417,53 @@
 		background: var(--color-text-primary);
 		color: var(--color-surface);
 	}
-	.gcard {
+	.paircard {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
-		padding: var(--space-4);
-		border-radius: var(--radius-lg);
+		gap: var(--space-5);
+		width: min(560px, 100%);
+		padding: clamp(20px, 3vmin, 36px);
+		border-radius: var(--radius-xl);
 		background: var(--color-surface);
-		box-shadow: var(--shadow-card);
+		box-shadow: var(--shadow-float);
 	}
-	.gcard .type-label {
+	.connectedbanner {
 		display: flex;
 		align-items: center;
-		gap: 6px;
-		color: var(--color-text-primary);
+		gap: 8px;
+		align-self: flex-start;
+		padding: 8px 14px;
+		border-radius: var(--radius-pill);
+		background: var(--color-accent-success-subtle, #e3f6ea);
+		color: var(--color-accent-success, #1a8a4a);
 	}
-	.gcard .sub {
+	.retryrow {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: var(--space-2);
+	}
+	.restartap {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 10px 18px;
+		border-radius: var(--radius-pill);
+		background: var(--color-surface-elevated);
 		color: var(--color-text-secondary);
+		font-weight: var(--weight-medium);
+		font-size: var(--text-sm);
+	}
+	.restartap:disabled {
+		opacity: 0.6;
+	}
+	.restartap :global(.spin) {
+		animation: spin 1s linear infinite;
+	}
+	@keyframes spin {
+		to {
+			transform: rotate(360deg);
+		}
 	}
 	.stepback {
 		display: inline-flex;
@@ -516,9 +556,6 @@
 		box-shadow: inset 0 0 0 1px var(--color-border-subtle);
 		color: var(--color-text-primary);
 		word-break: break-all;
-	}
-	.url.alt {
-		color: var(--color-text-tertiary);
 	}
 	.steps {
 		margin: 0;
@@ -620,43 +657,17 @@
 			opacity: 1;
 		}
 	}
-	.previewbody {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-4);
-	}
-	.fam {
-		color: var(--color-text-primary);
-	}
-	.pills {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--space-3);
-	}
-	.ppill {
-		display: inline-flex;
-		align-items: center;
-		gap: 8px;
-		padding: 6px 14px 6px 6px;
-		border-radius: var(--radius-pill);
-	}
-	.pav {
-		display: grid;
-		place-items: center;
-		width: 34px;
-		height: 34px;
-		border-radius: var(--radius-pill);
-		font-size: 1.15rem;
-	}
-	.age {
-		color: var(--color-text-tertiary);
-	}
 	@media (prefers-reduced-motion: reduce) {
 		.dotpulse {
 			animation: none;
 		}
 	}
 	@media (max-width: 820px) {
+		.setup {
+			grid-template-columns: 1fr;
+		}
+	}
+	@media (orientation: portrait) {
 		.setup {
 			grid-template-columns: 1fr;
 		}

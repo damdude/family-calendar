@@ -3,7 +3,12 @@
 	import type { PageData } from './$types';
 	import type { ProfileColor } from '$lib/types';
 	import type { ProfileDraft, SetupDraft } from '$lib/setup/types';
-	import { AVATAR_CHOICES } from '$lib/setup/types';
+	import {
+		AVATAR_CHOICES,
+		ageFromBirthdate,
+		defaultBirthdate,
+		todayDateStr
+	} from '$lib/setup/types';
 	import { PROFILE_COLORS, profileColorVar, profileTint } from '$lib/design/colors';
 	import { Check, Plus, X, ChevronRight, ChevronLeft } from 'lucide-svelte';
 
@@ -53,9 +58,10 @@
 
 	// --- Profile editing ---
 	let newName = $state('');
-	let newAge = $state<number | null>(null);
+	let newBirthdate = $state(defaultBirthdate());
 	let newColor = $state<ProfileColor>('pink');
 	let newAvatar = $state<string>(AVATAR_CHOICES[0]);
+	const todayStr = todayDateStr();
 
 	const usedColors = $derived(new Set(draft.profiles.map((p) => p.color)));
 
@@ -65,17 +71,17 @@
 
 	function addProfile() {
 		const name = newName.trim();
-		if (!name || newAge === null) return;
+		if (!name) return;
 		const p: ProfileDraft = {
 			id: crypto.randomUUID(),
 			name,
-			age: Number(newAge),
+			age: ageFromBirthdate(newBirthdate),
 			color: newColor,
 			avatarEmoji: newAvatar
 		};
 		draft.profiles.push(p);
 		newName = '';
-		newAge = null;
+		newBirthdate = defaultBirthdate();
 		newColor = suggestColor();
 		newAvatar = AVATAR_CHOICES[(draft.profiles.length * 2) % AVATAR_CHOICES.length];
 		sync();
@@ -213,23 +219,13 @@
 				{/if}
 
 				<div class="addform">
-					<div class="row2">
-						<input
-							class="input"
-							type="text"
-							placeholder="Name"
-							bind:value={newName}
-							maxlength="40"
-						/>
-						<input
-							class="input age"
-							type="number"
-							placeholder="Age"
-							min="0"
-							max="120"
-							bind:value={newAge}
-						/>
-					</div>
+					<input class="input" type="text" placeholder="Name" bind:value={newName} maxlength="40" />
+
+					<label class="field dob">
+						<span class="type-caption plabel">Date of birth</span>
+						<input class="input" type="date" max={todayStr} bind:value={newBirthdate} />
+						<span class="type-caption agehint">{ageFromBirthdate(newBirthdate)} years old</span>
+					</label>
 
 					<div class="picker">
 						<span class="type-caption plabel">Color</span>
@@ -261,12 +257,7 @@
 						</div>
 					</div>
 
-					<button
-						type="button"
-						class="addbtn"
-						disabled={!newName.trim() || newAge === null}
-						onclick={addProfile}
-					>
+					<button type="button" class="addbtn" disabled={!newName.trim()} onclick={addProfile}>
 						<Plus size={18} /> Add person
 					</button>
 				</div>
@@ -458,13 +449,13 @@
 		background: var(--color-surface);
 		box-shadow: var(--shadow-card);
 	}
-	.row2 {
+	.dob {
 		display: flex;
-		gap: var(--space-2);
+		flex-direction: column;
+		gap: 6px;
 	}
-	.age {
-		width: 88px;
-		flex: none;
+	.agehint {
+		color: var(--color-text-secondary);
 	}
 	.picker {
 		display: flex;

@@ -136,6 +136,7 @@ UNIT
 cat > /etc/sudoers.d/family-calendar <<SUDO
 ${DASH_USER} ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart family-calendar, \
   /usr/bin/systemctl restart family-calendar-kiosk, \
+  /usr/bin/systemctl restart family-calendar-wifi.service, \
   /usr/bin/systemctl start family-calendar-update.service, \
   /usr/bin/systemctl start --no-block family-calendar-update.service, \
   /usr/local/bin/fc-nas-mount, \

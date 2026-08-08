@@ -199,6 +199,23 @@ export async function joinWifi(
 	});
 }
 
+/**
+ * Force the setup hotspot to restart broadcasting. Restarting the onboarding
+ * service re-runs its connectivity check from scratch and, if still offline,
+ * launches a fresh access point — the only recovery available when the AP
+ * failed to come up, hung, or a join attempt left it in a bad state. This is
+ * also the only way to retry from the UI: a true TV can't tap anything, but a
+ * touch-capable screen set to TV mode can trigger this by returning to
+ * "Change screen type" and re-picking TV.
+ */
+export async function restartWifiAp(): Promise<{ ok: boolean; error?: string }> {
+	const out = await run('sudo', ['systemctl', 'restart', 'family-calendar-wifi.service'], 15000);
+	if (out === null) {
+		return { ok: false, error: 'Could not restart the Wi-Fi setup service on this host.' };
+	}
+	return { ok: true };
+}
+
 /** Run a shell command, always returning combined stdout+stderr (never throws). */
 function runCapture(cmd: string, timeoutMs = 4000): Promise<string> {
 	return new Promise((resolve) => {
@@ -246,7 +263,8 @@ export async function wifiDebugSnapshot(): Promise<string> {
 		'systemctl is-active family-calendar-wifi.service NetworkManager.service 2>&1',
 		'rfkill list wifi 2>&1',
 		'nmcli -t -f DEVICE,TYPE,STATE,CONNECTION device 2>&1',
-		'journalctl -u family-calendar-wifi.service --no-pager -n 12 -o cat 2>&1'
+		'journalctl -u family-calendar-wifi.service --no-pager -n 12 -o cat 2>&1',
+		'journalctl -u NetworkManager --no-pager -n 12 -o cat 2>&1'
 	];
 	const parts = await Promise.all(cmds.map((c) => runCapture(c)));
 	const combined = parts.join('\n').trim();

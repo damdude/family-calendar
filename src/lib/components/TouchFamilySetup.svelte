@@ -9,11 +9,18 @@
 	 * two paths converge on identical, already-validated server logic.
 	 */
 	import { onMount } from 'svelte';
-	import { AVATAR_CHOICES, type ProfileDraft, type SetupDraft } from '$lib/setup/types';
+	import {
+		AVATAR_CHOICES,
+		ageFromBirthdate,
+		defaultBirthdate,
+		todayDateStr,
+		type ProfileDraft,
+		type SetupDraft
+	} from '$lib/setup/types';
 	import type { ProfileColor } from '$lib/types';
 	import { PROFILE_COLORS, profileColorVar, profileTint } from '$lib/design/colors';
 	import OnScreenKeyboard from './OnScreenKeyboard.svelte';
-	import { Plus, X, ChevronRight, ChevronLeft, Minus } from 'lucide-svelte';
+	import { Plus, X, ChevronRight, ChevronLeft } from 'lucide-svelte';
 
 	let { token, oncomplete }: { token: string; oncomplete: (familyName: string) => void } = $props();
 
@@ -42,10 +49,11 @@
 
 	// --- People ---
 	let newName = $state('');
-	let newAge = $state(6);
+	let newBirthdate = $state(defaultBirthdate());
 	let newColor = $state<ProfileColor>('pink');
 	let newAvatar = $state<string>(AVATAR_CHOICES[0]);
 	let personKeyboardOpen = $state(false);
+	const todayStr = todayDateStr();
 
 	const usedColors = $derived(new Set(draft.profiles.map((p) => p.color)));
 	function suggestColor(): ProfileColor {
@@ -57,13 +65,13 @@
 		const p: ProfileDraft = {
 			id: crypto.randomUUID(),
 			name,
-			age: newAge,
+			age: ageFromBirthdate(newBirthdate),
 			color: newColor,
 			avatarEmoji: newAvatar
 		};
 		draft.profiles.push(p);
 		newName = '';
-		newAge = 6;
+		newBirthdate = defaultBirthdate();
 		newColor = suggestColor();
 		newAvatar = AVATAR_CHOICES[(draft.profiles.length * 2) % AVATAR_CHOICES.length];
 		personKeyboardOpen = false;
@@ -212,24 +220,11 @@
 					/>
 				{/if}
 
-				<div class="agepick">
-					<span class="type-label">Age</span>
-					<div class="stepper">
-						<button
-							type="button"
-							class="stepbtn"
-							aria-label="Decrease age"
-							onclick={() => (newAge = Math.max(0, newAge - 1))}><Minus size={18} /></button
-						>
-						<span class="ageval type-title">{newAge}</span>
-						<button
-							type="button"
-							class="stepbtn"
-							aria-label="Increase age"
-							onclick={() => (newAge = Math.min(120, newAge + 1))}><Plus size={18} /></button
-						>
-					</div>
-				</div>
+				<label class="field">
+					<span class="type-label">Date of birth</span>
+					<input class="input" type="date" max={todayStr} bind:value={newBirthdate} />
+					<span class="type-caption agehint">{ageFromBirthdate(newBirthdate)} years old</span>
+				</label>
 
 				<div class="picker">
 					<span class="type-caption plabel">Color</span>
@@ -443,33 +438,8 @@
 		border-radius: var(--radius-lg);
 		background: var(--color-surface-elevated);
 	}
-	.agepick {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-	}
-	.agepick .type-label {
+	.agehint {
 		color: var(--color-text-secondary);
-	}
-	.stepper {
-		display: flex;
-		align-items: center;
-		gap: var(--space-3);
-	}
-	.stepbtn {
-		display: grid;
-		place-items: center;
-		width: 44px;
-		height: 44px;
-		border-radius: var(--radius-pill);
-		background: var(--color-surface);
-		color: var(--color-text-primary);
-		box-shadow: var(--shadow-card);
-	}
-	.ageval {
-		min-width: 2.4ch;
-		text-align: center;
-		color: var(--color-text-primary);
 	}
 	.picker {
 		display: flex;

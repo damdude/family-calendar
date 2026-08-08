@@ -150,4 +150,13 @@
 	.foot {
 		color: var(--color-text-tertiary);
 	}
+	/* A portrait screen is almost always narrow too, so auto-fit would already
+	   collapse this — but detecting orientation directly (rather than relying on
+	   that incidental width crossover) is what actually answers "is this screen
+	   mounted upright," which is the thing that matters here. */
+	@media (orientation: portrait) {
+		.choices {
+			grid-template-columns: 1fr;
+		}
+	}
 </style>

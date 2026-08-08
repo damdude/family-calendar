@@ -57,3 +57,35 @@ export function emptyDraft(): SetupDraft {
 		profiles: []
 	};
 }
+
+/**
+ * Whole years between a birthdate (YYYY-MM-DD) and today. Both setup wizards
+ * collect a date of birth (a native date picker is far more reliable across
+ * mobile browsers than a bare number field, and doesn't go stale) but the
+ * stored/wire format everywhere else in the app is still a plain `age`
+ * number — this is computed once at entry time rather than persisting the
+ * birthdate itself, keeping the data model and server validation unchanged.
+ */
+export function ageFromBirthdate(birthdate: string): number {
+	const dob = new Date(`${birthdate}T00:00:00`);
+	if (Number.isNaN(dob.getTime())) return 0;
+	const now = new Date();
+	let age = now.getFullYear() - dob.getFullYear();
+	const beforeBirthdayThisYear =
+		now.getMonth() < dob.getMonth() ||
+		(now.getMonth() === dob.getMonth() && now.getDate() < dob.getDate());
+	if (beforeBirthdayThisYear) age -= 1;
+	return Math.max(0, age);
+}
+
+/** A sensible default birthdate to preselect in the picker (~8 years old). */
+export function defaultBirthdate(): string {
+	const d = new Date();
+	d.setFullYear(d.getFullYear() - 8);
+	return d.toISOString().slice(0, 10);
+}
+
+/** Today's date as YYYY-MM-DD, for capping a birthdate picker's `max`. */
+export function todayDateStr(): string {
+	return new Date().toISOString().slice(0, 10);
+}
