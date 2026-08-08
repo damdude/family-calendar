@@ -44,8 +44,12 @@ rollback() {
 }
 
 git pull --ff-only --quiet origin main || rollback
-npm ci --omit=dev || npm install --omit=dev || rollback
+# Full install (incl. devDependencies): vite/@sveltejs/kit live there and the
+# build step needs them. Pruned back down to production-only after building,
+# matching how the base image itself is provisioned.
+npm ci || npm install || rollback
 npm run build || rollback
+npm prune --omit=dev || true
 sudo systemctl restart "$SERVICE" || rollback
 
 # Health check: the server must respond within ~30s.
