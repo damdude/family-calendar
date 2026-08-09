@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { untrack } from 'svelte';
+	import { tick, untrack } from 'svelte';
 	import type { PageData } from './$types';
 	import type { ProfileColor } from '$lib/types';
 	import type { ProfileDraft, SetupDraft } from '$lib/setup/types';
@@ -69,7 +69,15 @@
 		return PROFILE_COLORS.find((c) => !usedColors.has(c)) ?? 'pink';
 	}
 
-	function addProfile() {
+	// Confirms the add right where the thumb already is. The person list this
+	// appends to sits above the form (name, DOB, color, avatar, button), so on a
+	// phone that's scrolled down to reach the button, a successful add is
+	// otherwise completely silent — it looks like nothing happened. Scrolling the
+	// new person into view fixes that directly, rather than just telling people
+	// to scroll themselves.
+	let justAdded = $state('');
+	let justAddedTimer: ReturnType<typeof setTimeout>;
+	async function addProfile() {
 		const name = newName.trim();
 		if (!name) return;
 		const p: ProfileDraft = {
@@ -85,6 +93,13 @@
 		newColor = suggestColor();
 		newAvatar = AVATAR_CHOICES[(draft.profiles.length * 2) % AVATAR_CHOICES.length];
 		sync();
+		justAdded = name;
+		clearTimeout(justAddedTimer);
+		justAddedTimer = setTimeout(() => (justAdded = ''), 2500);
+		await tick();
+		document
+			.getElementById(`person-${p.id}`)
+			?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 	}
 
 	function removeProfile(id: string) {
@@ -199,7 +214,7 @@
 				{#if draft.profiles.length}
 					<ul class="people">
 						{#each draft.profiles as p (p.id)}
-							<li class="person" style:background={profileTint(p.color, 30)}>
+							<li id="person-{p.id}" class="person" style:background={profileTint(p.color, 30)}>
 								<span class="pav" style:background={profileTint(p.color, 55)}>{p.avatarEmoji}</span>
 								<span class="pinfo">
 									<span class="type-label">{p.name}</span>
@@ -260,6 +275,9 @@
 					<button type="button" class="addbtn" disabled={!newName.trim()} onclick={addProfile}>
 						<Plus size={18} /> Add person
 					</button>
+					{#if justAdded}
+						<p class="addedhint type-label"><Check size={16} /> Added {justAdded}</p>
+					{/if}
 				</div>
 			</section>
 		{:else}
@@ -508,6 +526,14 @@
 	}
 	.addbtn:disabled {
 		opacity: 0.5;
+	}
+	.addedhint {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 6px;
+		margin: 0;
+		color: var(--color-accent-success);
 	}
 	.review {
 		display: flex;

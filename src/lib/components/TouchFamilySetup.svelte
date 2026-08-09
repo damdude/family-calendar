@@ -8,7 +8,7 @@
 	 * the pairing token this device's own setup session already holds), so the
 	 * two paths converge on identical, already-validated server logic.
 	 */
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import {
 		AVATAR_CHOICES,
 		ageFromBirthdate,
@@ -20,7 +20,7 @@
 	import type { ProfileColor } from '$lib/types';
 	import { PROFILE_COLORS, profileColorVar, profileTint } from '$lib/design/colors';
 	import OnScreenKeyboard from './OnScreenKeyboard.svelte';
-	import { Plus, X, ChevronRight, ChevronLeft } from 'lucide-svelte';
+	import { Plus, X, Check, ChevronRight, ChevronLeft } from 'lucide-svelte';
 
 	let { token, oncomplete }: { token: string; oncomplete: (familyName: string) => void } = $props();
 
@@ -59,7 +59,15 @@
 	function suggestColor(): ProfileColor {
 		return PROFILE_COLORS.find((c) => !usedColors.has(c)) ?? 'pink';
 	}
-	function addProfile() {
+
+	// Confirms the add right where the person is looking. The person list this
+	// appends to sits above the form (name, DOB, color, avatar, button), so once
+	// the on-screen keyboard has pushed the button down the screen, a successful
+	// add is otherwise completely silent — it looks like nothing happened.
+	// Scrolling the new person into view fixes that directly.
+	let justAdded = $state('');
+	let justAddedTimer: ReturnType<typeof setTimeout>;
+	async function addProfile() {
 		const name = newName.trim();
 		if (!name) return;
 		const p: ProfileDraft = {
@@ -75,6 +83,13 @@
 		newColor = suggestColor();
 		newAvatar = AVATAR_CHOICES[(draft.profiles.length * 2) % AVATAR_CHOICES.length];
 		personKeyboardOpen = false;
+		justAdded = name;
+		clearTimeout(justAddedTimer);
+		justAddedTimer = setTimeout(() => (justAdded = ''), 2500);
+		await tick();
+		document
+			.getElementById(`person-${p.id}`)
+			?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 	}
 	function removeProfile(id: string) {
 		const i = draft.profiles.findIndex((p) => p.id === id);
@@ -180,7 +195,7 @@
 			{#if draft.profiles.length}
 				<ul class="people">
 					{#each draft.profiles as p (p.id)}
-						<li class="person" style:background={profileTint(p.color, 30)}>
+						<li id="person-{p.id}" class="person" style:background={profileTint(p.color, 30)}>
 							<span class="pav" style:background={profileTint(p.color, 55)}>{p.avatarEmoji}</span>
 							<span class="pinfo">
 								<span class="type-label">{p.name}</span>
@@ -259,6 +274,9 @@
 				<button type="button" class="addbtn" disabled={!newName.trim()} onclick={addProfile}>
 					<Plus size={18} /> Add person
 				</button>
+				{#if justAdded}
+					<p class="addedhint type-label"><Check size={16} /> Added {justAdded}</p>
+				{/if}
 			</div>
 		</section>
 	{:else}
@@ -492,6 +510,14 @@
 	}
 	.addbtn:disabled {
 		opacity: 0.5;
+	}
+	.addedhint {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 6px;
+		margin: 0;
+		color: var(--color-accent-success);
 	}
 	.review {
 		display: flex;
