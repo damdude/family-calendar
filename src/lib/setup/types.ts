@@ -89,3 +89,20 @@ export function defaultBirthdate(): string {
 export function todayDateStr(): string {
 	return new Date().toISOString().slice(0, 10);
 }
+
+/**
+ * An ephemeral client-side id for a draft profile — never persisted or
+ * trusted server-side, just a React/Svelte-style list key. `crypto.randomUUID`
+ * only exists in a secure context (HTTPS, or literally `localhost`), and the
+ * pairing wizard is loaded over plain HTTP at a LAN mDNS address
+ * (`http://familycalendar.local:...`), which doesn't qualify — so on real
+ * phones (notably iOS Safari) that API is `undefined` and calling it throws,
+ * silently aborting "Add person" with no visible feedback. This works
+ * everywhere.
+ */
+export function randomId(): string {
+	if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+		return crypto.randomUUID();
+	}
+	return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}

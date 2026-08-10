@@ -13,6 +13,7 @@
 		AVATAR_CHOICES,
 		ageFromBirthdate,
 		defaultBirthdate,
+		randomId,
 		todayDateStr,
 		type ProfileDraft,
 		type SetupDraft
@@ -71,7 +72,7 @@
 		const name = newName.trim();
 		if (!name) return;
 		const p: ProfileDraft = {
-			id: crypto.randomUUID(),
+			id: randomId(),
 			name,
 			age: ageFromBirthdate(newBirthdate),
 			color: newColor,

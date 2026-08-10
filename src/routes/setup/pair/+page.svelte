@@ -7,6 +7,7 @@
 		AVATAR_CHOICES,
 		ageFromBirthdate,
 		defaultBirthdate,
+		randomId,
 		todayDateStr
 	} from '$lib/setup/types';
 	import { PROFILE_COLORS, profileColorVar, profileTint } from '$lib/design/colors';
@@ -81,7 +82,7 @@
 		const name = newName.trim();
 		if (!name) return;
 		const p: ProfileDraft = {
-			id: crypto.randomUUID(),
+			id: randomId(),
 			name,
 			age: ageFromBirthdate(newBirthdate),
 			color: newColor,
