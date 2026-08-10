@@ -63,8 +63,11 @@
 		sv.enabled && sv.idleMinutes > 0 && tick - lastActivity > sv.idleMinutes * 60_000
 	);
 	// "Sleep now" (forceSleep) always shows; scheduled/idle only when enabled.
+	// TV mode has no touch, so nothing could ever dismiss it once shown — and it
+	// would hide the persistent pairing QR below, the only way onto the device
+	// at all. Never let it activate there, regardless of trigger.
 	const screensaverActive = $derived(
-		screensaver.forceSleep || (sv.enabled && (sleepActive || idleActive))
+		!family.isTv && (screensaver.forceSleep || (sv.enabled && (sleepActive || idleActive)))
 	);
 </script>
 

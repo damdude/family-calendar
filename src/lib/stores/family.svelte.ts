@@ -55,6 +55,11 @@ class FamilyStore {
 		return this.displayMode === 'touch';
 	}
 
+	/** No touch means no way to dismiss anything shown over the display. */
+	get isTv(): boolean {
+		return this.displayMode === 'tv';
+	}
+
 	get profiles(): Profile[] {
 		return this.data.profiles;
 	}
