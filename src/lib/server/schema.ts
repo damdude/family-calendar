@@ -146,7 +146,10 @@ export const PersistedProfileSchema = z.object({
 	color: ProfileColorSchema,
 	avatarEmoji: z.string().min(1).max(8),
 	/** Set when the profile has an uploaded (encrypted) photo; cache-buster. */
-	photoUpdatedAt: z.number().optional()
+	photoUpdatedAt: z.number().optional(),
+	/** Whether this profile follows morning/evening routines. Adults default
+	 *  off (routines are seeded only for children); kids default on. */
+	routinesEnabled: z.boolean().optional()
 });
 
 export const PersistedConfigSchema = z.object({

@@ -129,6 +129,9 @@ export interface PersistedProfileMeta {
 	color: ProfileColor;
 	avatarEmoji: string;
 	photoUpdatedAt?: number;
+	/** Whether this profile follows morning/evening routines. Undefined defers
+	 *  to the role-based default (children on, adults off). */
+	routinesEnabled?: boolean;
 }
 /**
  * How this device is used. Chosen on the very first boot, before anything else,

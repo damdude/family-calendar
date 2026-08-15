@@ -32,6 +32,15 @@ export interface Profile {
 	photoUpdatedAt?: number;
 	/** Today's task progress, shown on the profile pill (e.g. "Liam 2/3"). */
 	tasks: { done: number; total: number };
+	/** Whether this profile follows morning/evening routines. Undefined defers
+	 *  to the role-based default (children on, adults off) — see `routinesOn()`. */
+	routinesEnabled?: boolean;
+}
+
+/** `routinesEnabled` defaults by role when unset, rather than always true —
+ *  seeding routines for a parent profile by default wouldn't make sense. */
+export function routinesOn(p: Pick<Profile, 'role' | 'routinesEnabled'>): boolean {
+	return p.routinesEnabled ?? p.role === 'child';
 }
 
 export interface FamilyEvent {

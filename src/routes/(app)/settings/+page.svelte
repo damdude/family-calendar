@@ -1,13 +1,34 @@
 <script lang="ts">
 	import { family } from '$lib/stores/family.svelte';
 	import { admin } from '$lib/stores/admin.svelte';
+	import { routinesOn } from '$lib/types';
 	import type { FeatureFlags } from '$lib/config';
 	import ProfileEditor from '$lib/components/ProfileEditor.svelte';
 	import GoogleConnect from '$lib/components/GoogleConnect.svelte';
 	import CalendarLinks from '$lib/components/CalendarLinks.svelte';
 	import StoragePanel from '$lib/components/StoragePanel.svelte';
 	import PinPad from '$lib/components/PinPad.svelte';
-	import { QrCode, Check, RefreshCw } from 'lucide-svelte';
+	import WifiPicker from '$lib/components/WifiPicker.svelte';
+	import { QrCode, Check, RefreshCw, Wifi } from 'lucide-svelte';
+
+	// Wi-Fi status + "change network" panel.
+	let wifiStatus = $state<{ online: boolean; ssid: string | null; signal: number | null } | null>(
+		null
+	);
+	let changingWifi = $state(false);
+	async function loadWifiStatus() {
+		try {
+			const r = await fetch('/api/net/status');
+			if (r.ok) wifiStatus = await r.json();
+		} catch {
+			/* keep last known state */
+		}
+	}
+	$effect(() => {
+		loadWifiStatus();
+		const id = setInterval(loadWifiStatus, 15000);
+		return () => clearInterval(id);
+	});
 
 	// Parental lock.
 	let pinSet = $state(false);
@@ -135,6 +156,38 @@
 	{#if locked}
 		<PinPad title="Settings locked" subtitle="Enter the parental PIN" onComplete={tryUnlock} />
 	{:else}
+		<!-- Wi-Fi -->
+		<section class="card">
+			<div class="cardhead">
+				<h2 class="type-heading">Wi-Fi</h2>
+				<p class="type-caption sub">
+					{#if wifiStatus === null}
+						Checking…
+					{:else if wifiStatus.online}
+						Connected{wifiStatus.ssid ? ` to “${wifiStatus.ssid}”` : ''}.
+					{:else}
+						Not connected.
+					{/if}
+				</p>
+			</div>
+			{#if changingWifi}
+				<WifiPicker
+					onjoined={() => {
+						changingWifi = false;
+						loadWifiStatus();
+					}}
+				/>
+				<button type="button" class="wifichange" onclick={() => (changingWifi = false)}
+					>Cancel</button
+				>
+			{:else}
+				<button type="button" class="wifichange pressable" onclick={() => (changingWifi = true)}>
+					<Wifi size={16} />
+					{wifiStatus?.online ? 'Change network' : 'Connect to Wi-Fi'}
+				</button>
+			{/if}
+		</section>
+
 		<!-- Screen type (chosen on first boot; changeable here as promised there) -->
 		<section class="card">
 			<div class="cardhead">
@@ -215,6 +268,40 @@
 					Tap a photo to upload one. Photos are encrypted on the device.
 				</p>
 				<ProfileEditor onChange={persist} />
+			</div>
+		</section>
+
+		<!-- Routines -->
+		<section class="card">
+			<div class="cardhead">
+				<h2 class="type-heading">Routines</h2>
+				<p class="type-caption sub">
+					Age-appropriate morning &amp; evening routines. Kids get them by default — turn off for
+					anyone who shouldn't see them.
+				</p>
+			</div>
+			<div class="rowset">
+				{#each family.profiles as p (p.id)}
+					{@const on = routinesOn(p)}
+					<div class="row">
+						<span class="type-body">{p.name}</span>
+						<button
+							type="button"
+							class="switch"
+							class:on
+							role="switch"
+							aria-checked={on}
+							aria-label="Routines for {p.name}"
+							onclick={() => {
+								family.setRoutinesEnabled(p.id, !on);
+								persist();
+							}}><span class="knob"></span></button
+						>
+					</div>
+				{/each}
+				{#if family.profiles.length === 0}
+					<p class="type-caption sub">Add people above first.</p>
+				{/if}
 			</div>
 		</section>
 
@@ -563,6 +650,17 @@
 	.orient {
 		display: flex;
 		gap: var(--space-3);
+	}
+	.wifichange {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		align-self: flex-start;
+		padding: 10px 18px;
+		border-radius: var(--radius-pill);
+		background: var(--color-surface-elevated);
+		color: var(--color-text-primary);
+		font-weight: var(--weight-medium);
 	}
 	.orientbtn {
 		display: flex;

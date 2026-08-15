@@ -20,14 +20,15 @@ import {
 import { emptyProgress, type FeelingEntry, type ProgressData } from '$lib/kid/progress';
 import { defaultRoutinesForAge } from '$lib/kid/routineLibrary';
 import { dateKey } from '$lib/time';
-import type {
-	FamilyData,
-	FamilyEvent,
-	Profile,
-	Recipe,
-	Reward,
-	RewardClaim,
-	Routine
+import {
+	routinesOn,
+	type FamilyData,
+	type FamilyEvent,
+	type Profile,
+	type Recipe,
+	type Reward,
+	type RewardClaim,
+	type Routine
 } from '$lib/types';
 
 export interface LocalEvent {
@@ -134,7 +135,7 @@ class FamilyStore {
 		const keep = new Set(cfg.profiles.map((pc) => pc.id));
 		this.data.profiles = this.data.profiles.filter((p) => keep.has(p.id));
 		for (const pc of cfg.profiles) {
-			const p = this.data.profiles.find((x) => x.id === pc.id);
+			let p = this.data.profiles.find((x) => x.id === pc.id);
 			if (p) {
 				p.name = pc.name;
 				p.nickname = pc.nickname;
@@ -143,8 +144,9 @@ class FamilyStore {
 				p.color = pc.color;
 				p.avatarEmoji = pc.avatarEmoji;
 				p.photoUpdatedAt = pc.photoUpdatedAt;
+				p.routinesEnabled = pc.routinesEnabled;
 			} else {
-				this.data.profiles.push({
+				p = {
 					id: pc.id,
 					name: pc.name,
 					nickname: pc.nickname,
@@ -153,9 +155,19 @@ class FamilyStore {
 					color: pc.color,
 					avatarEmoji: pc.avatarEmoji,
 					photoUpdatedAt: pc.photoUpdatedAt,
+					routinesEnabled: pc.routinesEnabled,
 					tasks: { done: 0, total: 0 }
-				});
+				};
+				this.data.profiles.push(p);
+			}
+			// Routines have no server persistence of their own — they're
+			// regenerated here from `routinesEnabled` every load, which is why
+			// that flag (not the routines array) is the thing that's saved.
+			const hasRoutines = this.data.routines.some((r) => r.profileId === pc.id);
+			if (routinesOn(p) && !hasRoutines) {
 				this.seedRoutinesForProfile(pc.id, pc.age);
+			} else if (!routinesOn(p) && hasRoutines) {
+				this.data.routines = this.data.routines.filter((r) => r.profileId !== pc.id);
 			}
 		}
 	}
@@ -315,6 +327,19 @@ class FamilyStore {
 		}
 	}
 
+	/** Turn routines on/off for a profile (Settings). Persist separately via
+	 *  `toPersisted()` + a config save — this only updates local state. */
+	setRoutinesEnabled(profileId: number, enabled: boolean) {
+		const p = this.profile(profileId);
+		if (!p) return;
+		p.routinesEnabled = enabled;
+		const hasRoutines = this.data.routines.some((r) => r.profileId === profileId);
+		if (enabled && !hasRoutines) this.seedRoutinesForProfile(profileId, p.age);
+		else if (!enabled && hasRoutines) {
+			this.data.routines = this.data.routines.filter((r) => r.profileId !== profileId);
+		}
+	}
+
 	/** Step ids currently marked done for a routine. */
 	doneStepIds(routineId: number): number[] {
 		return (
@@ -376,7 +401,8 @@ class FamilyStore {
 				role: p.role,
 				color: p.color,
 				avatarEmoji: p.avatarEmoji,
-				photoUpdatedAt: p.photoUpdatedAt
+				photoUpdatedAt: p.photoUpdatedAt,
+				routinesEnabled: p.routinesEnabled
 			})),
 			app: this.config
 		};
