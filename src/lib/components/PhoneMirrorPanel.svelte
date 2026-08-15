@@ -2,11 +2,17 @@
 	/**
 	 * Always-available "control this screen from your phone" QR.
 	 *
-	 * TV mode keeps the code on screen permanently — there's no touch, so the QR
-	 * *is* the input method and must be scannable at any moment without someone
-	 * first finding a button. Touch mode collapses it to a small icon, since the
-	 * screen itself is usable and a big QR would just be in the way.
+	 * A device with no touch at all keeps the code on screen permanently —
+	 * there's no other input method, so the QR must be scannable at any moment
+	 * without someone first finding a button to reveal it. Every touch-capable
+	 * device collapses it to a small icon instead, tapped open when wanted.
+	 *
+	 * Deliberately keyed off *this device's* real touch support, not the
+	 * household's `displayMode` setting — that describes the one fixed kiosk,
+	 * but every family member's own phone loads the same app and has touch,
+	 * so it should never get the permanent, unclosable version either.
 	 */
+	import { onMount } from 'svelte';
 	import { family } from '$lib/stores/family.svelte';
 	import { mirror } from '$lib/stores/mirror.svelte';
 	import { QrCode, X, Smartphone } from 'lucide-svelte';
@@ -17,7 +23,15 @@
 
 	// Only the display side shows a QR; a phone acting as controller must not.
 	const show = $derived(mirror.role !== 'controller');
-	const isTv = $derived(family.displayMode !== 'touch');
+	// Best-guess default before mount (matches the common case: the fixed
+	// kiosk itself), corrected to the device's real capability once known.
+	let noTouch = $state(family.displayMode !== 'touch');
+	onMount(() => {
+		noTouch = !(
+			(typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches) ||
+			navigator.maxTouchPoints > 0
+		);
+	});
 
 	async function load() {
 		try {
@@ -42,8 +56,9 @@
 </script>
 
 {#if show}
-	{#if isTv}
-		<!-- TV: permanent, scannable from across the room. -->
+	{#if noTouch}
+		<!-- No touch at all: permanent, scannable from across the room — the
+		     only way in, so it can't be collapsed. -->
 		<aside class="tvqr" aria-label="Control from your phone">
 			{#if qrSvg}
 				<div class="qr">
@@ -57,7 +72,7 @@
 			{/if}
 		</aside>
 	{:else}
-		<!-- Touch: out of the way until asked for. -->
+		<!-- Has touch: out of the way until asked for, on this device only. -->
 		<button
 			type="button"
 			class="fab"
