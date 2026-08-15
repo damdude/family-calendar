@@ -552,11 +552,21 @@
 		color: var(--color-accent-warning);
 	}
 	.nav {
+		/* Stuck to the bottom of the viewport rather than the end of a long step
+		   (many color/avatar options on step 2) — otherwise reaching Next/Back/
+		   Finish means scrolling all the way down every time. */
+		position: sticky;
+		bottom: 0;
+		z-index: 5;
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
 		gap: var(--space-3);
-		padding-top: var(--space-2);
+		margin: var(--space-2) calc(-1 * var(--space-5)) calc(-1 * var(--space-5));
+		padding: var(--space-3) var(--space-5);
+		background: var(--color-surface);
+		border-radius: 0 0 var(--radius-xl) var(--radius-xl);
+		box-shadow: 0 -8px 16px -8px rgba(0, 0, 0, 0.12);
 	}
 	.btn {
 		display: inline-flex;
