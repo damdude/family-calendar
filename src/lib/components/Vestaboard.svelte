@@ -36,6 +36,11 @@
 
 	const cfg = $derived(family.config.screensaver.vestaboard);
 	const clock24 = $derived(family.config.view.clock24h);
+	// TV has no touch, so this is the only surface it ever shows — full-bleed,
+	// no chrome to compete with the board, and a fixed fast cadence since
+	// there's no one to open the settings gear and tune it. Touch mode keeps
+	// the framed look + configurable timing since it's reached by choice.
+	const isTv = $derived(family.isTv);
 
 	function whenLabel(d: Date): string {
 		const now = new Date();
@@ -195,9 +200,10 @@
 		};
 	});
 
-	// Rotate boards on the configured cadence.
+	// Rotate boards on the configured cadence — fixed at 10s on TV, since
+	// there's no one there to tune the "seconds per board" setting.
 	$effect(() => {
-		const hold = Math.max(4, cfg.holdSeconds) * 1000;
+		const hold = (isTv ? 10 : Math.max(4, cfg.holdSeconds)) * 1000;
 		const id = setInterval(() => {
 			boardIndex = (boardIndex + 1) % boards.length;
 		}, hold);
@@ -231,6 +237,7 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
 	class="vboard-saver"
+	class:tv={isTv}
 	style="--accent:{activeColor ? chipColor[activeColor] : 'transparent'}"
 	onpointerdown={() => ondismiss?.()}
 >
@@ -241,18 +248,23 @@
 			</div>
 		{/each}
 	</div>
-	<footer class="vfoot">
-		<span>{family.data.familyName || 'FAMILY CALENDAR'}</span>
-		<span class="dot" style="background:{activeColor ? chipColor[activeColor] : '#555'}"></span>
-		<span>{formatClock(clock, clock24)}</span>
-	</footer>
+	{#if !isTv}
+		<footer class="vfoot">
+			<span>{family.data.familyName || 'FAMILY CALENDAR'}</span>
+			<span class="dot" style="background:{activeColor ? chipColor[activeColor] : '#555'}"></span>
+			<span>{formatClock(clock, clock24)}</span>
+		</footer>
+	{/if}
 </div>
 
 <style>
 	.vboard-saver {
 		position: fixed;
 		inset: 0;
-		z-index: 200;
+		/* Below PhoneMirrorPanel's permanent TV QR (z-index 90) so it stays
+		   visible over the board — a real TV has no other way to control or
+		   leave this screen. Still above ordinary page content (z-index auto). */
+		z-index: 50;
 		background: #111114;
 		display: flex;
 		flex-direction: column;
@@ -261,6 +273,10 @@
 		gap: clamp(6px, 1.4vh, 20px);
 		padding: clamp(10px, 2.2vmin, 28px);
 		overflow: hidden;
+	}
+	.vboard-saver.tv {
+		padding: 0;
+		gap: 0;
 	}
 	.board {
 		flex: 1;
@@ -276,6 +292,12 @@
 		box-shadow:
 			0 0 0 3px var(--accent, transparent),
 			0 24px 60px rgba(0, 0, 0, 0.6);
+	}
+	/* Edge-to-edge on TV: no frame competing with the board, no footer to fit. */
+	.vboard-saver.tv .board {
+		padding: 0;
+		border-radius: 0;
+		box-shadow: none;
 	}
 	.flap {
 		position: relative;
