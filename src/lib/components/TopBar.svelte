@@ -3,7 +3,7 @@
 	import { mirror } from '$lib/stores/mirror.svelte';
 	import { formatClock } from '$lib/time';
 	import WeatherChip from './WeatherChip.svelte';
-	import { Smartphone } from 'lucide-svelte';
+	import { Smartphone, Wifi, WifiOff, WifiLow } from 'lucide-svelte';
 
 	// Live clock — ticks once a second, cleaned up on unmount.
 	let now = $state(new Date());
@@ -13,6 +13,31 @@
 	});
 
 	const clock = $derived(formatClock(now, family.config.view.clock24h));
+
+	// Wi-Fi status — cheap enough (no rescan) to poll continuously so the icon
+	// reflects reality the moment the connection drops, not just on page load.
+	let wifi = $state<{ online: boolean; ssid: string | null; signal: number | null }>({
+		online: true,
+		ssid: null,
+		signal: null
+	});
+	$effect(() => {
+		let cancelled = false;
+		const poll = async () => {
+			try {
+				const r = await fetch('/api/net/status');
+				if (r.ok && !cancelled) wifi = await r.json();
+			} catch {
+				/* keep the last known state */
+			}
+		};
+		poll();
+		const id = setInterval(poll, 15000);
+		return () => {
+			cancelled = true;
+			clearInterval(id);
+		};
+	});
 </script>
 
 <header class="topbar">
@@ -23,6 +48,19 @@
 			<span class="pair live"><Smartphone size={18} /> Phone paired</span>
 		{/if}
 		<time class="clock type-title-lg">{clock}</time>
+		<span
+			class="wifi"
+			class:off={!wifi.online}
+			title={wifi.online ? (wifi.ssid ?? 'Connected') : 'Not connected to Wi-Fi'}
+		>
+			{#if !wifi.online}
+				<WifiOff size={18} />
+			{:else if wifi.signal !== null && wifi.signal < 50}
+				<WifiLow size={18} />
+			{:else}
+				<Wifi size={18} />
+			{/if}
+		</span>
 		<WeatherChip weather={family.data.weather} />
 	</div>
 </header>
@@ -66,5 +104,12 @@
 	.clock {
 		color: var(--color-text-primary);
 		font-variant-numeric: tabular-nums;
+	}
+	.wifi {
+		display: inline-flex;
+		color: var(--color-text-secondary);
+	}
+	.wifi.off {
+		color: var(--color-accent-warning);
 	}
 </style>

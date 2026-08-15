@@ -104,6 +104,35 @@ export async function isOnline(): Promise<boolean> {
 	return !(await isSetupApActive());
 }
 
+export interface WifiStatus {
+	online: boolean;
+	/** Currently-associated SSID, or null when offline / on Ethernet. */
+	ssid: string | null;
+	/** 0-100, or null when unknown. */
+	signal: number | null;
+}
+
+/**
+ * Current connection at a glance — for the Settings panel and the TopBar
+ * status icon. Deliberately cheap: unlike `scanWifi()` this never triggers a
+ * rescan, so it's safe to poll every few seconds.
+ */
+export async function wifiStatus(): Promise<WifiStatus> {
+	const online = await isOnline();
+	if (!online) return { online, ssid: null, signal: null };
+	const out = await run('nmcli', ['-t', '-f', 'ACTIVE,SSID,SIGNAL', 'device', 'wifi', 'list']);
+	if (!out) return { online, ssid: null, signal: null };
+	for (const line of out.split('\n')) {
+		if (!line.trim()) continue;
+		const parts = line.split(/(?<!\\):/).map((p) => p.replace(/\\:/g, ':'));
+		if (parts[0]?.trim() === 'yes') {
+			return { online, ssid: parts[1] || null, signal: Number(parts[2]) || null };
+		}
+	}
+	// Associated but not seen in this scan's cache (e.g. Ethernet) — still online.
+	return { online, ssid: null, signal: null };
+}
+
 export interface WifiNetwork {
 	ssid: string;
 	/** 0-100 */

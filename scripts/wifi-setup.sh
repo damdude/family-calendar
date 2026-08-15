@@ -52,11 +52,32 @@ done
 echo "wifi-setup: rfkill: $(rfkill list wifi 2>&1 | tr '\n' ' ')"
 echo "wifi-setup: nmcli device: $(nmcli -t -f DEVICE,TYPE,STATE device 2>&1 | tr '\n' ' ')"
 
-# Already on a real network (Ethernet or previously-saved Wi-Fi)? Nothing to do.
+# Already on a real network (Ethernet or a Wi-Fi reconnect that was already
+# done by the time the device left "unavailable")? Nothing to do.
 state="$(nmcli -t -f CONNECTIVITY general 2>/dev/null || echo unknown)"
 if [ "$state" = "full" ] || [ "$state" = "limited" ]; then
   echo "wifi-setup: already online ($state) — skipping captive portal"
   exit 0
+fi
+
+# If we've joined a network before, give NetworkManager real time to
+# autoconnect to it before giving up. Checking connectivity only once, right
+# as wlan0 leaves "unavailable", is too early — the WPA handshake and DHCP
+# lease can easily take another 10-20s, especially on a weaker signal — and a
+# false "offline" reading here used to steal wlan0 into AP/hotspot mode
+# mid-reconnect, permanently pre-empting the very connection that was about
+# to succeed. This is the fix for "the Pi doesn't reconnect to Wi-Fi on boot".
+if nmcli -t -f NAME connection show 2>/dev/null | grep -qx "fc-wifi"; then
+  echo "wifi-setup: known network saved — waiting up to 25s for autoconnect"
+  for _ in $(seq 1 25); do
+    state="$(nmcli -t -f CONNECTIVITY general 2>/dev/null || echo unknown)"
+    if [ "$state" = "full" ] || [ "$state" = "limited" ]; then
+      echo "wifi-setup: connected ($state) — skipping captive portal"
+      exit 0
+    fi
+    sleep 1
+  done
+  echo "wifi-setup: known network didn't come up in time — falling back to setup hotspot"
 fi
 
 # No wifi-connect binary → can't onboard; don't loop-restart.
