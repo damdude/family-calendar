@@ -37,7 +37,9 @@ export interface FeatureFlags {
 	sitesOfInterest: boolean;
 }
 
-export type Orientation = 'landscape' | 'portrait';
+/** 'auto' detects the real screen orientation at runtime; the other two force it
+ *  (an escape hatch for hardware that doesn't report a rotated viewport). */
+export type Orientation = 'auto' | 'landscape' | 'portrait';
 
 export interface ViewPrefs {
 	/** First hour shown on the weekly grid (0–23). */
@@ -167,7 +169,7 @@ export const defaultConfig: AppConfig = {
 		dayEndHour: 17,
 		weekStartsOn: 1,
 		clock24h: false,
-		orientation: 'landscape'
+		orientation: 'auto'
 	},
 	sleep: {
 		start: '21:00',

@@ -36,6 +36,11 @@
 		return () => es.close();
 	});
 
+	// Real screen orientation, kept live so a physical rotation (e.g. a
+	// touchscreen mounted portrait) is reflected without a manual setting going
+	// stale the moment someone turns the panel.
+	$effect(() => family.watchOrientation());
+
 	// --- Screensaver / sleep mode ---
 	let tick = $state(Date.now());
 	let lastActivity = $state(Date.now());

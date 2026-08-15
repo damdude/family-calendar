@@ -169,20 +169,27 @@
 		<section class="card">
 			<div class="cardhead">
 				<h2 class="type-heading">Display orientation</h2>
-				<p class="type-caption sub">Match how your screen is mounted.</p>
+				<p class="type-caption sub">
+					Auto detects how your screen is mounted. Only force landscape or portrait if that's wrong
+					for your hardware.
+				</p>
 			</div>
 			<div class="orient">
-				{#each [{ v: 'landscape', label: 'Landscape' }, { v: 'portrait', label: 'Portrait' }] as opt (opt.v)}
+				{#each [{ v: 'auto', label: 'Auto' }, { v: 'landscape', label: 'Landscape' }, { v: 'portrait', label: 'Portrait' }] as opt (opt.v)}
 					<button
 						type="button"
 						class="orientbtn pressable"
 						class:on={family.config.view.orientation === opt.v}
 						onclick={() => {
-							family.config.view.orientation = opt.v as 'landscape' | 'portrait';
+							family.config.view.orientation = opt.v as 'auto' | 'landscape' | 'portrait';
 							persist();
 						}}
 					>
-						<span class="frame {opt.v}"></span>
+						{#if opt.v === 'auto'}
+							<span class="frame auto"><RefreshCw size={20} /></span>
+						{:else}
+							<span class="frame {opt.v}"></span>
+						{/if}
 						<span class="type-label">{opt.label}</span>
 					</button>
 				{/each}
@@ -584,6 +591,13 @@
 	.frame.portrait {
 		width: 46px;
 		height: 72px;
+	}
+	.frame.auto {
+		width: 60px;
+		height: 60px;
+		display: grid;
+		place-items: center;
+		color: var(--color-text-secondary);
 	}
 
 	/* Rows + switches */

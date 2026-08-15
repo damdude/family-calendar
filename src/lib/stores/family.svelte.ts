@@ -1,20 +1,20 @@
 /**
  * Reactive family store (runes).
  *
- * Seeded from demo data today; in later batches the SSE layer mutates `data`
- * in place (mutate-don't-spread — the home-display pattern) so the whole UI
- * stays reactive without re-assigning the root object.
+ * Starts empty — a real device has no family until setup writes one — and the
+ * SSE layer mutates `data` in place (mutate-don't-spread — the home-display
+ * pattern) so the whole UI stays reactive without re-assigning the root
+ * object. Per ADR-002, demo data (src/lib/fake) is never imported here or by
+ * any production code path.
  *
  * This is the single source the UI reads from; components never import
  * src/lib/fake directly.
  */
 
-import { demoFamily } from '$lib/fake/family';
 import {
 	defaultConfig,
 	type AppConfig,
 	type DisplayMode,
-	type Orientation,
 	type PersistedConfigShape
 } from '$lib/config';
 import { emptyProgress, type FeelingEntry, type ProgressData } from '$lib/kid/progress';
@@ -40,8 +40,31 @@ export interface LocalEvent {
 	profileIds: number[];
 }
 
+/** Nothing configured yet — a fresh device before/without a real family. */
+function emptyFamilyData(): FamilyData {
+	return {
+		familyName: '',
+		timezone: 'UTC',
+		weekStartsOn: 1,
+		profiles: [],
+		events: [],
+		routines: [],
+		rewards: [],
+		stars: [],
+		rewardClaims: [],
+		feelingsToday: [],
+		lists: [],
+		meals: [],
+		tasks: [],
+		recipes: [],
+		// No live weather source is wired up yet — this is a placeholder, not a
+		// reading, until a real integration exists.
+		weather: { tempF: 0, condition: 'Unavailable', icon: '—' }
+	};
+}
+
 class FamilyStore {
-	data = $state<FamilyData>(demoFamily);
+	data = $state<FamilyData>(emptyFamilyData());
 	config = $state<AppConfig>(defaultConfig);
 	progress = $state<ProgressData>(emptyProgress());
 	localEvents = $state<LocalEvent[]>([]);
@@ -64,8 +87,27 @@ class FamilyStore {
 		return this.data.profiles;
 	}
 
-	get orientation(): Orientation {
-		return this.config.view.orientation;
+	/** Real screen aspect ratio, kept live by `watchOrientation()` (started once
+	 *  from the app shell). Used whenever the configured orientation is 'auto' —
+	 *  a stored 'landscape'/'portrait' value goes stale the moment someone
+	 *  physically rotates the panel, so auto-detecting from the real viewport is
+	 *  the only way the layout reliably matches how the screen is mounted. */
+	detectedOrientation = $state<'landscape' | 'portrait'>('landscape');
+
+	get orientation(): 'landscape' | 'portrait' {
+		const configured = this.config.view.orientation;
+		return configured === 'auto' ? this.detectedOrientation : configured;
+	}
+
+	/** Track the real viewport aspect ratio via `matchMedia`. Browser-only —
+	 *  call once from a client effect; returns the cleanup function. */
+	watchOrientation(): () => void {
+		if (typeof matchMedia !== 'function') return () => {};
+		const mq = matchMedia('(orientation: portrait)');
+		const update = () => (this.detectedOrientation = mq.matches ? 'portrait' : 'landscape');
+		update();
+		mq.addEventListener('change', update);
+		return () => mq.removeEventListener('change', update);
 	}
 
 	/** Read-only TV mode — editing controls are hidden on the display. */
@@ -74,11 +116,12 @@ class FamilyStore {
 	}
 
 	/**
-	 * Apply persisted config (from config.json) onto the demo-seeded store.
-	 * App config (features, view prefs, orientation) is applied wholesale;
-	 * family name and matching profiles' display fields are overridden in place
-	 * so the curated calendar demo (events/routines keyed by profile id) stays
-	 * intact. No-op until setup is complete.
+	 * Apply persisted config (from config.json) onto the store. App config
+	 * (features, view prefs, orientation) is applied wholesale; profiles are
+	 * fully synced against `cfg.profiles` — updated in place if they already
+	 * exist, added (with starter routines) if new, and dropped if removed —
+	 * since profiles can arrive here either from the setup wizard or from
+	 * in-app editing. No-op until setup is complete.
 	 */
 	applyConfig(cfg: PersistedConfigShape) {
 		this.config = cfg.app;
@@ -87,6 +130,9 @@ class FamilyStore {
 		if (!cfg.setupComplete) return;
 		if (cfg.family.name) this.data.familyName = cfg.family.name;
 		this.data.weekStartsOn = cfg.family.weekStartsOn;
+
+		const keep = new Set(cfg.profiles.map((pc) => pc.id));
+		this.data.profiles = this.data.profiles.filter((p) => keep.has(p.id));
 		for (const pc of cfg.profiles) {
 			const p = this.data.profiles.find((x) => x.id === pc.id);
 			if (p) {
@@ -97,6 +143,19 @@ class FamilyStore {
 				p.color = pc.color;
 				p.avatarEmoji = pc.avatarEmoji;
 				p.photoUpdatedAt = pc.photoUpdatedAt;
+			} else {
+				this.data.profiles.push({
+					id: pc.id,
+					name: pc.name,
+					nickname: pc.nickname,
+					age: pc.age,
+					role: pc.role,
+					color: pc.color,
+					avatarEmoji: pc.avatarEmoji,
+					photoUpdatedAt: pc.photoUpdatedAt,
+					tasks: { done: 0, total: 0 }
+				});
+				this.seedRoutinesForProfile(pc.id, pc.age);
 			}
 		}
 	}
@@ -347,8 +406,7 @@ class FamilyStore {
 		this.data.lists = data.lists;
 		this.data.tasks = data.tasks ?? [];
 		this.data.recipes = data.recipes ?? [];
-		// Only override the demo star balances once the family has real ones.
-		if (data.stars && data.stars.length) this.data.stars = data.stars;
+		this.data.stars = data.stars ?? [];
 		this.data.rewardClaims = data.rewardClaims ?? [];
 		this.localEvents = data.localEvents ?? [];
 		this.materializeLocalEvents();
