@@ -1,5 +1,14 @@
 <script lang="ts">
-	import { HardDrive, Server, ArrowRightLeft, Wifi, Folder, Lock } from 'lucide-svelte';
+	import {
+		HardDrive,
+		Server,
+		ArrowRightLeft,
+		Wifi,
+		Folder,
+		FolderOpen,
+		Lock,
+		ChevronRight
+	} from 'lucide-svelte';
 
 	interface Disk {
 		total: number;
@@ -21,6 +30,10 @@
 		name: string;
 		comment?: string;
 	}
+	interface NasEntry {
+		name: string;
+		isDir: boolean;
+	}
 
 	let info = $state<Info | null>(null);
 	let nasPath = $state('');
@@ -41,6 +54,55 @@
 	let sharesErr = $state('');
 	let selectedShare = $state('');
 	let mounting = $state(false);
+
+	// --- Folder browse, inside the chosen share — many NAS boxes only expose a
+	// share above the real destination (a per-user home share, a shared
+	// "Public" volume), so mounting the share root isn't always what you want. ---
+	let browsePath = $state<string[]>([]);
+	let folderEntries = $state<NasEntry[]>([]);
+	let loadingFolder = $state(false);
+	let folderErr = $state('');
+
+	async function loadFolder() {
+		loadingFolder = true;
+		folderErr = '';
+		try {
+			const r = await fetch('/api/storage/nas/browse', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({
+					host: host.trim(),
+					share: selectedShare,
+					path: browsePath.join('/'),
+					username: nasUser.trim(),
+					password: nasPass
+				})
+			});
+			const res = await r.json().catch(() => ({ ok: false }));
+			if (res.ok) folderEntries = res.entries ?? [];
+			else folderErr = res.error ?? 'Could not open that folder.';
+		} finally {
+			loadingFolder = false;
+		}
+	}
+
+	function pickShare(name: string) {
+		selectedShare = name;
+		browsePath = [];
+		folderErr = '';
+		loadFolder();
+	}
+
+	function openFolder(name: string) {
+		browsePath = [...browsePath, name];
+		loadFolder();
+	}
+
+	/** Jump to a breadcrumb segment; -1 is the share root. */
+	function jumpTo(i: number) {
+		browsePath = browsePath.slice(0, i + 1);
+		loadFolder();
+	}
 
 	async function load() {
 		const r = await fetch('/api/storage');
@@ -114,6 +176,7 @@
 				body: JSON.stringify({
 					host: host.trim(),
 					share: selectedShare,
+					folder: browsePath.join('/') || undefined,
 					username: nasUser.trim(),
 					password: nasPass
 				})
@@ -244,30 +307,66 @@
 				{#if sharesErr}<p class="type-caption err">✗ {sharesErr}</p>{/if}
 
 				<!-- Step 3: pick a share -->
-				{#if shares.length}
+				{#if shares.length && !selectedShare}
 					<div class="serverlist">
 						{#each shares as sh (sh.name)}
-							<button
-								type="button"
-								class="server"
-								class:on={selectedShare === sh.name}
-								onclick={() => (selectedShare = sh.name)}
-							>
+							<button type="button" class="server" onclick={() => pickShare(sh.name)}>
 								<Folder size={16} />
 								<span class="sname">{sh.name}</span>
 								{#if sh.comment}<span class="type-caption sub">{sh.comment}</span>{/if}
 							</button>
 						{/each}
 					</div>
-					<button
-						type="button"
-						class="btn primary"
-						disabled={mounting || !selectedShare}
-						onclick={useShare}
-					>
-						<ArrowRightLeft size={16} />
-						{mounting ? 'Mounting…' : 'Use this share for storage'}
-					</button>
+				{/if}
+
+				<!-- Step 4: browse into the share to find where to actually store data —
+				     many NAS boxes expose a share above the real destination. -->
+				{#if selectedShare}
+					<div class="folderbrowse">
+						<div class="crumbs">
+							<button type="button" class="crumb" onclick={() => jumpTo(-1)}>{selectedShare}</button
+							>
+							{#each browsePath as seg, i (i)}
+								<ChevronRight size={13} class="sub" />
+								<button type="button" class="crumb" onclick={() => jumpTo(i)}>{seg}</button>
+							{/each}
+						</div>
+
+						{#if loadingFolder}
+							<p class="type-caption sub">Loading…</p>
+						{:else if folderErr}
+							<p class="type-caption err">✗ {folderErr}</p>
+						{:else if folderEntries.filter((e) => e.isDir).length === 0}
+							<p class="type-caption sub">No subfolders here.</p>
+						{:else}
+							<div class="serverlist">
+								{#each folderEntries.filter((e) => e.isDir) as entry (entry.name)}
+									<button type="button" class="server" onclick={() => openFolder(entry.name)}>
+										<FolderOpen size={16} />
+										<span class="sname">{entry.name}</span>
+									</button>
+								{/each}
+							</div>
+						{/if}
+
+						<button
+							type="button"
+							class="linkish"
+							onclick={() => {
+								selectedShare = '';
+								browsePath = [];
+							}}
+						>
+							Choose a different share
+						</button>
+
+						<button type="button" class="btn primary" disabled={mounting} onclick={useShare}>
+							<ArrowRightLeft size={16} />
+							{mounting
+								? 'Mounting…'
+								: `Use ${browsePath.length ? 'this folder' : 'this share'} for storage`}
+						</button>
+					</div>
 				{/if}
 
 				<!-- Advanced: point at an already-mounted folder -->
@@ -431,6 +530,30 @@
 		font-size: var(--text-sm);
 		text-decoration: underline;
 		padding: 4px 0;
+	}
+	.folderbrowse {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-2);
+		padding: var(--space-3);
+		border-radius: var(--radius-md);
+		background: var(--color-surface-elevated);
+	}
+	.crumbs {
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 4px;
+	}
+	.crumb {
+		padding: 3px 8px;
+		border-radius: var(--radius-sm);
+		font-weight: var(--weight-semibold);
+		font-size: var(--text-sm);
+		color: var(--color-text-primary);
+	}
+	.crumb:hover {
+		background: var(--color-surface);
 	}
 	.ok {
 		color: var(--color-accent-success);

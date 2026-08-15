@@ -37,6 +37,8 @@ export interface NasShare {
 export interface NasConfig {
 	host: string;
 	share: string;
+	/** `/`-joined subfolder inside the share, if one was chosen while browsing. */
+	folder?: string;
 	username: string;
 	mountPath: string;
 }
@@ -129,10 +131,58 @@ export async function listShares(
 	return { ok: true, shares };
 }
 
+export interface NasEntry {
+	name: string;
+	isDir: boolean;
+}
+
+/**
+ * List the contents of a folder inside a share (directories and files),
+ * so the family can navigate down to wherever they actually want data
+ * stored — many NAS boxes only expose a share at a level above the real
+ * destination (a per-user home share, a shared "Public" volume, etc.).
+ * `subpath` is a `/`-joined path relative to the share root ('' for the root).
+ */
+export async function listFolder(
+	host: string,
+	share: string,
+	subpath: string,
+	username?: string,
+	password?: string
+): Promise<{ ok: boolean; entries: NasEntry[]; error?: string }> {
+	const auth = username ? ['-U', `${username}%${password ?? ''}`] : ['-N'];
+	// smbclient's own `cd` understands a full relative path in one go; quote it
+	// so spaces in folder names don't split into extra command tokens.
+	const cmd = subpath ? `cd "${subpath.replace(/"/g, '')}"; ls` : 'ls';
+	const out = await run('smbclient', [`//${host}/${share}`, '-c', cmd, ...auth], undefined, 12000);
+	if (out === null) {
+		return { ok: false, entries: [], error: 'Could not open that folder.' };
+	}
+	const entries: NasEntry[] = [];
+	for (const line of out.split('\n')) {
+		// Fixed-ish-width `ls` output: "  <name>  <attrs>  <size>  <date...>".
+		// Name may contain spaces, so anchor on the LAST run of 2+ spaces before
+		// the attribute/size/date columns rather than splitting on whitespace.
+		const m = line.match(/^\s*(.+?)\s{2,}([A-Za-z]*)\s+(-?\d+)\s+/);
+		if (!m) continue;
+		const name = m[1].trim();
+		if (!name || name === '.' || name === '..') continue;
+		entries.push({ name, isDir: m[2].includes('D') });
+	}
+	entries.sort((a, b) => Number(b.isDir) - Number(a.isDir) || a.name.localeCompare(b.name));
+	return { ok: true, entries };
+}
+
 export async function loadNasConfig(): Promise<NasConfig | null> {
 	try {
 		const j = JSON.parse(await fsp.readFile(NAS_FILE, 'utf8'));
-		return { host: j.host, share: j.share, username: j.username, mountPath: j.mountPath };
+		return {
+			host: j.host,
+			share: j.share,
+			folder: j.folder,
+			username: j.username,
+			mountPath: j.mountPath
+		};
 	} catch {
 		return null;
 	}
@@ -155,17 +205,24 @@ export async function nasPassword(): Promise<string | null> {
 }
 
 /**
- * Mount a share and persist it (fstab, via the privileged helper). Returns the
- * local mount path on success. The data migration is done separately by the
- * storage layer once the mount exists.
+ * Mount a share (optionally a subfolder inside it, chosen by browsing) and
+ * persist it (fstab, via the privileged helper). Returns the local mount
+ * path on success. The data migration is done separately by the storage
+ * layer once the mount exists.
  */
 export async function mountShare(opts: {
 	host: string;
 	share: string;
+	/** `/`-joined path relative to the share root, chosen via `listFolder`. */
+	folder?: string;
 	username: string;
 	password: string;
 }): Promise<{ ok: boolean; mountPath?: string; error?: string }> {
-	const safeShare = opts.share.replace(/[^a-zA-Z0-9._-]/g, '_');
+	// The privileged helper builds the UNC path as //host/<share arg> verbatim,
+	// so folding the chosen subfolder into that one argument is enough — no
+	// helper-script changes needed to mount below the share root.
+	const sharePath = opts.folder ? `${opts.share}/${opts.folder}` : opts.share;
+	const safeShare = sharePath.replace(/[^a-zA-Z0-9._-]/g, '_');
 	const mountPath = path.join(
 		MOUNT_ROOT,
 		`${opts.host.replace(/[^a-zA-Z0-9._-]/g, '_')}-${safeShare}`
@@ -174,7 +231,7 @@ export async function mountShare(opts: {
 	// The helper receives the password on stdin (arg 5 = "-" means read stdin).
 	const res = await run(
 		'sudo',
-		['/usr/local/bin/fc-nas-mount', opts.host, opts.share, mountPath, opts.username],
+		['/usr/local/bin/fc-nas-mount', opts.host, sharePath, mountPath, opts.username],
 		opts.password + '\n',
 		20000
 	);
@@ -186,7 +243,7 @@ export async function mountShare(opts: {
 		};
 	}
 	await saveNasConfig(
-		{ host: opts.host, share: opts.share, username: opts.username, mountPath },
+		{ host: opts.host, share: opts.share, folder: opts.folder, username: opts.username, mountPath },
 		opts.password
 	);
 	return { ok: true, mountPath };
