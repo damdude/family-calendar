@@ -19,6 +19,7 @@ import {
 } from '$lib/config';
 import { emptyProgress, type FeelingEntry, type ProgressData } from '$lib/kid/progress';
 import { defaultRoutinesForAge } from '$lib/kid/routineLibrary';
+import { mirror } from './mirror.svelte';
 import { dateKey } from '$lib/time';
 import {
 	routinesOn,
@@ -95,9 +96,35 @@ class FamilyStore {
 	 *  the only way the layout reliably matches how the screen is mounted. */
 	detectedOrientation = $state<'landscape' | 'portrait'>('landscape');
 
+	/** A phone/tablet that scanned in as a mirror controller is never the
+	 *  physically-mounted kiosk — it should always use its own real shape,
+	 *  regardless of whatever the household's kiosk orientation is set to. */
 	get orientation(): 'landscape' | 'portrait' {
+		if (mirror.role === 'controller') return this.detectedOrientation;
 		const configured = this.config.view.orientation;
 		return configured === 'auto' ? this.detectedOrientation : configured;
+	}
+
+	/**
+	 * Degrees to visually rotate the rendered page to compensate for a panel
+	 * that was physically turned 90° without the OS/compositor rotating its
+	 * own framebuffer to match — common on a kiosk Pi with no display-rotate
+	 * configured. `detectedOrientation` reads the RAW, unrotated viewport
+	 * shape; when a forced (non-'auto') orientation disagrees with it, the
+	 * layout alone (sidebar left vs bottom) isn't enough — the actual pixels
+	 * are still laid out for the old shape, so they need rotating too.
+	 * 'auto' never triggers this: it trusts the raw viewport outright, which
+	 * is correct whenever the hardware *does* rotate its own framebuffer.
+	 */
+	get rotationDeg(): 0 | 90 | -90 {
+		if (mirror.role === 'controller') return 0;
+		const configured = this.config.view.orientation;
+		if (configured === 'auto' || configured === this.detectedOrientation) return 0;
+		// Turning a landscape panel 90° clockwise to mount it portrait moves
+		// its native top-left corner to the new top-right — so content has to
+		// be pre-rotated -90° (counter-clockwise) to land upright afterward.
+		// If your panel was actually turned the other way, flip this sign.
+		return configured === 'portrait' ? -90 : 90;
 	}
 
 	/** Track the real viewport aspect ratio via `matchMedia`. Browser-only —
