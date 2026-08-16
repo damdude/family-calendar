@@ -292,7 +292,11 @@ export async function wifiDebugSnapshot(): Promise<string> {
 		'systemctl is-active family-calendar-wifi.service NetworkManager.service 2>&1',
 		'rfkill list wifi 2>&1',
 		'nmcli -t -f DEVICE,TYPE,STATE,CONNECTION device 2>&1',
-		'journalctl -u family-calendar-wifi.service --no-pager -n 12 -o cat 2>&1',
+		// Every saved profile + whether NM will autoconnect it — the direct
+		// answer to "why didn't it reconnect on boot" (a missing/renamed
+		// profile, or autoconnect=no, shows up immediately here).
+		'nmcli -t -f NAME,TYPE,AUTOCONNECT,AUTOCONNECT-PRIORITY connection show 2>&1',
+		'journalctl -u family-calendar-wifi.service --no-pager -n 20 -o cat 2>&1',
 		'journalctl -u NetworkManager --no-pager -n 12 -o cat 2>&1'
 	];
 	const parts = await Promise.all(cmds.map((c) => runCapture(c)));

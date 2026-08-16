@@ -60,6 +60,25 @@ if [ "$state" = "full" ] || [ "$state" = "limited" ]; then
   exit 0
 fi
 
+# Do we have a previously-joined (non-hotspot) Wi-Fi profile at all? Two
+# different tools can have created it — our own in-app picker writes a
+# profile named "fc-wifi" (fc-wifi-join), but the phone/QR captive-portal
+# flow (Balena wifi-connect, used whenever the family is on TV mode) creates
+# its OWN profile, typically named after the SSID, through its own internal
+# logic — never through our script at all. Checking for the literal name
+# "fc-wifi" only caught the first case; a household set up via the QR flow
+# never matched, so it never got the extra patience below and — the more
+# common path — kept hitting the *original* "reconnect fails" bug.
+KNOWN_WIFI=""
+while IFS=: read -r name type; do
+  [ "$type" = "802-11-wireless" ] || continue
+  mode="$(nmcli -t -f 802-11-wireless.mode connection show "$name" 2>/dev/null)"
+  if [ "${mode##*:}" != "ap" ]; then
+    KNOWN_WIFI="$name"
+    break
+  fi
+done < <(nmcli -t -f NAME,TYPE connection show 2>/dev/null)
+
 # If we've joined a network before, give NetworkManager real time to
 # autoconnect to it before giving up. Checking connectivity only once, right
 # as wlan0 leaves "unavailable", is too early — the WPA handshake and DHCP
@@ -67,8 +86,8 @@ fi
 # false "offline" reading here used to steal wlan0 into AP/hotspot mode
 # mid-reconnect, permanently pre-empting the very connection that was about
 # to succeed. This is the fix for "the Pi doesn't reconnect to Wi-Fi on boot".
-if nmcli -t -f NAME connection show 2>/dev/null | grep -qx "fc-wifi"; then
-  echo "wifi-setup: known network saved — waiting up to 25s for autoconnect"
+if [ -n "$KNOWN_WIFI" ]; then
+  echo "wifi-setup: known network '$KNOWN_WIFI' saved — waiting up to 25s for autoconnect"
   for _ in $(seq 1 25); do
     state="$(nmcli -t -f CONNECTIVITY general 2>/dev/null || echo unknown)"
     if [ "$state" = "full" ] || [ "$state" = "limited" ]; then
@@ -77,6 +96,18 @@ if nmcli -t -f NAME connection show 2>/dev/null | grep -qx "fc-wifi"; then
     fi
     sleep 1
   done
+  # Autoconnect still hasn't kicked in — force one explicit activation
+  # attempt. NetworkManager can leave a connection that previously failed to
+  # activate (a stale lease, a transient auth hiccup) sitting out of its
+  # normal autoconnect rotation; an explicit `connection up` clears that.
+  echo "wifi-setup: autoconnect didn't kick in — forcing 'connection up $KNOWN_WIFI'"
+  if nmcli --wait 20 connection up "$KNOWN_WIFI" >/dev/null 2>&1; then
+    state="$(nmcli -t -f CONNECTIVITY general 2>/dev/null || echo unknown)"
+    if [ "$state" = "full" ] || [ "$state" = "limited" ]; then
+      echo "wifi-setup: connected ($state) after forced activation — skipping captive portal"
+      exit 0
+    fi
+  fi
   echo "wifi-setup: known network didn't come up in time — falling back to setup hotspot"
 fi
 
