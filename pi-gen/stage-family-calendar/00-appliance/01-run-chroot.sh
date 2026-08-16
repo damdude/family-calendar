@@ -30,7 +30,11 @@ fi
 chown -R "${DASH_USER}:${DASH_USER}" "${APP_DIR}"
 # Full install (vite/svelte-kit are devDeps needed to build), build, then prune
 # dev deps so only the runtime tree (better-sqlite3, adapter output) ships.
-sudo -u "${DASH_USER}" bash -lc "cd '${APP_DIR}' && npm ci && npm run build && npm prune --omit=dev"
+# npm_config_build_from_source: better-sqlite3's prebuilt linux-arm64 binary
+# needs a newer glibc than this image ships, breaking every DB-backed route
+# with a dlopen error. .npmrc already sets this too — exported explicitly
+# here as well since it's the form confirmed to actually take effect.
+sudo -u "${DASH_USER}" bash -lc "cd '${APP_DIR}' && npm_config_build_from_source=true npm ci && npm run build && npm prune --omit=dev"
 [ -f "${APP_DIR}/.env" ] || { cp "${APP_DIR}/.env.example" "${APP_DIR}/.env"; chown "${DASH_USER}:${DASH_USER}" "${APP_DIR}/.env"; }
 
 # --- Server service (Node adapter → `node build`, port 5173) ---
