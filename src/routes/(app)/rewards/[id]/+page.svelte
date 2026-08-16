@@ -220,7 +220,7 @@
 	.toast {
 		position: fixed;
 		left: 50%;
-		bottom: var(--space-6);
+		bottom: calc(var(--space-6) + var(--bottom-nav-clearance, 0px));
 		transform: translateX(-50%);
 		z-index: 120;
 		padding: 12px 20px;

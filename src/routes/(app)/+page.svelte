@@ -144,7 +144,9 @@
 	.fabs {
 		position: fixed;
 		right: var(--space-5);
-		bottom: var(--space-5);
+		/* Clears the bottom tab bar in portrait mode, where it would otherwise
+		   sit on top of the last couple of nav items. */
+		bottom: calc(var(--space-5) + var(--bottom-nav-clearance, 0px));
 		z-index: 50;
 		display: flex;
 		flex-direction: column;
