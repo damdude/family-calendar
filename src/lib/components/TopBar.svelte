@@ -43,8 +43,10 @@
 <header class="topbar">
 	<h1 class="family type-title-lg">{family.data.familyName}</h1>
 	<div class="right">
-		<!-- Pairing QR now lives in PhoneMirrorPanel (always-on for TV, icon for touch). -->
-		{#if mirror.role === 'display' && mirror.connected}
+		<!-- Pairing QR lives in PhoneMirrorPanel (always-on for TV, icon for touch);
+		     this reflects whether a phone is actually paired right now, not just
+		     whether our own SSE stream to the server happens to be open. -->
+		{#if mirror.role === 'display' && mirror.controllerConnected}
 			<span class="pair live"><Smartphone size={18} /> Phone paired</span>
 		{/if}
 		<time class="clock type-title-lg">{clock}</time>

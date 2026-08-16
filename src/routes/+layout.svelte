@@ -8,7 +8,8 @@
 
 	let { children } = $props();
 
-	// DISPLAY (TV): follow the controller's path over SSE.
+	// DISPLAY (TV): follow the controller's path over SSE, and track whether a
+	// phone is actively paired right now (drives the QR ↔ "Phone paired" swap).
 	$effect(() => {
 		if (mirror.role !== 'display' || !mirror.token) return;
 		const es = new EventSource(`/api/mirror/events?token=${mirror.token}`);
@@ -20,22 +21,34 @@
 				goto(path);
 			}
 		};
+		es.addEventListener('status', (e) => {
+			mirror.controllerConnected = (e as MessageEvent).data === 'true';
+		});
 		return () => {
 			es.close();
 			mirror.connected = false;
+			mirror.controllerConnected = false;
 		};
 	});
 
-	// CONTROLLER (phone): report our current in-app path to the TV.
+	// CONTROLLER (phone): report our current in-app path to the TV, and keep
+	// heartbeating on an interval even without navigating — the display's
+	// "phone paired" status is based on how recently it last heard from us,
+	// not just on the last screen we happened to visit.
 	$effect(() => {
 		if (mirror.role !== 'controller' || !mirror.token) return;
-		const path = page.url.pathname;
-		if (path.startsWith('/remote') || path.startsWith('/pair')) return;
-		fetch('/api/mirror/nav', {
-			method: 'POST',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ token: mirror.token, path })
-		}).catch(() => {});
+		const report = () => {
+			const path = page.url.pathname;
+			if (path.startsWith('/remote') || path.startsWith('/pair')) return;
+			fetch('/api/mirror/nav', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ token: mirror.token, path })
+			}).catch(() => {});
+		};
+		report();
+		const id = setInterval(report, 5000);
+		return () => clearInterval(id);
 	});
 </script>
 

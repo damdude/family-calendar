@@ -57,10 +57,14 @@
 
 {#if show}
 	{#if noTouch}
-		<!-- No touch at all: permanent, scannable from across the room — the
-		     only way in, so it can't be collapsed. -->
-		<aside class="tvqr" aria-label="Control from your phone">
-			{#if qrSvg}
+		<!-- No touch at all: the QR is the only way in, so it's permanent and
+		     un-dismissable — but once a phone has actually paired, showing it is
+		     pointless (and confusing, since scanning it again does nothing
+		     useful). The TopBar's "Phone paired" badge covers the status while
+		     paired; this panel just goes quiet until that phone disconnects,
+		     when the QR reappears automatically. -->
+		{#if !mirror.controllerConnected && qrSvg}
+			<aside class="tvqr" aria-label="Control from your phone">
 				<div class="qr">
 					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 					{@html qrSvg}
@@ -69,13 +73,14 @@
 					<span class="type-label"><Smartphone size={14} /> Control from your phone</span>
 					<span class="type-caption sub">Scan to add events, lists and more</span>
 				</div>
-			{/if}
-		</aside>
+			</aside>
+		{/if}
 	{:else}
 		<!-- Has touch: out of the way until asked for, on this device only. -->
 		<button
 			type="button"
 			class="fab"
+			class:portrait={family.orientation === 'portrait'}
 			aria-label="Control from your phone"
 			onclick={() => (expanded = true)}
 		>
@@ -167,6 +172,10 @@
 		background: var(--color-surface);
 		color: var(--color-text-secondary);
 		box-shadow: var(--shadow-float);
+	}
+	/* Portrait puts the nav as a bottom bar — clear it rather than overlap. */
+	.fab.portrait {
+		bottom: calc(80px + env(safe-area-inset-bottom, 0px));
 	}
 	.fab:active {
 		transform: translateY(1px);

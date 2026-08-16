@@ -23,6 +23,9 @@ class MirrorControl {
 	token = $state<string | null>(null);
 	/** True once the display has an open event stream. */
 	connected = $state(false);
+	/** Display only: a phone is actively paired right now (heartbeating), not
+	 *  just that our own SSE stream to the server happens to be open. */
+	controllerConnected = $state(false);
 
 	constructor() {
 		if (!browser) return;
@@ -56,6 +59,7 @@ class MirrorControl {
 		this.role = 'idle';
 		this.token = null;
 		this.connected = false;
+		this.controllerConnected = false;
 		if (browser) {
 			localStorage.removeItem(DISPLAY_KEY);
 			sessionStorage.removeItem(CONTROLLER_KEY);

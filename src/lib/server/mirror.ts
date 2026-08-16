@@ -26,6 +26,9 @@ interface Channel {
 
 const channels = new Map<string, Channel>();
 const TTL_MS = 60 * 60 * 1000; // 1h idle → drop
+/** A controller heartbeats every 5s (see /api/mirror/nav); missing two in a
+ *  row means the phone's tab was closed or lost its connection. */
+const CONTROLLER_TIMEOUT_MS = 15 * 1000;
 
 function prune() {
 	const now = Date.now();
@@ -54,6 +57,13 @@ export function createMirrorToken(): string {
 /** Is this a live mirror channel? Guards the controller's nav endpoint. */
 export function isMirrorToken(token: string): boolean {
 	return channels.has(token);
+}
+
+/** Is a phone actively paired right now (heartbeated recently), vs never
+ *  connected or gone stale? Drives the QR ↔ "Phone paired" swap on the TV. */
+export function isControllerConnected(token: string): boolean {
+	const ch = channels.get(token);
+	return !!ch && ch.everPushed && Date.now() - ch.updatedAt < CONTROLLER_TIMEOUT_MS;
 }
 
 /** The controller pushes its current path; broadcast to the display(s). */
