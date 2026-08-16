@@ -59,7 +59,9 @@
 		};
 	});
 	const sv = $derived(family.config.screensaver);
-	// The sleep window forces the screensaver on (a tap won't dismiss it).
+	// The sleep window forces the screensaver on outside of the snooze below —
+	// otherwise it'd flip back on every few seconds all night regardless of
+	// anyone touching the screen.
 	const sleepActive = $derived(
 		family.config.sleep.enabled &&
 			isWithinWindow(new Date(tick), family.config.sleep.start, family.config.sleep.end)
@@ -67,16 +69,33 @@
 	const idleActive = $derived(
 		sv.enabled && sv.idleMinutes > 0 && tick - lastActivity > sv.idleMinutes * 60_000
 	);
+	// A dismiss always guarantees a real window of "definitely off" — a tap
+	// resetting `lastActivity` isn't enough on its own to prove the screen
+	// actually comes back, since `tick`/`lastActivity` can already be stale by
+	// the moment screensaverActive first turns true (e.g. switching this
+	// screen from TV to touch mode after it sat idle — TV mode is exempt from
+	// the screensaver entirely, so nothing had been resetting the idle clock —
+	// which otherwise reads as "the screensaver came on and touch does
+	// nothing," since every recomputation immediately re-triggers it.
+	let snoozedUntil = $state(0);
 	// "Sleep now" (forceSleep) always shows; scheduled/idle only when enabled.
 	// TV mode has no touch, so nothing could ever dismiss it once shown — and it
 	// would hide the persistent pairing QR below, the only way onto the device
 	// at all. Never let it activate there, regardless of trigger.
 	const screensaverActive = $derived(
-		!family.isTv && (screensaver.forceSleep || (sv.enabled && (sleepActive || idleActive)))
+		tick < snoozedUntil
+			? false
+			: !family.isTv && (screensaver.forceSleep || (sv.enabled && (sleepActive || idleActive)))
 	);
 </script>
 
-<div class="app" data-orientation={family.orientation}>
+<div
+	class="app"
+	class:rotated={family.rotationDeg !== 0}
+	data-orientation={family.orientation}
+	style:--rotate-deg="{family.rotationDeg}deg"
+	style:--bottom-nav-clearance={family.orientation === 'portrait' ? '80px' : '0px'}
+>
 	<Sidebar />
 	<div class="content">
 		<TopBar />
@@ -97,6 +116,7 @@
 		ondismiss={() => {
 			screensaver.forceSleep = false;
 			lastActivity = Date.now();
+			snoozedUntil = Date.now() + 10_000;
 		}}
 	/>
 {/if}
@@ -107,6 +127,19 @@
 		height: 100vh;
 		width: 100vw;
 		overflow: hidden;
+	}
+	/* Compensates for a panel that was physically rotated 90° without its
+	   OS/compositor rotating the framebuffer to match: render into a box with
+	   the OLD (raw) dimensions swapped in, then rotate the whole thing back so
+	   it lands upright on the physically-turned screen. */
+	.app.rotated {
+		position: fixed;
+		inset: 0;
+		top: 50%;
+		left: 50%;
+		width: 100vh;
+		height: 100vw;
+		transform: translate(-50%, -50%) rotate(var(--rotate-deg));
 	}
 	.content {
 		flex: 1;
