@@ -30,11 +30,19 @@ fi
 chown -R "${DASH_USER}:${DASH_USER}" "${APP_DIR}"
 # Full install (vite/svelte-kit are devDeps needed to build), build, then prune
 # dev deps so only the runtime tree (better-sqlite3, adapter output) ships.
-# npm_config_build_from_source: better-sqlite3's prebuilt linux-arm64 binary
-# needs a newer glibc than this image ships, breaking every DB-backed route
-# with a dlopen error. .npmrc already sets this too — exported explicitly
-# here as well since it's the form confirmed to actually take effect.
-sudo -u "${DASH_USER}" bash -lc "cd '${APP_DIR}' && npm_config_build_from_source=true npm ci && npm run build && npm prune --omit=dev"
+# better-sqlite3's prebuilt linux-arm64 binary needs a newer glibc than this
+# image ships, breaking every DB-backed route with a dlopen error. .npmrc
+# sets build-from-source=true, but on-device testing showed npm ci pulls the
+# prebuilt binary regardless (completes in ~25s — nowhere near long enough to
+# have compiled it) even with the flag set both ways — so it's rebuilt
+# explicitly afterward instead of trusted to npm ci, and verified by actually
+# loading the module rather than trusting node-gyp's exit code (observed
+# returning nonzero from an unrelated post-build cache-cleanup step even
+# after successfully compiling and linking). The existing prebuilds/ dir has
+# to go first: `npm rebuild` finds it already "installed" and skips straight
+# past the compile step otherwise, silently leaving the broken prebuilt
+# binary in place despite reporting success.
+sudo -u "${DASH_USER}" bash -lc "cd '${APP_DIR}' && npm ci && rm -rf node_modules/better-sqlite3/build node_modules/better-sqlite3/prebuilds && (npm_config_build_from_source=true npm rebuild better-sqlite3 || true) && node -e \"new (require('better-sqlite3'))(':memory:')\" && npm run build && npm prune --omit=dev"
 [ -f "${APP_DIR}/.env" ] || { cp "${APP_DIR}/.env.example" "${APP_DIR}/.env"; chown "${DASH_USER}:${DASH_USER}" "${APP_DIR}/.env"; }
 
 # --- Server service (Node adapter → `node build`, port 5173) ---

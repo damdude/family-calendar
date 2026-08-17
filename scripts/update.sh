@@ -47,15 +47,25 @@ git pull --ff-only --quiet origin main || rollback
 # Full install (incl. devDependencies): vite/@sveltejs/kit live there and the
 # build step needs them. Pruned back down to production-only after building,
 # matching how the base image itself is provisioned.
-#
+npm ci || npm install || rollback
 # better-sqlite3's prebuilt linux-arm64 binary needs a newer glibc than
 # Raspberry Pi OS ships, so installing it as-is breaks every DB-backed route
-# with a dlopen error. .npmrc already sets build-from-source=true, but export
-# it explicitly here too — confirmed working via this exact env var, whereas
-# npm's own "unknown config" warning for the .npmrc form leaves some doubt
-# whether it's actually honored on every npm version this appliance might run.
-export npm_config_build_from_source=true
-npm ci || npm install || rollback
+# with a dlopen error. .npmrc sets build-from-source=true, but `npm ci` was
+# confirmed on-device to still pull the prebuilt binary regardless (finishes
+# in ~25s — nowhere near long enough to have actually compiled it) — so it's
+# rebuilt explicitly afterward instead of trusted to npm ci. The existing
+# prebuilds/ dir has to go first: `npm rebuild` finds it already "installed"
+# and skips straight past the compile step otherwise, silently leaving the
+# broken prebuilt binary in place despite reporting success.
+#
+# Ignore node-gyp's own exit code here: it was observed on-device returning a
+# nonzero status from a post-build cache cleanup step (an ENOENT lstat on
+# node_gyp_bins) *after* successfully compiling and linking the binary — a
+# false failure signal. What actually matters is whether the module loads,
+# so that's checked directly instead of trusting the exit code.
+rm -rf node_modules/better-sqlite3/build node_modules/better-sqlite3/prebuilds
+npm_config_build_from_source=true npm rebuild better-sqlite3 || true
+node -e "new (require('better-sqlite3'))(':memory:')" || rollback
 npm run build || rollback
 npm prune --omit=dev || true
 sudo systemctl restart "$SERVICE" || rollback
