@@ -11,7 +11,14 @@
 set -uo pipefail
 
 APP_DIR="${APP_DIR:-$HOME/family-calendar}"
-URL="${HEALTHCHECK_URL:-http://localhost:5173}"
+# /api/config, not just / — the static shell can return 200 from a build
+# whose server-side code is actually broken (confirmed on-device: a missing
+# node_modules/zod after `npm prune` 500'd every API route while / kept
+# serving fine, so this check let a broken deploy report "healthy").
+# loadConfig() itself never throws (falls back to defaults on any read/parse
+# error), so a 500 here means a real server-side fault, not a first-boot
+# empty-config false positive.
+URL="${HEALTHCHECK_URL:-http://localhost:5173/api/config}"
 SERVICE="${SERVICE:-family-calendar}"
 cd "$APP_DIR" || exit 1
 
