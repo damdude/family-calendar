@@ -38,6 +38,15 @@ if [ -z "${FC_UPDATE_REEXEC:-}" ]; then
 	paused="$(node -e "try{process.stdout.write(require('./data/config.json').updates?.paused?'1':'0')}catch{process.stdout.write('0')}" 2>/dev/null || echo 0)"
 	if [ "$paused" = "1" ]; then log "updates paused"; exit 0; fi
 
+	# npm ci regenerates package-lock.json on-device (differs from the Mac-
+	# generated lockfile committed upstream — npm version / platform-resolved
+	# optional-deps ordering), leaving it modified after every run. Discard
+	# that before checking for real work-in-progress, or every update after
+	# the first one permanently skips itself here — confirmed on-device: this
+	# silently blocked every deploy (including the cron timer) after the very
+	# first `npm ci` ever ran.
+	git checkout -- package-lock.json 2>/dev/null || true
+
 	# Refuse to update over local work-in-progress.
 	if ! git diff --quiet || ! git diff --cached --quiet; then
 		log "local changes present — skipping"; exit 0
