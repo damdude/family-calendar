@@ -94,8 +94,8 @@
 		width: 104px;
 		height: 104px;
 		border-radius: var(--radius-lg);
-		color: color-mix(in srgb, var(--accent) 62%, #1a1a1a);
-		background: color-mix(in srgb, var(--accent) 42%, white);
+		color: color-mix(in srgb, var(--accent) 62%, var(--color-text-primary));
+		background: color-mix(in srgb, var(--accent) 42%, var(--color-surface));
 	}
 	.dots {
 		display: flex;

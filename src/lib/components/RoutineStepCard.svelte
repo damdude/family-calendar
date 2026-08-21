@@ -72,8 +72,8 @@
 		height: 64px;
 		flex: none;
 		border-radius: var(--radius-md);
-		color: color-mix(in srgb, var(--accent) 60%, #1a1a1a);
-		background: color-mix(in srgb, var(--accent) 40%, white);
+		color: color-mix(in srgb, var(--accent) 60%, var(--color-text-primary));
+		background: color-mix(in srgb, var(--accent) 40%, var(--color-surface));
 	}
 	.icononly .icon {
 		width: 84px;

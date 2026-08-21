@@ -119,6 +119,9 @@ export interface PersistedFamily {
 	name: string;
 	timezone: string;
 	weekStartsOn: 0 | 1;
+	/** Drives the sunrise/sunset auto theme (src/lib/sun.ts); optional. */
+	latitude?: number;
+	longitude?: number;
 }
 export interface PersistedProfileMeta {
 	id: number;

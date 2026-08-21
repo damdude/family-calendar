@@ -47,7 +47,11 @@ export const SetupDraftSchema = z.object({
 const PersistedFamilySchema = z.object({
 	name: z.string().trim().max(60),
 	timezone: z.string().min(1).max(64),
-	weekStartsOn: z.union([z.literal(0), z.literal(1)])
+	weekStartsOn: z.union([z.literal(0), z.literal(1)]),
+	// Optional — drives the sunrise/sunset calculation for the auto light/dark
+	// theme. Falls back to a reasonable default (src/lib/sun.ts) when unset.
+	latitude: z.number().min(-90).max(90).optional(),
+	longitude: z.number().min(-180).max(180).optional()
 });
 
 // --- Persisted app config ---

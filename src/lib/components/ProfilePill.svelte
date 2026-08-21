@@ -40,10 +40,12 @@
 		min-width: 34px;
 		padding: 2px 8px;
 		border-radius: var(--radius-pill);
-		background: color-mix(in srgb, var(--pill-accent) 60%, white);
-		color: color-mix(in srgb, var(--pill-accent) 60%, #1a1a1a);
+		background: color-mix(in srgb, var(--pill-accent) 60%, var(--color-surface));
+		color: color-mix(in srgb, var(--pill-accent) 60%, var(--color-text-primary));
 	}
 	.count.complete {
+		/* Solid accent-success bg, unchanged across themes — the fixed dark
+		   text keeps contrast either way, no need to mix toward the theme ink. */
 		background: var(--color-accent-success);
 		color: #10391f;
 	}

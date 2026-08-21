@@ -79,3 +79,34 @@
 		--material-blur: none;
 	}
 }
+
+/* Auto dark theme (src/lib/sun.ts drives the [data-theme] attribute from
+   sunrise/sunset, not prefers-color-scheme — the display should match the
+   room's actual daylight, not the OS setting). Profile/accent colors stay
+   the same across themes so a kid's color stays recognizable; only the
+   neutrals + materials flip. */
+:root[data-theme='dark'] {
+	--color-canvas: #121212;
+	--color-surface: #1e1e1e;
+	--color-surface-elevated: #292929;
+	--color-text-primary: #f2f2f2;
+	--color-text-secondary: #b3b3b3;
+	--color-text-tertiary: #808080;
+	--color-border-subtle: #2e2e2e;
+	--color-border-hairline: #272727;
+
+	--shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.24);
+	--shadow-raised: 0 4px 12px rgba(0, 0, 0, 0.36), 0 1px 3px rgba(0, 0, 0, 0.24);
+	--shadow-float: 0 12px 32px rgba(0, 0, 0, 0.48), 0 2px 8px rgba(0, 0, 0, 0.32);
+
+	--material-thin: rgba(30, 30, 30, 0.6);
+	--material-regular: rgba(24, 24, 24, 0.72);
+	--material-thick: rgba(20, 20, 20, 0.85);
+}
+@media (prefers-reduced-transparency: reduce) {
+	:root[data-theme='dark'] {
+		--material-thin: #1e1e1e;
+		--material-regular: #181818;
+		--material-thick: #141414;
+	}
+}

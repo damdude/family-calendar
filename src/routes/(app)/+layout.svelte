@@ -9,6 +9,7 @@
 	import PhoneMirrorPanel from '$lib/components/PhoneMirrorPanel.svelte';
 	import { dragScroll } from '$lib/actions/dragScroll';
 	import { isWithinWindow } from '$lib/time';
+	import { isDarkNow } from '$lib/sun';
 	import { invalidateAll } from '$app/navigation';
 	import { untrack } from 'svelte';
 	import type { LayoutData } from './$types';
@@ -93,6 +94,21 @@
 	const tvIdleActive = $derived(family.isTv && idleOrSleepActive && !mirror.controllerConnected);
 	// Touch: the original dismissible clock/photos screensaver, unchanged.
 	const touchScreensaverActive = $derived(!family.isTv && idleOrSleepActive);
+
+	// --- Auto light/dark theme (sunrise/sunset ±1h) ---
+	// Set on <html>, not the .app div — TvIdleScreen/Screensaver render as
+	// siblings of .app, not children, so a document-level attribute is the
+	// only way every overlay picks up the same theme tokens.
+	const theme = $derived(isDarkNow(new Date(tick), family.latitude, family.longitude) ? 'dark' : 'light');
+	$effect(() => {
+		document.documentElement.dataset.theme = theme;
+	});
+
+	// --- Dim after long inactivity (screen-burn / just-being-considerate) ---
+	// A separate, longer threshold from the idle screensaver above — it can
+	// layer on top of the QR idle screen or the regular dashboard alike.
+	const DIM_AFTER_MS = 30 * 60_000;
+	const dimActive = $derived(tick - lastActivity > DIM_AFTER_MS);
 </script>
 
 <div
@@ -130,6 +146,8 @@
 		}}
 	/>
 {/if}
+
+<div class="dim-overlay" class:active={dimActive} aria-hidden="true"></div>
 
 <style>
 	.app {
@@ -180,5 +198,22 @@
 	}
 	.app[data-orientation='portrait'] :global(.sidebar) {
 		order: 2;
+	}
+
+	/* Software brightness dim after long inactivity — HDMI TVs have no
+	   backlight the Pi can drive, so this darkens the rendered picture
+	   instead. pointer-events: none so a touch still reaches through to
+	   count as activity and lift the dim. */
+	.dim-overlay {
+		position: fixed;
+		inset: 0;
+		background: #000;
+		opacity: 0;
+		pointer-events: none;
+		z-index: 9999;
+		transition: opacity 3s ease;
+	}
+	.dim-overlay.active {
+		opacity: 0.55;
 	}
 </style>

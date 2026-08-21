@@ -74,6 +74,10 @@ class FamilyStore {
 	displayMode = $state<DisplayMode | null>(null);
 	/** Family chose to set up Wi-Fi later. */
 	wifiSkipped = $state(false);
+	/** For the sunrise/sunset-based auto theme; undefined falls back to a
+	 *  default location (src/lib/sun.ts). */
+	latitude = $state<number | undefined>(undefined);
+	longitude = $state<number | undefined>(undefined);
 
 	/** Touch devices get on-screen input; TV devices are driven from a phone. */
 	get isTouch(): boolean {
@@ -155,6 +159,8 @@ class FamilyStore {
 		this.config = cfg.app;
 		this.displayMode = cfg.displayMode ?? null;
 		this.wifiSkipped = !!cfg.wifiSkipped;
+		this.latitude = cfg.family.latitude;
+		this.longitude = cfg.family.longitude;
 		if (!cfg.setupComplete) return;
 		if (cfg.family.name) this.data.familyName = cfg.family.name;
 		this.data.weekStartsOn = cfg.family.weekStartsOn;
@@ -418,7 +424,9 @@ class FamilyStore {
 			family: {
 				name: this.data.familyName,
 				timezone: this.data.timezone,
-				weekStartsOn: this.data.weekStartsOn
+				weekStartsOn: this.data.weekStartsOn,
+				latitude: this.latitude,
+				longitude: this.longitude
 			},
 			profiles: this.data.profiles.map((p) => ({
 				id: p.id,

@@ -56,8 +56,8 @@
 		height: 52px;
 		flex: none;
 		border-radius: var(--radius-md);
-		background: color-mix(in srgb, var(--accent) 45%, white);
-		color: color-mix(in srgb, var(--accent) 60%, #1a1a1a);
+		background: color-mix(in srgb, var(--accent) 45%, var(--color-surface));
+		color: color-mix(in srgb, var(--accent) 60%, var(--color-text-primary));
 	}
 	.info {
 		flex: 1;

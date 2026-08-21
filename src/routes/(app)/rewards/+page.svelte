@@ -168,8 +168,8 @@
 		color: var(--color-text-tertiary);
 	}
 	.chip.can {
-		background: color-mix(in srgb, var(--color-accent-success) 22%, white);
-		color: #10391f;
+		background: color-mix(in srgb, var(--color-accent-success) 22%, var(--color-surface));
+		color: color-mix(in srgb, var(--color-accent-success) 55%, var(--color-text-primary));
 		cursor: pointer;
 	}
 	.chip.can:hover:not(:disabled) {
