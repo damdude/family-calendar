@@ -55,6 +55,8 @@ export const load: PageServerLoad = async ({ url }) => {
 			avatarEmoji: p.avatarEmoji,
 			photoUpdatedAt: p.photoUpdatedAt
 		})),
-		events
+		events,
+		lists: familyData?.lists ?? [],
+		tasks: familyData?.tasks ?? []
 	};
 };

@@ -168,3 +168,24 @@ export async function appendListItem(listId: number, text: string): Promise<bool
 	await saveFamilyData(data);
 	return true;
 }
+
+/** Toggle a task's done state (phone companion). Returns false if no task. */
+export async function toggleTaskDone(taskId: number): Promise<boolean> {
+	const data = (await loadFamilyData()) ?? emptyData();
+	const task = data.tasks.find((t) => t.id === taskId);
+	if (!task) return false;
+	task.done = !task.done;
+	await saveFamilyData(data);
+	return true;
+}
+
+/** Toggle a list item's completed state (phone companion). Returns false if
+ *  no such list/item. */
+export async function toggleListItemDone(listId: number, itemId: number): Promise<boolean> {
+	const data = (await loadFamilyData()) ?? emptyData();
+	const item = data.lists.find((l) => l.id === listId)?.items.find((i) => i.id === itemId);
+	if (!item) return false;
+	item.completed = !item.completed;
+	await saveFamilyData(data);
+	return true;
+}

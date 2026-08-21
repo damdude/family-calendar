@@ -5,7 +5,7 @@
 	import { profileColorVar, profileTint } from '$lib/design/colors';
 	import { formatRange } from '$lib/time';
 	import Avatar from '$lib/components/Avatar.svelte';
-	import { Check, Plus, Smartphone } from 'lucide-svelte';
+	import { Check, Plus, Smartphone, CalendarDays, ListChecks, SquareCheck } from 'lucide-svelte';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -17,7 +17,15 @@
 	});
 
 	let stopped = $state(false);
+	type Tab = 'calendar' | 'lists' | 'tasks';
+	let tab = $state<Tab>('calendar');
 
+	function done() {
+		mirror.stop();
+		stopped = true;
+	}
+
+	// --- Calendar: add event ---
 	function pad(n: number) {
 		return String(n).padStart(2, '0');
 	}
@@ -29,11 +37,11 @@
 	let allDay = $state(false);
 	let location = $state('');
 	let profileIds = $state<number[]>([]);
-	let saving = $state(false);
-	let justAdded = $state(false);
-	let error = $state('');
+	let savingEvent = $state(false);
+	let eventAdded = $state(false);
+	let eventError = $state('');
 
-	function toggle(id: number) {
+	function toggleProfile(id: number) {
 		profileIds = profileIds.includes(id) ? profileIds.filter((x) => x !== id) : [...profileIds, id];
 	}
 	function ts(d: string, t: string): number {
@@ -42,13 +50,13 @@
 		return Math.floor(new Date(y, m - 1, day, hh, mm).getTime() / 1000);
 	}
 
-	async function add() {
+	async function addEvent() {
 		if (!title.trim()) {
-			error = 'Add a title.';
+			eventError = 'Add a title.';
 			return;
 		}
-		saving = true;
-		error = '';
+		savingEvent = true;
+		eventError = '';
 		let startTs: number;
 		let endTs: number;
 		if (allDay) {
@@ -75,26 +83,21 @@
 				})
 			});
 			if (r.ok) {
-				justAdded = true;
+				eventAdded = true;
 				title = '';
 				location = '';
 				profileIds = [];
 				await invalidateAll(); // pull the fresh event into "What's coming up"
-				setTimeout(() => (justAdded = false), 2500);
+				setTimeout(() => (eventAdded = false), 2500);
 			} else {
-				error = (await r.json().catch(() => ({})))?.message ?? 'Could not add.';
+				eventError = (await r.json().catch(() => ({})))?.message ?? 'Could not add.';
 			}
 		} finally {
-			saving = false;
+			savingEvent = false;
 		}
 	}
 
-	function done() {
-		mirror.stop();
-		stopped = true;
-	}
-
-	// --- "What's coming up" grouping ---
+	// --- Calendar: "What's coming up" grouping ---
 	function dayLabel(ts: number): string {
 		const d = new Date(ts * 1000);
 		const today = new Date();
@@ -121,6 +124,81 @@
 		const list = ids.length === 0 ? data.profiles : data.profiles.filter((p) => ids.includes(p.id));
 		return list.slice(0, 4);
 	}
+
+	// --- Lists ---
+	let newItemText = $state<Record<number, string>>({});
+	let listBusy = $state<number | null>(null);
+
+	async function toggleItem(listId: number, itemId: number) {
+		try {
+			await fetch('/api/mirror/list-item-toggle', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ token: data.token, listId, itemId })
+			});
+		} finally {
+			await invalidateAll();
+		}
+	}
+	async function addItem(listId: number) {
+		const text = (newItemText[listId] ?? '').trim();
+		if (!text) return;
+		listBusy = listId;
+		try {
+			await fetch('/api/mirror/list-item', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ token: data.token, listId, text })
+			});
+			newItemText[listId] = '';
+			await invalidateAll();
+		} finally {
+			listBusy = null;
+		}
+	}
+
+	// --- Tasks ---
+	let newTaskText = $state('');
+	let taskProfileId = $state<number | ''>('');
+	let savingTask = $state(false);
+
+	async function toggleTask(id: number) {
+		try {
+			await fetch('/api/mirror/task-toggle', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ token: data.token, id })
+			});
+		} finally {
+			await invalidateAll();
+		}
+	}
+	async function addTask() {
+		const text = newTaskText.trim();
+		if (!text) return;
+		savingTask = true;
+		try {
+			await fetch('/api/mirror/task', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({
+					token: data.token,
+					text,
+					profileId: taskProfileId === '' ? undefined : Number(taskProfileId)
+				})
+			});
+			newTaskText = '';
+			taskProfileId = '';
+			await invalidateAll();
+		} finally {
+			savingTask = false;
+		}
+	}
+	const openTasks = $derived(data.tasks.filter((t) => !t.done));
+	const doneTasks = $derived(data.tasks.filter((t) => t.done));
+	function profileName(id?: number) {
+		return id ? (data.profiles.find((p) => p.id === id)?.name ?? '') : '';
+	}
 </script>
 
 <svelte:head>
@@ -138,124 +216,260 @@
 		<header class="head">
 			<div>
 				<p class="brand type-caption">{data.familyName || 'Family Calendar'}</p>
-				<h1 class="type-title">Add to the calendar</h1>
+				<h1 class="type-title">Family Calendar</h1>
 			</div>
 			<button type="button" class="done" onclick={done}>Done</button>
 		</header>
 		<p class="live type-caption"><Smartphone size={13} /> Live — shows up on the display right away</p>
 
-		<section class="card">
-			<label class="field">
-				<span class="type-label lbl">Title</span>
-				<input
-					class="in"
-					type="text"
-					placeholder="e.g. Dentist"
-					bind:value={title}
-					maxlength="120"
-				/>
-			</label>
+		<nav class="tabs">
+			<button type="button" class="tab" class:on={tab === 'calendar'} onclick={() => (tab = 'calendar')}>
+				<CalendarDays size={16} /> Calendar
+			</button>
+			<button type="button" class="tab" class:on={tab === 'lists'} onclick={() => (tab = 'lists')}>
+				<ListChecks size={16} /> Lists
+			</button>
+			<button type="button" class="tab" class:on={tab === 'tasks'} onclick={() => (tab = 'tasks')}>
+				<SquareCheck size={16} /> Tasks
+			</button>
+		</nav>
 
-			{#if data.profiles.length}
-				<div class="field">
-					<span class="type-label lbl">People</span>
-					<div class="chips">
-						{#each data.profiles as p (p.id)}
+		{#if tab === 'calendar'}
+			<section class="card">
+				<label class="field">
+					<span class="type-label lbl">Title</span>
+					<input
+						class="in"
+						type="text"
+						placeholder="e.g. Dentist"
+						bind:value={title}
+						maxlength="120"
+					/>
+				</label>
+
+				{#if data.profiles.length}
+					<div class="field">
+						<span class="type-label lbl">People</span>
+						<div class="chips">
+							{#each data.profiles as p (p.id)}
+								<button
+									type="button"
+									class="chip"
+									class:on={profileIds.includes(p.id)}
+									style:background={profileIds.includes(p.id) ? profileTint(p.color, 45) : ''}
+									style:box-shadow={profileIds.includes(p.id)
+										? `inset 0 0 0 2px ${profileColorVar(p.color)}`
+										: ''}
+									onclick={() => toggleProfile(p.id)}>{p.avatarEmoji} {p.name}</button
+								>
+							{/each}
+						</div>
+					</div>
+				{/if}
+
+				<div class="row">
+					<label class="field grow">
+						<span class="type-label lbl">Date</span>
+						<input class="in" type="date" bind:value={date} />
+					</label>
+					<label class="field allday">
+						<span class="type-label lbl">All day</span>
+						<button
+							type="button"
+							class="switch"
+							class:on={allDay}
+							role="switch"
+							aria-checked={allDay}
+							aria-label="All day"
+							onclick={() => (allDay = !allDay)}><span class="knob"></span></button
+						>
+					</label>
+				</div>
+
+				{#if !allDay}
+					<div class="row">
+						<label class="field grow"
+							><span class="type-label lbl">Start</span><input
+								class="in"
+								type="time"
+								bind:value={startTime}
+							/></label
+						>
+						<label class="field grow"
+							><span class="type-label lbl">End</span><input
+								class="in"
+								type="time"
+								bind:value={endTime}
+							/></label
+						>
+					</div>
+				{/if}
+
+				<label class="field">
+					<span class="type-label lbl">Location (optional)</span>
+					<input class="in" type="text" bind:value={location} maxlength="120" />
+				</label>
+
+				{#if eventError}<p class="type-caption err">{eventError}</p>{/if}
+				<button type="button" class="btn primary" disabled={savingEvent} onclick={addEvent}>
+					{#if eventAdded}<Check size={18} /> Added{:else}<Plus size={18} />{savingEvent
+							? 'Adding…'
+							: 'Add event'}{/if}
+				</button>
+			</section>
+
+			<h2 class="type-label section-h">What's coming up</h2>
+			{#if groups.length === 0}
+				<p class="type-body sub empty">Nothing in the next two weeks.</p>
+			{:else}
+				<div class="agenda">
+					{#each groups as g (g.label)}
+						<div class="group">
+							<p class="glabel type-caption">{g.label}</p>
+							{#each g.events as e (e.id)}
+								<div class="erow">
+									<div class="etime type-caption">
+										{e.allDay
+											? 'All day'
+											: formatRange(new Date(e.startTs * 1000), new Date(e.endTs * 1000))}
+									</div>
+									<div class="ebody">
+										<p class="etitle type-body">{e.title}</p>
+										{#if e.location}<p class="eloc type-caption">{e.location}</p>{/if}
+									</div>
+									{#if peopleFor(e.profileIds).length}
+										<div class="eavatars">
+											{#each peopleFor(e.profileIds) as p (p.id)}
+												<Avatar profile={p} size={22} ring={false} />
+											{/each}
+										</div>
+									{/if}
+								</div>
+							{/each}
+						</div>
+					{/each}
+				</div>
+			{/if}
+		{/if}
+
+		{#if tab === 'lists'}
+			{#if data.lists.length === 0}
+				<p class="type-body sub empty">No lists yet — create one on the display.</p>
+			{:else}
+				{#each data.lists as list (list.id)}
+					<section class="card">
+						<h2 class="type-label listname"><span>{list.icon}</span> {list.name}</h2>
+						{#if list.items.length === 0}
+							<p class="type-caption sub">Nothing on this list yet.</p>
+						{:else}
+							<div class="items">
+								{#each list.items as item (item.id)}
+									<button
+										type="button"
+										class="itemrow"
+										class:done={item.completed}
+										onclick={() => toggleItem(list.id, item.id)}
+									>
+										<span class="check" class:on={item.completed}
+											>{#if item.completed}<Check size={14} strokeWidth={3} />{/if}</span
+										>
+										<span class="itext type-body">{item.text}</span>
+									</button>
+								{/each}
+							</div>
+						{/if}
+						<div class="addrow">
+							<input
+								class="in"
+								type="text"
+								placeholder="Add an item"
+								bind:value={newItemText[list.id]}
+								onkeydown={(e) => e.key === 'Enter' && addItem(list.id)}
+							/>
+							<button
+								type="button"
+								class="addbtn"
+								disabled={listBusy === list.id}
+								onclick={() => addItem(list.id)}><Plus size={18} /></button
+							>
+						</div>
+					</section>
+				{/each}
+			{/if}
+		{/if}
+
+		{#if tab === 'tasks'}
+			<section class="card">
+				<label class="field">
+					<span class="type-label lbl">New task</span>
+					<input
+						class="in"
+						type="text"
+						placeholder="e.g. Pack swim bag"
+						bind:value={newTaskText}
+						maxlength="200"
+						onkeydown={(e) => e.key === 'Enter' && addTask()}
+					/>
+				</label>
+				{#if data.profiles.length}
+					<div class="field">
+						<span class="type-label lbl">For (optional)</span>
+						<div class="chips">
 							<button
 								type="button"
 								class="chip"
-								class:on={profileIds.includes(p.id)}
-								style:background={profileIds.includes(p.id) ? profileTint(p.color, 45) : ''}
-								style:box-shadow={profileIds.includes(p.id)
-									? `inset 0 0 0 2px ${profileColorVar(p.color)}`
-									: ''}
-								onclick={() => toggle(p.id)}>{p.avatarEmoji} {p.name}</button
+								class:on={taskProfileId === ''}
+								onclick={() => (taskProfileId = '')}>Anyone</button
 							>
-						{/each}
+							{#each data.profiles as p (p.id)}
+								<button
+									type="button"
+									class="chip"
+									class:on={taskProfileId === p.id}
+									style:background={taskProfileId === p.id ? profileTint(p.color, 45) : ''}
+									style:box-shadow={taskProfileId === p.id
+										? `inset 0 0 0 2px ${profileColorVar(p.color)}`
+										: ''}
+									onclick={() => (taskProfileId = p.id)}>{p.avatarEmoji} {p.name}</button
+								>
+							{/each}
+						</div>
 					</div>
-				</div>
+				{/if}
+				<button type="button" class="btn primary" disabled={savingTask} onclick={addTask}>
+					<Plus size={18} />{savingTask ? 'Adding…' : 'Add task'}
+				</button>
+			</section>
+
+			{#if openTasks.length === 0 && doneTasks.length === 0}
+				<p class="type-body sub empty">No tasks yet.</p>
+			{:else}
+				<section class="card">
+					{#if openTasks.length}
+						<div class="items">
+							{#each openTasks as t (t.id)}
+								<button type="button" class="itemrow" onclick={() => toggleTask(t.id)}>
+									<span class="check"></span>
+									<span class="itext type-body">{t.text}</span>
+									{#if t.profileId}<span class="tfor type-caption">{profileName(t.profileId)}</span
+										>{/if}
+								</button>
+							{/each}
+						</div>
+					{/if}
+					{#if doneTasks.length}
+						<p class="type-caption glabel donelabel">Done</p>
+						<div class="items">
+							{#each doneTasks as t (t.id)}
+								<button type="button" class="itemrow done" onclick={() => toggleTask(t.id)}>
+									<span class="check on"><Check size={14} strokeWidth={3} /></span>
+									<span class="itext type-body">{t.text}</span>
+								</button>
+							{/each}
+						</div>
+					{/if}
+				</section>
 			{/if}
-
-			<div class="row">
-				<label class="field grow">
-					<span class="type-label lbl">Date</span>
-					<input class="in" type="date" bind:value={date} />
-				</label>
-				<label class="field allday">
-					<span class="type-label lbl">All day</span>
-					<button
-						type="button"
-						class="switch"
-						class:on={allDay}
-						role="switch"
-						aria-checked={allDay}
-						aria-label="All day"
-						onclick={() => (allDay = !allDay)}><span class="knob"></span></button
-					>
-				</label>
-			</div>
-
-			{#if !allDay}
-				<div class="row">
-					<label class="field grow"
-						><span class="type-label lbl">Start</span><input
-							class="in"
-							type="time"
-							bind:value={startTime}
-						/></label
-					>
-					<label class="field grow"
-						><span class="type-label lbl">End</span><input
-							class="in"
-							type="time"
-							bind:value={endTime}
-						/></label
-					>
-				</div>
-			{/if}
-
-			<label class="field">
-				<span class="type-label lbl">Location (optional)</span>
-				<input class="in" type="text" bind:value={location} maxlength="120" />
-			</label>
-
-			{#if error}<p class="type-caption err">{error}</p>{/if}
-			<button type="button" class="btn primary" disabled={saving} onclick={add}>
-				{#if justAdded}<Check size={18} /> Added{:else}<Plus size={18} />{saving
-						? 'Adding…'
-						: 'Add event'}{/if}
-			</button>
-		</section>
-
-		<h2 class="type-label upcoming-h">What's coming up</h2>
-		{#if groups.length === 0}
-			<p class="type-body sub empty">Nothing in the next two weeks.</p>
-		{:else}
-			<div class="agenda">
-				{#each groups as g (g.label)}
-					<div class="group">
-						<p class="glabel type-caption">{g.label}</p>
-						{#each g.events as e (e.id)}
-							<div class="erow">
-								<div class="etime type-caption">
-									{e.allDay ? 'All day' : formatRange(new Date(e.startTs * 1000), new Date(e.endTs * 1000))}
-								</div>
-								<div class="ebody">
-									<p class="etitle type-body">{e.title}</p>
-									{#if e.location}<p class="eloc type-caption">{e.location}</p>{/if}
-								</div>
-								{#if peopleFor(e.profileIds).length}
-									<div class="eavatars">
-										{#each peopleFor(e.profileIds) as p (p.id)}
-											<Avatar profile={p} size={22} ring={false} />
-										{/each}
-									</div>
-								{/if}
-							</div>
-						{/each}
-					</div>
-				{/each}
-			</div>
 		{/if}
 	</div>
 {/if}
@@ -297,6 +511,30 @@
 		gap: 6px;
 		color: var(--color-accent-success);
 		margin-top: -8px;
+	}
+	.tabs {
+		display: flex;
+		gap: var(--space-2);
+		background: var(--color-surface-elevated);
+		padding: 4px;
+		border-radius: var(--radius-pill);
+	}
+	.tab {
+		flex: 1;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 6px;
+		padding: 9px 10px;
+		border-radius: var(--radius-pill);
+		color: var(--color-text-secondary);
+		font-weight: var(--weight-semibold);
+		font-size: var(--text-sm);
+	}
+	.tab.on {
+		background: var(--color-surface);
+		color: var(--color-text-primary);
+		box-shadow: var(--shadow-card);
 	}
 	.card {
 		display: flex;
@@ -381,7 +619,7 @@
 	.err {
 		color: var(--color-accent-warning);
 	}
-	.upcoming-h {
+	.section-h {
 		color: var(--color-text-secondary);
 	}
 	.empty {
@@ -439,6 +677,74 @@
 	}
 	.eavatars :global(.avatar:not(:first-child)) {
 		margin-left: -8px;
+	}
+	.listname {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		color: var(--color-text-primary);
+	}
+	.items {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-2);
+	}
+	.itemrow {
+		display: flex;
+		align-items: center;
+		gap: var(--space-3);
+		padding: 10px;
+		border-radius: var(--radius-md);
+		background: var(--color-surface-elevated);
+		text-align: left;
+	}
+	.check {
+		flex: none;
+		width: 22px;
+		height: 22px;
+		border-radius: var(--radius-sm);
+		border: 2px solid var(--color-border-subtle);
+		display: grid;
+		place-items: center;
+		color: var(--color-surface);
+	}
+	.check.on {
+		background: var(--color-accent-success);
+		border-color: var(--color-accent-success);
+	}
+	.itext {
+		flex: 1;
+		color: var(--color-text-primary);
+	}
+	.itemrow.done .itext {
+		color: var(--color-text-tertiary);
+		text-decoration: line-through;
+	}
+	.tfor {
+		flex: none;
+		color: var(--color-text-tertiary);
+	}
+	.donelabel {
+		margin-top: var(--space-2);
+	}
+	.addrow {
+		display: flex;
+		gap: var(--space-2);
+	}
+	.addrow .in {
+		flex: 1;
+	}
+	.addbtn {
+		display: grid;
+		place-items: center;
+		width: 48px;
+		border-radius: var(--radius-md);
+		background: var(--color-text-primary);
+		color: var(--color-surface);
+		flex: none;
+	}
+	.addbtn:disabled {
+		opacity: 0.6;
 	}
 	.closed {
 		display: flex;
