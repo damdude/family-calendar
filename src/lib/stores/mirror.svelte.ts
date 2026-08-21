@@ -26,6 +26,13 @@ class MirrorControl {
 	/** Display only: a phone is actively paired right now (heartbeating), not
 	 *  just that our own SSE stream to the server happens to be open. */
 	controllerConnected = $state(false);
+	/** The pairing QR, fetched once and shared by every display-side consumer
+	 *  (the small corner panel, the TV idle screen) — fetching it per-component
+	 *  would mint a fresh token each time either one mounts, orphaning any
+	 *  phone that scanned the previous one. */
+	qrSvg = $state('');
+	qrUrl = $state('');
+	private qrLoading = false;
 
 	constructor() {
 		if (!browser) return;
@@ -45,6 +52,27 @@ class MirrorControl {
 		this.role = 'display';
 		this.token = token;
 		if (browser) localStorage.setItem(DISPLAY_KEY, token);
+	}
+
+	/** Fetch the pairing QR once per display session (idempotent — safe to
+	 *  call from every place that wants to show it). Re-issuing would orphan
+	 *  a phone that already scanned the current one, so this never re-fetches
+	 *  once a QR exists. */
+	async ensureQr() {
+		if (this.qrSvg || this.qrLoading) return;
+		this.qrLoading = true;
+		try {
+			const r = await fetch('/api/mirror/start', { method: 'POST' });
+			if (!r.ok) return;
+			const d = await r.json();
+			this.qrSvg = d.qrSvg;
+			this.qrUrl = d.url;
+			this.becomeDisplay(d.token);
+		} catch {
+			/* offline — no QR to show; next call retries */
+		} finally {
+			this.qrLoading = false;
+		}
 	}
 
 	/** This device (a scanned phone) becomes the controller. */

@@ -14,7 +14,7 @@ export const POST: RequestHandler = async ({ url }) => {
 		type: 'svg',
 		margin: 1,
 		width: 520,
-		color: { dark: '#111114', light: '#ffffff' }
+		color: { dark: '#000000', light: '#ffffff' }
 	});
 	return json({ token, url: remoteUrl, qrSvg });
 };

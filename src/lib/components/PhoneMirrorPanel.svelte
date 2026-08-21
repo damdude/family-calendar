@@ -17,8 +17,6 @@
 	import { mirror } from '$lib/stores/mirror.svelte';
 	import { QrCode, X, Smartphone } from 'lucide-svelte';
 
-	let qrSvg = $state('');
-	let url = $state('');
 	let expanded = $state(false);
 
 	// Only the display side shows a QR; a phone acting as controller must not.
@@ -33,25 +31,8 @@
 		);
 	});
 
-	async function load() {
-		try {
-			const r = await fetch('/api/mirror/start', { method: 'POST' });
-			if (!r.ok) return;
-			const d = await r.json();
-			qrSvg = d.qrSvg;
-			url = d.url;
-			mirror.becomeDisplay(d.token);
-		} catch {
-			/* offline — no QR to show */
-		}
-	}
-
 	$effect(() => {
-		if (!show) return;
-		// Fetch once per display session. The token stays valid while this screen
-		// holds its event-stream subscription, so it never needs re-issuing —
-		// re-issuing would in fact orphan a phone that's already paired.
-		if (!qrSvg) load();
+		if (show) mirror.ensureQr();
 	});
 </script>
 
@@ -63,11 +44,11 @@
 		     useful). The TopBar's "Phone paired" badge covers the status while
 		     paired; this panel just goes quiet until that phone disconnects,
 		     when the QR reappears automatically. -->
-		{#if !mirror.controllerConnected && qrSvg}
+		{#if !mirror.controllerConnected && mirror.qrSvg}
 			<aside class="tvqr" aria-label="Control from your phone">
 				<div class="qr">
 					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-					{@html qrSvg}
+					{@html mirror.qrSvg}
 				</div>
 				<div class="cap">
 					<span class="type-label"><Smartphone size={14} /> Control from your phone</span>
@@ -103,15 +84,15 @@
 						><X size={20} /></button
 					>
 				</header>
-				{#if qrSvg}
+				{#if mirror.qrSvg}
 					<div class="qr big">
 						<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-						{@html qrSvg}
+						{@html mirror.qrSvg}
 					</div>
 					<p class="type-body sub">
 						Scan with your phone camera. Whatever you open there, this screen follows.
 					</p>
-					<code class="url">{url}</code>
+					<code class="url">{mirror.qrUrl}</code>
 				{:else}
 					<p class="type-body sub">Preparing…</p>
 				{/if}

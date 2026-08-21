@@ -1,9 +1,11 @@
 <script lang="ts">
 	import { family } from '$lib/stores/family.svelte';
 	import { screensaver } from '$lib/stores/screensaver.svelte';
+	import { mirror } from '$lib/stores/mirror.svelte';
 	import Sidebar from '$lib/components/Sidebar.svelte';
 	import TopBar from '$lib/components/TopBar.svelte';
 	import Screensaver from '$lib/components/Screensaver.svelte';
+	import TvIdleScreen from '$lib/components/TvIdleScreen.svelte';
 	import PhoneMirrorPanel from '$lib/components/PhoneMirrorPanel.svelte';
 	import { dragScroll } from '$lib/actions/dragScroll';
 	import { isWithinWindow } from '$lib/time';
@@ -78,15 +80,19 @@
 	// which otherwise reads as "the screensaver came on and touch does
 	// nothing," since every recomputation immediately re-triggers it.
 	let snoozedUntil = $state(0);
-	// "Sleep now" (forceSleep) always shows; scheduled/idle only when enabled.
-	// TV mode has no touch, so nothing could ever dismiss it once shown — and it
-	// would hide the persistent pairing QR below, the only way onto the device
-	// at all. Never let it activate there, regardless of trigger.
-	const screensaverActive = $derived(
+	// Same idle/sleep-window/"Sleep now" condition drives both modes' idle
+	// state — only the content shown for it differs below.
+	const idleOrSleepActive = $derived(
 		tick < snoozedUntil
 			? false
-			: !family.isTv && (screensaver.forceSleep || (sv.enabled && (sleepActive || idleActive)))
+			: screensaver.forceSleep || (sv.enabled && (sleepActive || idleActive))
 	);
+	// TV: the QR + clock idle screen (TvIdleScreen) — but only while nobody's
+	// actively driving it from a phone, since the live dashboard following
+	// their navigation is what's useful to show then instead.
+	const tvIdleActive = $derived(family.isTv && idleOrSleepActive && !mirror.controllerConnected);
+	// Touch: the original dismissible clock/photos screensaver, unchanged.
+	const touchScreensaverActive = $derived(!family.isTv && idleOrSleepActive);
 </script>
 
 <div
@@ -106,11 +112,15 @@
 </div>
 
 <!-- Full QR on a TV (the only way in), a small icon on a touchscreen. -->
-{#if !screensaverActive}
+{#if !tvIdleActive && !touchScreensaverActive}
 	<PhoneMirrorPanel />
 {/if}
 
-{#if screensaverActive}
+{#if tvIdleActive}
+	<TvIdleScreen />
+{/if}
+
+{#if touchScreensaverActive}
 	<Screensaver
 		mode={sv.mode}
 		ondismiss={() => {

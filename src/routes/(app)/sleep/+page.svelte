@@ -115,13 +115,14 @@
 					}}><span class="knob"></span></button
 				>
 			</div>
-			<div class="row">
+			<div class="row" class:disabledrow={family.isTv}>
 				<span class="type-label">Style</span>
 				<div class="segmented">
 					<button
 						type="button"
 						class="seg"
 						class:on={family.config.screensaver.mode === 'clock'}
+						disabled={family.isTv}
 						onclick={() => {
 							family.config.screensaver.mode = 'clock';
 							persist();
@@ -131,6 +132,7 @@
 						type="button"
 						class="seg"
 						class:on={family.config.screensaver.mode === 'photos'}
+						disabled={family.isTv}
 						onclick={() => {
 							family.config.screensaver.mode = 'photos';
 							persist();
@@ -138,6 +140,12 @@
 					>
 				</div>
 			</div>
+			{#if family.isTv}
+				<p class="type-caption sub tvnote">
+					TV mode always shows a QR to control it from a phone, with the date and time — instead of
+					the styles above.
+				</p>
+			{/if}
 			<div class="row">
 				<span class="type-label">Show after idle</span>
 				<div class="segmented">
@@ -282,5 +290,11 @@
 	}
 	.dash {
 		color: var(--color-text-tertiary);
+	}
+	.disabledrow {
+		opacity: 0.45;
+	}
+	.tvnote {
+		margin-top: calc(-1 * var(--space-2));
 	}
 </style>
