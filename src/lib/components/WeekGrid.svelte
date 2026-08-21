@@ -17,10 +17,8 @@
 		onEventClick?: (e: FamilyEvent) => void;
 	} = $props();
 
-	const startHour = $derived(family.config.view.dayStartHour);
-	const endHour = $derived(family.config.view.dayEndHour);
-	const span = $derived(endHour - startHour); // total hours shown
-	const slots = $derived(timeSlots(startHour, endHour, family.config.view.clock24h));
+	const configStartHour = $derived(family.config.view.dayStartHour);
+	const configEndHour = $derived(family.config.view.dayEndHour);
 	const columns = $derived(weekColumns(weekStart, days));
 
 	function dayIndex(d: Date): number {
@@ -31,6 +29,52 @@
 
 	const allDayEvents = $derived(events.filter((e) => e.allDay));
 	const timedEvents = $derived(events.filter((e) => !e.allDay));
+
+	// Ticks once a minute — just enough to keep the rolling window and the
+	// current-time line honest without a real-time-per-second redraw.
+	let now = $state(new Date());
+	$effect(() => {
+		const id = setInterval(() => (now = new Date()), 60_000);
+		return () => clearInterval(id);
+	});
+
+	// Rolling window: only meaningful when today is actually one of the
+	// visible columns — browsing to a different week falls back to the full
+	// configured day range, since "centered on now" has no anchor there.
+	const todayColIndex = $derived(columns.findIndex((c) => c.isToday));
+	const showingToday = $derived(todayColIndex >= 0);
+
+	const ROLL_BEFORE_H = 3;
+	const ROLL_AFTER_H = 4;
+	// How much further past the base window to look for a next event worth
+	// pulling into view — past this, a gap just means "nothing to compress
+	// toward," not "keep expanding."
+	const ROLL_EXTEND_MAX_H = 3;
+
+	const startHour = $derived.by(() => {
+		if (!showingToday) return configStartHour;
+		return Math.max(configStartHour, Math.floor(fractionalHour(now) - ROLL_BEFORE_H));
+	});
+	const endHour = $derived.by(() => {
+		if (!showingToday) return configEndHour;
+		const base = Math.min(configEndHour, Math.ceil(fractionalHour(now) + ROLL_AFTER_H));
+		// A gap right after the base window, with something worth showing just
+		// past it, gets pulled into view instead of leaving dead space — a
+		// genuinely distant next event just doesn't make the cut.
+		const todayEvents = timedEvents.filter((e) => dayIndex(e.start) === todayColIndex);
+		const next = todayEvents
+			.map((e) => fractionalHour(e.start))
+			.filter((h) => h > base && h <= base + ROLL_EXTEND_MAX_H)
+			.sort((a, b) => a - b)[0];
+		return Math.min(configEndHour, next !== undefined ? Math.ceil(next + 0.5) : base);
+	});
+	const span = $derived(endHour - startHour); // total hours shown
+	const slots = $derived(timeSlots(startHour, endHour, family.config.view.clock24h));
+	const nowLinePct = $derived(
+		showingToday && fractionalHour(now) >= startHour && fractionalHour(now) <= endHour
+			? ((fractionalHour(now) - startHour) / span) * 100
+			: null
+	);
 
 	function tint(color: ProfileColor, pct = 74) {
 		return `color-mix(in srgb, ${profileColorVar(color)} ${pct}%, white)`;
@@ -193,6 +237,11 @@
 							<EventCard event={p.event} />
 						</div>
 					{/each}
+					{#if col.isToday && nowLinePct !== null}
+						<div class="nowline" style:top="{nowLinePct}%">
+							<span class="nowdot"></span>
+						</div>
+					{/if}
 				</div>
 			{/each}
 		</div>
@@ -332,5 +381,24 @@
 	}
 	.event-pos.clickable {
 		cursor: pointer;
+	}
+	.nowline {
+		position: absolute;
+		left: 0;
+		right: 0;
+		height: 2px;
+		background: var(--color-accent-warning);
+		z-index: 5;
+		pointer-events: none;
+	}
+	.nowdot {
+		position: absolute;
+		left: -4px;
+		top: 50%;
+		transform: translateY(-50%);
+		width: 8px;
+		height: 8px;
+		border-radius: var(--radius-pill);
+		background: var(--color-accent-warning);
 	}
 </style>
