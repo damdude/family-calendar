@@ -28,16 +28,30 @@
 	});
 
 	const timeLabel = $derived(formatRange(event.start, event.end, family.config.view.clock24h));
+	// Time + location share one line — a separate line each ate too much
+	// vertical space on an ordinary ~1hr grid block, so location was silently
+	// dropping off events it should absolutely still show on.
+	const metaLine = $derived.by(() => {
+		const parts: string[] = [];
+		if (!event.allDay) parts.push(timeLabel);
+		if (event.location) parts.push(event.location);
+		return parts.join(' · ');
+	});
+	// The grid block's rendered height tracks duration, and only the
+	// tightest slivers (well under an hour) genuinely have no room for a
+	// second line — a CSS container query here turned out unreliable inside
+	// this absolute-positioned/percentage-height layout (misfired even when
+	// the container was well above the threshold), so this checks the
+	// duration directly instead of trying to read back the rendered size.
+	const durationMinutes = $derived((event.end.getTime() - event.start.getTime()) / 60_000);
+	const showMeta = $derived(variant === 'list' || event.allDay || durationMinutes >= 45);
 </script>
 
 <div class="card {variant}" style:background>
 	<div class="body">
-		<p class="title type-label">{event.title}</p>
-		{#if !event.allDay}
-			<p class="time type-caption">{timeLabel}</p>
-		{/if}
-		{#if event.location}
-			<p class="loc type-caption">{event.location}</p>
+		<p class="title type-label" class:clamp1={variant === 'grid'}>{event.title}</p>
+		{#if metaLine && showMeta}
+			<p class="meta type-caption">{metaLine}</p>
 		{/if}
 	</div>
 	{#if people.length}
@@ -60,8 +74,6 @@
 		display: flex;
 		flex-direction: column;
 		justify-content: flex-start;
-		container-type: size;
-		container-name: eventcard;
 	}
 	.card.list {
 		height: auto;
@@ -77,21 +89,20 @@
 		line-clamp: 2;
 		-webkit-box-orient: vertical;
 	}
-	.time,
-	.loc {
+	/* Grid columns are narrow enough that a 2-line title regularly ate the
+	   whole card, leaving the meta line (time + location) nowhere to go
+	   regardless of how much time the event actually had. One line here
+	   guarantees the meta line always gets its row. */
+	.title.clamp1 {
+		-webkit-line-clamp: 1;
+		line-clamp: 1;
+	}
+	.meta {
 		color: color-mix(in srgb, var(--color-text-primary) 62%, transparent);
 		margin-top: 2px;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
-	}
-	/* A short (~30-45min) grid block has room for the title + time but not
-	   also the location without clipping mid-word — drop it rather than show
-	   a garbled fragment. List view (fixed min-height) always has room. */
-	@container eventcard (max-height: 44px) {
-		.loc {
-			display: none;
-		}
 	}
 	.avatars {
 		position: absolute;
