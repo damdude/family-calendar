@@ -7,7 +7,7 @@ import {
 	listEvents,
 	refreshAccessToken
 } from './google';
-import { fetchIcsEvents } from './ical';
+import { fetchIcsEvents, type IcsEvent } from './ical';
 import {
 	clearCalendarEvents,
 	getCalendars,
@@ -15,8 +15,10 @@ import {
 	saveOAuthToken,
 	setCalendarSynced,
 	upsertCalendar,
-	upsertEvent
+	upsertEvent,
+	type CalendarRow
 } from './db/repo';
+import { loadConfig } from './config';
 
 /** The window we sync events within: 2 weeks back, 6 weeks forward. */
 function syncWindow(): { min: Date; max: Date } {
@@ -91,34 +93,102 @@ export async function syncGoogle(): Promise<number> {
  * Sync all ICS/webcal subscriptions. Each feed is fully re-materialized within
  * the window (removed/changed occurrences drop out). Returns events synced.
  */
+/** One calendar's fetched-but-not-yet-stored event, kept with its source
+ *  calendar for the cross-calendar dedup pass below. */
+interface FetchedEvent {
+	cal: CalendarRow;
+	e: IcsEvent;
+}
+
+/** Same title + same start + same end, synced from two different calendars,
+ *  is the same real-world event shared via a calendar invite (e.g. a parent
+ *  invited a child) — not two coincidentally identical events. Case/
+ *  whitespace-insensitive so "Piano Lesson " vs "piano lesson" still merge. */
+function dedupKey(e: IcsEvent): string {
+	return `${e.title.trim().toLowerCase()}|${e.startTs}|${e.endTs}`;
+}
+
+/** Pick which family member a group of duplicate copies is actually for.
+ *  A copy that landed on exactly one specific person's own calendar is a
+ *  strong signal it's theirs. When it landed on more than one person's
+ *  calendar (or none), fall back to spotting a family member's name in the
+ *  title — otherwise leave it attributed to whichever calendar is chosen for
+ *  storage (a shared calendar's profileId, or none). */
+function resolveProfileId(
+	group: FetchedEvent[],
+	profiles: { id: number; name: string }[]
+): number | undefined {
+	const distinct = [...new Set(group.map((g) => g.cal.profileId).filter((id): id is number => !!id))];
+	if (distinct.length === 1) return distinct[0];
+	if (distinct.length > 1) {
+		const title = group[0].e.title.toLowerCase();
+		const named = profiles.find((p) => p.name && title.includes(p.name.toLowerCase()));
+		if (named) return named.id;
+		return distinct[0];
+	}
+	return group[0].cal.profileId ?? undefined;
+}
+
 export async function syncIcal(): Promise<number> {
 	const cals = getCalendars('ical');
 	if (cals.length === 0) return 0;
 	const { min, max } = syncWindow();
 
-	let count = 0;
+	// Fetch every calendar before writing anything — the same real-world
+	// event can be synced separately onto two family members' calendars
+	// (e.g. a parent invited a child to it), and catching that needs to see
+	// all calendars' events together, not one feed at a time.
+	const fetched: FetchedEvent[] = [];
+	const okCals: CalendarRow[] = [];
 	for (const cal of cals) {
 		try {
 			const events = await fetchIcsEvents(cal.externalId, min, max);
-			clearCalendarEvents(cal.id);
-			for (const e of events) {
-				upsertEvent({
-					calendarId: cal.id,
-					externalId: e.externalId,
-					startTs: e.startTs,
-					endTs: e.endTs,
-					allDay: e.allDay,
-					title: e.title,
-					description: e.description,
-					location: e.location
-				});
-				count += 1;
-			}
-			setCalendarSynced(cal.id);
+			for (const e of events) fetched.push({ cal, e });
+			okCals.push(cal);
 		} catch {
-			// Leave the last good events in place if a feed is temporarily down.
+			// Leave that calendar's last good events in place if its feed is
+			// temporarily down; still processes the rest.
 		}
 	}
+	if (okCals.length === 0) return 0;
+
+	const profiles = (await loadConfig()).profiles.map((p) => ({ id: p.id, name: p.name }));
+	const groups = new Map<string, FetchedEvent[]>();
+	for (const f of fetched) {
+		const key = dedupKey(f.e);
+		const list = groups.get(key);
+		if (list) list.push(f);
+		else groups.set(key, [f]);
+	}
+
+	for (const cal of okCals) clearCalendarEvents(cal.id);
+
+	let count = 0;
+	for (const group of groups.values()) {
+		// Only collapse a "duplicate" when it actually spans more than one
+		// calendar — that's the invite-copy scenario. Two same-titled,
+		// same-timed entries within a single feed are left alone rather than
+		// risking silently dropping a genuinely separate event.
+		const spansCalendars = new Set(group.map((g) => g.cal.id)).size > 1;
+		const toStore = spansCalendars ? [group[0]] : group;
+		const profileId = spansCalendars ? resolveProfileId(group, profiles) : undefined;
+
+		for (const { cal, e } of toStore) {
+			upsertEvent({
+				calendarId: cal.id,
+				externalId: e.externalId,
+				startTs: e.startTs,
+				endTs: e.endTs,
+				allDay: e.allDay,
+				title: e.title,
+				description: e.description,
+				location: e.location,
+				profileId: profileId ?? cal.profileId ?? undefined
+			});
+			count += 1;
+		}
+	}
+	for (const cal of okCals) setCalendarSynced(cal.id);
 	return count;
 }
 

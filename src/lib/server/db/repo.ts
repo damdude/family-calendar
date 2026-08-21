@@ -152,17 +152,21 @@ export interface SyncedEvent {
 	title?: string;
 	description?: string;
 	location?: string;
+	/** Overrides the owning calendar's profile_id — set when this event was
+	 *  deduped from a copy synced onto more than one family member's
+	 *  calendar, tagging it with whichever one it's actually for. */
+	profileId?: number;
 }
 
 export function upsertEvent(e: SyncedEvent): void {
 	getDb()
 		.prepare(
 			`INSERT INTO events
-				(calendar_id, external_id, start_ts, end_ts, all_day, title, description_encrypted, location, updated_at)
-			 VALUES (@calendarId, @externalId, @startTs, @endTs, @allDay, @title, @desc, @location, @now)
+				(calendar_id, external_id, start_ts, end_ts, all_day, title, description_encrypted, location, profile_id, updated_at)
+			 VALUES (@calendarId, @externalId, @startTs, @endTs, @allDay, @title, @desc, @location, @profileId, @now)
 			 ON CONFLICT(calendar_id, external_id) DO UPDATE SET
 				start_ts=@startTs, end_ts=@endTs, all_day=@allDay, title=@title,
-				description_encrypted=@desc, location=@location, updated_at=@now`
+				description_encrypted=@desc, location=@location, profile_id=@profileId, updated_at=@now`
 		)
 		.run({
 			calendarId: e.calendarId,
@@ -173,6 +177,7 @@ export function upsertEvent(e: SyncedEvent): void {
 			title: e.title ?? null,
 			desc: e.description ? encryptString(e.description) : null,
 			location: e.location ?? null,
+			profileId: e.profileId ?? null,
 			now: Math.floor(Date.now() / 1000)
 		});
 }
@@ -193,7 +198,7 @@ export interface EventRow {
 export function getEventsInRange(from: number, to: number): EventRow[] {
 	const rows = getDb()
 		.prepare(
-			`SELECT e.*, c.profile_id AS profile_id
+			`SELECT e.*, COALESCE(e.profile_id, c.profile_id) AS profile_id
 			 FROM events e JOIN calendars c ON c.id = e.calendar_id
 			 WHERE c.enabled = 1 AND e.start_ts < ? AND e.end_ts > ?
 			 ORDER BY e.start_ts`
@@ -239,7 +244,7 @@ export function getSyncedEventsLean(
 	if (!dbExists()) return [];
 	const rows = getDb()
 		.prepare(
-			`SELECT e.id, c.profile_id AS profile_id, e.start_ts, e.end_ts, e.all_day, e.title, e.location
+			`SELECT e.id, COALESCE(e.profile_id, c.profile_id) AS profile_id, e.start_ts, e.end_ts, e.all_day, e.title, e.location
 			 FROM events e JOIN calendars c ON c.id = e.calendar_id
 			 WHERE c.enabled = 1 AND e.start_ts < ? AND e.end_ts > ?
 			 ORDER BY e.start_ts`

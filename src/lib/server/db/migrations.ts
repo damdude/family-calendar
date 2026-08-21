@@ -58,5 +58,18 @@ export const migrations: Migration[] = [
 
 			CREATE INDEX idx_events_time ON events (start_ts, end_ts);
 		`
+	},
+	{
+		version: 2,
+		name: 'event_profile_override',
+		sql: `
+			-- Overrides the owning calendar's profile_id for one event. Set when
+			-- the same real-world event is synced onto more than one family
+			-- member's calendar (e.g. a parent invited a child) — the sync step
+			-- keeps a single row and tags it with whichever family member it's
+			-- actually for, instead of leaving it attributed to whoever's
+			-- calendar happened to be picked for storage.
+			ALTER TABLE events ADD COLUMN profile_id INTEGER;
+		`
 	}
 ];
