@@ -50,6 +50,28 @@ export function hourLabel(hour: number, clock24h = false): string {
 	return `${h} ${ap}`;
 }
 
+export interface TimeSlot {
+	hour: number; // fractional (e.g. 9.5 for 9:30)
+	major: boolean; // on-the-hour vs the half-hour tick between
+	label: string;
+}
+
+/** Weekly-grid rail slots every 30 minutes between startHour and endHour
+ *  (inclusive). Half-hour ticks get a lighter sub-label, matching how
+ *  dedicated calendar-hub displays mark time without doubling the label width. */
+export function timeSlots(startHour: number, endHour: number, clock24h = false): TimeSlot[] {
+	const slots: TimeSlot[] = [];
+	for (let h = startHour; h <= endHour; h += 0.5) {
+		const major = Number.isInteger(h);
+		slots.push({
+			hour: h,
+			major,
+			label: major ? hourLabel(h, clock24h) : clock24h ? `${Math.floor(h)}:30` : ':30'
+		});
+	}
+	return slots;
+}
+
 export interface DayColumn {
 	date: Date;
 	label: string; // "Tue"

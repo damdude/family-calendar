@@ -168,8 +168,8 @@ export const defaultConfig: AppConfig = {
 		sitesOfInterest: true
 	},
 	view: {
-		dayStartHour: 9,
-		dayEndHour: 17,
+		dayStartHour: 6,
+		dayEndHour: 21,
 		weekStartsOn: 1,
 		clock24h: false,
 		orientation: 'auto'

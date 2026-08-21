@@ -2,7 +2,7 @@
 	import type { FamilyEvent, ProfileColor } from '$lib/types';
 	import { family } from '$lib/stores/family.svelte';
 	import { profileColorVar } from '$lib/design/colors';
-	import { fractionalHour, hourLabel, weekColumns } from '$lib/time';
+	import { fractionalHour, timeSlots, weekColumns } from '$lib/time';
 	import EventCard from './EventCard.svelte';
 
 	let {
@@ -20,7 +20,7 @@
 	const startHour = $derived(family.config.view.dayStartHour);
 	const endHour = $derived(family.config.view.dayEndHour);
 	const span = $derived(endHour - startHour); // total hours shown
-	const hours = $derived(Array.from({ length: span + 1 }, (_, i) => startHour + i));
+	const slots = $derived(timeSlots(startHour, endHour, family.config.view.clock24h));
 	const columns = $derived(weekColumns(weekStart, days));
 
 	function dayIndex(d: Date): number {
@@ -156,17 +156,25 @@
 	<!-- Time body (fills remaining height) -->
 	<div class="row body">
 		<div class="rail">
-			{#each hours as h (h)}
-				<span class="hourlabel type-caption" style:top="{((h - startHour) / span) * 100}%">
-					{hourLabel(h, family.config.view.clock24h)}
+			{#each slots as s (s.hour)}
+				<span
+					class="hourlabel type-caption"
+					class:minor={!s.major}
+					style:top="{((s.hour - startHour) / span) * 100}%"
+				>
+					{s.label}
 				</span>
 			{/each}
 		</div>
 		<div class="cols bodycols" style:--cols={days}>
 			{#each columns as col, i (col.date.getTime())}
 				<div class="daycol" class:today={col.isToday}>
-					{#each hours as h (h)}
-						<div class="hourline" style:top="{((h - startHour) / span) * 100}%"></div>
+					{#each slots as s (s.hour)}
+						<div
+							class="hourline"
+							class:minor={!s.major}
+							style:top="{((s.hour - startHour) / span) * 100}%"
+						></div>
 					{/each}
 					{#each layoutDay(i) as p (p.event.id)}
 						<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
@@ -291,6 +299,10 @@
 		color: var(--color-text-tertiary);
 		font-variant-numeric: tabular-nums;
 	}
+	.hourlabel.minor {
+		font-size: 0.8em;
+		opacity: 0.6;
+	}
 	.bodycols {
 		position: relative;
 	}
@@ -310,6 +322,9 @@
 		right: 0;
 		height: 1px;
 		background: var(--color-border-hairline);
+	}
+	.hourline.minor {
+		opacity: 0.5;
 	}
 	.event-pos {
 		position: absolute;
