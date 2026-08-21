@@ -17,23 +17,6 @@ cd "$APP_DIR" || exit 1
 
 log() { echo "[update $(date +%FT%T)] $*"; }
 
-# Respect the pause flag in config.json (no jq dependency).
-paused="$(node -e "try{process.stdout.write(require('./data/config.json').updates?.paused?'1':'0')}catch{process.stdout.write('0')}" 2>/dev/null || echo 0)"
-if [ "$paused" = "1" ]; then log "updates paused"; exit 0; fi
-
-# Refuse to update over local work-in-progress.
-if ! git diff --quiet || ! git diff --cached --quiet; then
-	log "local changes present — skipping"; exit 0
-fi
-
-git fetch --quiet origin main || { log "fetch failed"; exit 1; }
-PREV="$(git rev-parse HEAD)"
-REMOTE="$(git rev-parse origin/main)"
-if [ "$PREV" = "$REMOTE" ]; then log "already up to date ($PREV)"; exit 0; fi
-
-log "updating $PREV -> $REMOTE"
-rm -rf build.prev && cp -r build build.prev 2>/dev/null || true
-
 rollback() {
 	log "ROLLBACK to $PREV"
 	git reset --hard "$PREV" --quiet || true
@@ -43,7 +26,39 @@ rollback() {
 	exit 1
 }
 
-git pull --ff-only --quiet origin main || rollback
+if [ -z "${FC_UPDATE_REEXEC:-}" ]; then
+	# First pass: everything up to and including the pull. Re-exec afterward
+	# so install/build/restart run from a freshly-read copy of this very
+	# script instead of a stale in-memory one — bash can buffer a running
+	# script's remaining lines, so when THIS script updates itself via the
+	# git pull below, lines after it can keep executing the pre-pull logic
+	# against the just-pulled commit. Confirmed on-device: a change to the
+	# install step here didn't take effect on the run that pulled it in,
+	# only on the next one — silently re-breaking the very thing it fixed.
+	paused="$(node -e "try{process.stdout.write(require('./data/config.json').updates?.paused?'1':'0')}catch{process.stdout.write('0')}" 2>/dev/null || echo 0)"
+	if [ "$paused" = "1" ]; then log "updates paused"; exit 0; fi
+
+	# Refuse to update over local work-in-progress.
+	if ! git diff --quiet || ! git diff --cached --quiet; then
+		log "local changes present — skipping"; exit 0
+	fi
+
+	git fetch --quiet origin main || { log "fetch failed"; exit 1; }
+	PREV="$(git rev-parse HEAD)"
+	REMOTE="$(git rev-parse origin/main)"
+	if [ "$PREV" = "$REMOTE" ]; then log "already up to date ($PREV)"; exit 0; fi
+
+	log "updating $PREV -> $REMOTE"
+	rm -rf build.prev && cp -r build build.prev 2>/dev/null || true
+
+	git pull --ff-only --quiet origin main || rollback
+
+	FC_UPDATE_REEXEC=1 FC_UPDATE_PREV="$PREV" FC_UPDATE_REMOTE="$REMOTE" exec bash "$0"
+fi
+
+PREV="$FC_UPDATE_PREV"
+REMOTE="${FC_UPDATE_REMOTE:-}"
+
 # Full install (incl. devDependencies): vite/@sveltejs/kit live there and the
 # build step needs them. Pruned back down to production-only after building,
 # matching how the base image itself is provisioned.
