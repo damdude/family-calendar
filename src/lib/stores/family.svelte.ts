@@ -40,7 +40,22 @@ export interface LocalEvent {
 	allDay: boolean;
 	location?: string;
 	profileIds: number[];
+	/** Which local calendar this is filed under (LocalCalendar.id) — 1 is the
+	 *  default shared "Family" calendar. Independent of profileIds: this is
+	 *  "where it's filed", profileIds is "who it's for". */
+	calendarId: number;
 }
+
+export interface LocalCalendar {
+	id: number;
+	name: string;
+	/** undefined = shared/household calendar; set = "belongs to" one profile. */
+	profileId?: number;
+}
+
+/** Every device starts with one shared calendar so there's always somewhere
+ *  to file a local event, even before anyone creates more. */
+const DEFAULT_LOCAL_CALENDARS: LocalCalendar[] = [{ id: 1, name: 'Family' }];
 
 /** Nothing configured yet — a fresh device before/without a real family. */
 function emptyFamilyData(): FamilyData {
@@ -70,6 +85,7 @@ class FamilyStore {
 	config = $state<AppConfig>(defaultConfig);
 	progress = $state<ProgressData>(emptyProgress());
 	localEvents = $state<LocalEvent[]>([]);
+	localCalendars = $state<LocalCalendar[]>(DEFAULT_LOCAL_CALENDARS);
 	/** 'tv' (no touch — drive from a phone) or 'touch'; null before first boot's pick. */
 	displayMode = $state<DisplayMode | null>(null);
 	/** Family chose to set up Wi-Fi later. */
@@ -456,6 +472,7 @@ class FamilyStore {
 			meals: FamilyData['meals'];
 			lists: FamilyData['lists'];
 			localEvents?: LocalEvent[];
+			localCalendars?: LocalCalendar[];
 			tasks?: FamilyData['tasks'];
 			recipes?: FamilyData['recipes'];
 			stars?: FamilyData['stars'];
@@ -470,6 +487,7 @@ class FamilyStore {
 		this.data.stars = data.stars ?? [];
 		this.data.rewardClaims = data.rewardClaims ?? [];
 		this.localEvents = data.localEvents ?? [];
+		this.localCalendars = data.localCalendars?.length ? data.localCalendars : DEFAULT_LOCAL_CALENDARS;
 		this.materializeLocalEvents();
 	}
 
@@ -479,11 +497,35 @@ class FamilyStore {
 			meals: this.data.meals,
 			lists: this.data.lists,
 			localEvents: this.localEvents,
+			localCalendars: this.localCalendars,
 			tasks: this.data.tasks,
 			recipes: this.data.recipes,
 			stars: this.data.stars,
 			rewardClaims: this.data.rewardClaims
 		};
+	}
+
+	/** Create a new local calendar the family can file events under.
+	 *  `profileId` (optional) is just the default placement hint — anyone's
+	 *  events can still be filed here regardless. */
+	addLocalCalendar(name: string, profileId?: number): LocalCalendar {
+		const id = this.localCalendars.reduce((m, c) => Math.max(m, c.id), 0) + 1;
+		const cal: LocalCalendar = { id, name, profileId };
+		this.localCalendars.push(cal);
+		this.persistFamilyData();
+		return cal;
+	}
+
+	/** Remove a local calendar. Refuses to delete the default shared calendar
+	 *  or one that still has events filed under it (move them first). */
+	removeLocalCalendar(id: number): boolean {
+		if (id === 1) return false;
+		if (this.localEvents.some((e) => e.calendarId === id)) return false;
+		const i = this.localCalendars.findIndex((c) => c.id === id);
+		if (i < 0) return false;
+		this.localCalendars.splice(i, 1);
+		this.persistFamilyData();
+		return true;
 	}
 
 	// --- Rewards ---

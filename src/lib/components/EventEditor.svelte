@@ -35,6 +35,7 @@
 	let allDay = $state(ex?.allDay ?? false);
 	let location = $state(ex?.location ?? '');
 	let profileIds = $state<number[]>(ex?.profileIds ? [...ex.profileIds] : []);
+	let calendarId = $state(ex?.calendarId ?? 1);
 	let error = $state('');
 
 	function toggleProfile(id: number) {
@@ -69,7 +70,8 @@
 			endTs,
 			allDay,
 			location: location.trim() || undefined,
-			profileIds
+			profileIds,
+			calendarId
 		};
 		if (existing) {
 			family.removeLocalEvent(existing.id);
@@ -126,6 +128,17 @@
 			{/each}
 		</div>
 	</div>
+
+	<label class="field">
+		<span class="type-label lbl">Calendar</span>
+		<select class="in" bind:value={calendarId}>
+			{#each family.localCalendars as c (c.id)}
+				<option value={c.id}
+					>{c.name}{c.profileId ? ` (${family.profile(c.profileId)?.name ?? ''})` : ''}</option
+				>
+			{/each}
+		</select>
+	</label>
 
 	<div class="row">
 		<label class="field grow">

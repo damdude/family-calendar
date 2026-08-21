@@ -40,7 +40,20 @@ const LocalEventSchema = z.object({
 	endTs: z.number().int(),
 	allDay: z.boolean(),
 	location: z.string().max(120).optional(),
-	profileIds: z.array(z.number().int()).max(12)
+	profileIds: z.array(z.number().int()).max(12),
+	// Which local calendar this is filed under — id 1 (the default "Family"
+	// shared calendar) unless the family created more. Independent of
+	// profileIds: calendarId is "where it's filed", profileIds is "who it's
+	// for" — a shared calendar can still hold an event tagged to one person.
+	calendarId: z.number().int().default(1)
+});
+
+const LocalCalendarSchema = z.object({
+	id: z.number().int(),
+	name: z.string().max(60),
+	// undefined = shared/household calendar; set = "belongs to" one profile
+	// (used to default quick-add placement, not to restrict who can see it).
+	profileId: z.number().int().optional()
 });
 
 const TaskSchema = z.object({
@@ -82,6 +95,7 @@ export const FamilyDataSchema = z.object({
 	meals: z.array(MealSchema).max(200),
 	lists: z.array(ListSchema).max(50),
 	localEvents: z.array(LocalEventSchema).max(500).default([]),
+	localCalendars: z.array(LocalCalendarSchema).max(20).default([]),
 	tasks: z.array(TaskSchema).max(500).default([]),
 	recipes: z.array(RecipeSchema).max(200).default([]),
 	stars: z.array(StarBalanceSchema).max(50).default([]),
@@ -116,6 +130,7 @@ function emptyData(): FamilyDataPersist {
 		meals: [],
 		lists: [],
 		localEvents: [],
+		localCalendars: [],
 		tasks: [],
 		recipes: [],
 		stars: [],

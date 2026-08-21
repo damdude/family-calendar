@@ -22,7 +22,17 @@ export const POST: RequestHandler = async ({ request }) => {
 	if (!getSession(parsed.data.token)) throw error(410, 'This add link has expired.');
 
 	const { title, startTs, endTs, allDay, location, profileIds } = parsed.data;
-	const ev = await appendLocalEvent({ title, startTs, endTs, allDay, location, profileIds });
+	// Quick-add always files into the default shared calendar — picking a
+	// specific one isn't worth the extra tap on a phone quick-add form.
+	const ev = await appendLocalEvent({
+		title,
+		startTs,
+		endTs,
+		allDay,
+		location,
+		profileIds,
+		calendarId: 1
+	});
 	publishLive(); // tell the display to refresh
 	return json({ ok: true, event: ev });
 };

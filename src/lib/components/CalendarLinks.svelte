@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { family } from '$lib/stores/family.svelte';
 	import { profileColorVar } from '$lib/design/colors';
-	import { Link2, Plus, X, RefreshCw } from 'lucide-svelte';
+	import { Link2, Plus, X, RefreshCw, CalendarPlus } from 'lucide-svelte';
 
 	interface Cal {
 		id: number;
@@ -85,6 +85,37 @@
 			return u;
 		}
 	}
+
+	// --- Local calendars (no external source — events are created right here) ---
+	let localName = $state('');
+	let localProfileId = $state<number | ''>('');
+	let localMsg = $state('');
+
+	function addLocal() {
+		if (!localName.trim()) return;
+		family.addLocalCalendar(
+			localName.trim(),
+			localProfileId === '' ? undefined : Number(localProfileId)
+		);
+		localName = '';
+		localProfileId = '';
+	}
+
+	function removeLocal(id: number) {
+		localMsg = family.removeLocalCalendar(id)
+			? ''
+			: 'Move its events to another calendar before deleting it.';
+	}
+
+	// A profile with neither a synced calendar nor a local calendar of their
+	// own has nowhere to file their events yet.
+	const profilesWithoutCalendar = $derived(
+		family.profiles.filter(
+			(p) =>
+				!cals.some((c) => c.profileId === p.id) &&
+				!family.localCalendars.some((c) => c.profileId === p.id)
+		)
+	);
 </script>
 
 <div class="cl">
@@ -133,6 +164,70 @@
 		</div>
 	</div>
 	{#if msg}<p class="type-caption msg">{msg}</p>{/if}
+
+	{#if profilesWithoutCalendar.length}
+		<div class="nocal">
+			{#each profilesWithoutCalendar as p (p.id)}
+				<p class="type-caption nocal-row">
+					No calendar for {p.name} yet
+					<button
+						type="button"
+						class="mklocal"
+						onclick={() => {
+							localName = `${p.name}'s calendar`;
+							localProfileId = p.id;
+						}}
+					>
+						Create a local calendar
+					</button>
+				</p>
+			{/each}
+		</div>
+	{/if}
+
+	<div class="head">
+		<p class="type-label"><CalendarPlus size={16} /> Local calendars</p>
+	</div>
+	<p class="type-caption sub">
+		No external source needed — events created here on the display (or via the phone quick-add)
+		are filed under one of these. Used automatically when a profile has no synced calendar.
+	</p>
+
+	{#each family.localCalendars as c (c.id)}
+		<div class="cal">
+			<span
+				class="dot"
+				style:background={c.profileId
+					? profileColorVar(family.profile(c.profileId)?.color ?? 'sky')
+					: 'var(--color-text-tertiary)'}
+			></span>
+			<span class="cname type-label">{c.name}</span>
+			<span class="chost type-caption"
+				>{c.profileId ? (family.profile(c.profileId)?.name ?? 'Unassigned') : 'Whole family'}</span
+			>
+			{#if c.id !== 1}
+				<button type="button" class="del" aria-label="Remove" onclick={() => removeLocal(c.id)}>
+					<X size={14} />
+				</button>
+			{/if}
+		</div>
+	{/each}
+
+	<div class="addform">
+		<div class="row2">
+			<input class="in name" type="text" placeholder="Calendar name" bind:value={localName} />
+			<select class="in sel" bind:value={localProfileId}>
+				<option value="">Whole family</option>
+				{#each family.profiles as p (p.id)}
+					<option value={p.id}>{p.name}</option>
+				{/each}
+			</select>
+			<button type="button" class="add" disabled={!localName.trim()} onclick={addLocal}>
+				<Plus size={16} /> Add
+			</button>
+		</div>
+	</div>
+	{#if localMsg}<p class="type-caption msg">{localMsg}</p>{/if}
 </div>
 
 <style>
@@ -241,5 +336,24 @@
 	}
 	.msg {
 		color: var(--color-text-secondary);
+	}
+	.nocal {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-2);
+		padding: var(--space-3);
+		border-radius: var(--radius-md);
+		background: color-mix(in srgb, var(--color-accent-warning) 12%, var(--color-surface));
+	}
+	.nocal-row {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
+		color: var(--color-text-secondary);
+	}
+	.mklocal {
+		font-weight: var(--weight-semibold);
+		color: var(--color-text-primary);
+		text-decoration: underline;
 	}
 </style>

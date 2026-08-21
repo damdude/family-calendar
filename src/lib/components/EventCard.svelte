@@ -7,19 +7,24 @@
 
 	let { event, variant = 'grid' }: { event: FamilyEvent; variant?: 'grid' | 'list' } = $props();
 
-	const people = $derived(
+	// Who this event is assigned to — empty means "the whole family" (a
+	// household calendar with no per-person tagging), not "nobody".
+	const assignedPeople = $derived(
 		event.profileIds.map((id) => family.profile(id)).filter((p) => p !== undefined)
 	);
+	// For the avatar stack specifically: a household event shows everyone's
+	// icon at a glance, rather than none.
+	const people = $derived(event.profileIds.length === 0 ? family.profiles : assignedPeople);
 
 	function tint(color: Parameters<typeof profileColorVar>[0]) {
 		return `color-mix(in srgb, ${profileColorVar(color)} 74%, white)`;
 	}
 
 	const background = $derived.by(() => {
-		if (people.length === 0) return 'var(--color-surface-elevated)';
-		if (people.length === 1) return tint(people[0].color);
+		if (assignedPeople.length === 0) return 'var(--color-surface-elevated)';
+		if (assignedPeople.length === 1) return tint(assignedPeople[0].color);
 		// Two+ profiles → diagonal split (mirrors the reference's shared-event card).
-		return `linear-gradient(135deg, ${tint(people[0].color)} 0 46%, ${tint(people[1].color)} 54% 100%)`;
+		return `linear-gradient(135deg, ${tint(assignedPeople[0].color)} 0 46%, ${tint(assignedPeople[1].color)} 54% 100%)`;
 	});
 
 	const timeLabel = $derived(formatRange(event.start, event.end, family.config.view.clock24h));
@@ -31,7 +36,7 @@
 		{#if !event.allDay}
 			<p class="time type-caption">{timeLabel}</p>
 		{/if}
-		{#if event.location && variant === 'list'}
+		{#if event.location}
 			<p class="loc type-caption">{event.location}</p>
 		{/if}
 	</div>
@@ -55,6 +60,8 @@
 		display: flex;
 		flex-direction: column;
 		justify-content: flex-start;
+		container-type: size;
+		container-name: eventcard;
 	}
 	.card.list {
 		height: auto;
@@ -74,6 +81,17 @@
 	.loc {
 		color: color-mix(in srgb, var(--color-text-primary) 62%, transparent);
 		margin-top: 2px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	/* A short (~30-45min) grid block has room for the title + time but not
+	   also the location without clipping mid-word — drop it rather than show
+	   a garbled fragment. List view (fixed min-height) always has room. */
+	@container eventcard (max-height: 44px) {
+		.loc {
+			display: none;
+		}
 	}
 	.avatars {
 		position: absolute;
