@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { getCalendars, upsertCalendar } from '$lib/server/db/repo';
 import { normalizeIcsUrl } from '$lib/server/ical';
 import { syncIcal } from '$lib/server/sync';
+import { publishLive } from '$lib/server/live';
 import type { RequestHandler } from './$types';
 
 /** List ICS/webcal subscriptions. */
@@ -37,5 +38,6 @@ export const POST: RequestHandler = async ({ request }) => {
 	} catch {
 		/* the feed may be slow/unreachable; cron will retry */
 	}
+	publishLive(); // tell the display to refresh, even if the sync itself failed
 	return json({ ok: true, count, calendars: getCalendars('ical') });
 };
