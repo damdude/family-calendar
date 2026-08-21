@@ -180,6 +180,7 @@ class FamilyStore {
 		if (!cfg.setupComplete) return;
 		if (cfg.family.name) this.data.familyName = cfg.family.name;
 		this.data.weekStartsOn = cfg.family.weekStartsOn;
+		this.data.timezone = cfg.family.timezone;
 
 		const keep = new Set(cfg.profiles.map((pc) => pc.id));
 		this.data.profiles = this.data.profiles.filter((p) => keep.has(p.id));
