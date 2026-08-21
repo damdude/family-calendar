@@ -2,11 +2,16 @@
 	import type { Profile } from '$lib/types';
 	import { profileColorVar, profileTint } from '$lib/design/colors';
 
+	// Only the fields actually rendered — callers with a lighter-weight
+	// profile summary (e.g. the /remote page's server load) shouldn't have to
+	// fabricate age/role/tasks just to satisfy the full Profile type.
+	type AvatarProfile = Pick<Profile, 'id' | 'name' | 'color' | 'avatarEmoji' | 'photoUpdatedAt'>;
+
 	let {
 		profile,
 		size = 36,
 		ring = true
-	}: { profile: Profile; size?: number; ring?: boolean } = $props();
+	}: { profile: AvatarProfile; size?: number; ring?: boolean } = $props();
 
 	// Fall back to the emoji if the photo fails to load.
 	let photoFailed = $state(false);

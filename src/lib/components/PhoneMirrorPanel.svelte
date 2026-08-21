@@ -90,7 +90,7 @@
 						{@html mirror.qrSvg}
 					</div>
 					<p class="type-body sub">
-						Scan with your phone camera. Whatever you open there, this screen follows.
+						Scan with your phone camera to add events — they show up here right away.
 					</p>
 					<code class="url">{mirror.qrUrl}</code>
 				{:else}

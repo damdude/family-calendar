@@ -27,7 +27,7 @@
 	</button>
 
 	<div class="inner">
-		<h1 class="title"><Smartphone size={34} /> Control this TV from your phone</h1>
+		<h1 class="title"><Smartphone size={34} /> Add events from your phone</h1>
 
 		{#if err}
 			<p class="sub">Couldn't start the pairing session. Go back and try again.</p>
@@ -39,7 +39,7 @@
 			<ol class="steps">
 				<li>Open your phone camera and point it at this code</li>
 				<li>Tap the link that appears</li>
-				<li>Your phone becomes a remote — whatever you open, this TV follows</li>
+				<li>Add events there — they show up here right away</li>
 			</ol>
 			<code class="url">{url}</code>
 		{:else}
