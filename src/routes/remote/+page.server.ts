@@ -66,6 +66,7 @@ export const load: PageServerLoad = async ({ url }) => {
 		})),
 		events,
 		lists: familyData?.lists ?? [],
-		tasks: familyData?.tasks ?? []
+		tasks: familyData?.tasks ?? [],
+		meals: familyData?.meals ?? []
 	};
 };

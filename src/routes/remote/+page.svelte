@@ -4,6 +4,7 @@
 	import { mirror } from '$lib/stores/mirror.svelte';
 	import { profileColorVar, profileTint, PROFILE_COLORS } from '$lib/design/colors';
 	import { AVATAR_CHOICES } from '$lib/setup/types';
+	import { autoEmojiFor } from '$lib/meals';
 	import { formatRange } from '$lib/time';
 	import Avatar from '$lib/components/Avatar.svelte';
 	import {
@@ -17,7 +18,8 @@
 		Trash2,
 		Search,
 		Pencil,
-		X
+		X,
+		UtensilsCrossed
 	} from 'lucide-svelte';
 	import type { ProfileColor } from '$lib/types';
 	import type { PageData } from './$types';
@@ -31,7 +33,7 @@
 	});
 
 	let stopped = $state(false);
-	type Tab = 'calendar' | 'lists' | 'tasks' | 'settings';
+	type Tab = 'calendar' | 'lists' | 'tasks' | 'meals' | 'settings';
 	let tab = $state<Tab>('calendar');
 
 	// The display follows whichever tab is active here (not a full mirror —
@@ -41,6 +43,7 @@
 		calendar: '/',
 		lists: '/lists',
 		tasks: '/tasks',
+		meals: '/meals',
 		settings: '/settings'
 	};
 	$effect(() => {
@@ -410,6 +413,67 @@
 		if (editingProfileId === id) cancelProfileForm();
 		await invalidateAll();
 	}
+
+	// --- Meals ---
+	type MealType = 'breakfast' | 'lunch' | 'dinner';
+	const MEAL_TYPES: MealType[] = ['breakfast', 'lunch', 'dinner'];
+	const MEAL_LABEL: Record<MealType, string> = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner' };
+
+	function ymd(d: Date): string {
+		return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+	}
+	const mealDays = $derived.by(() => {
+		const out: { key: string; label: string }[] = [];
+		const base = new Date();
+		for (let i = 0; i < 7; i++) {
+			const d = new Date(base);
+			d.setDate(d.getDate() + i);
+			out.push({ key: ymd(d), label: dayLabel(Math.floor(d.getTime() / 1000)) });
+		}
+		return out;
+	});
+	function mealAt(dateKey: string, type: MealType) {
+		return data.meals.find((m) => m.date === dateKey && m.mealType === type);
+	}
+
+	let editingMeal = $state<{ date: string; type: MealType } | null>(null);
+	let mealDraft = $state('');
+	let savingMeal = $state(false);
+
+	function openMealEditor(dateKey: string, type: MealType) {
+		editingMeal = { date: dateKey, type };
+		mealDraft = mealAt(dateKey, type)?.name ?? '';
+	}
+	function closeMealEditor() {
+		editingMeal = null;
+		mealDraft = '';
+	}
+	async function saveMeal() {
+		if (!editingMeal) return;
+		savingMeal = true;
+		try {
+			await fetch('/api/mirror/meal', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({
+					token: data.token,
+					date: editingMeal.date,
+					mealType: editingMeal.type,
+					name: mealDraft.trim(),
+					emoji: autoEmojiFor(mealDraft.trim())
+				})
+			});
+			closeMealEditor();
+			await invalidateAll();
+		} finally {
+			savingMeal = false;
+		}
+	}
+	async function clearMeal() {
+		if (!editingMeal) return;
+		mealDraft = '';
+		await saveMeal();
+	}
 </script>
 
 <svelte:head>
@@ -442,6 +506,9 @@
 			</button>
 			<button type="button" class="tab" class:on={tab === 'tasks'} onclick={() => (tab = 'tasks')}>
 				<SquareCheck size={16} /> Tasks
+			</button>
+			<button type="button" class="tab" class:on={tab === 'meals'} onclick={() => (tab = 'meals')}>
+				<UtensilsCrossed size={16} /> Meals
 			</button>
 			<button type="button" class="tab" class:on={tab === 'settings'} onclick={() => (tab = 'settings')}>
 				<Settings size={16} /> Settings
@@ -684,6 +751,55 @@
 					{/if}
 				</section>
 			{/if}
+		{/if}
+
+		{#if tab === 'meals'}
+			{#each mealDays as day (day.key)}
+				<section class="card">
+					<h2 class="type-label sec-h">{day.label}</h2>
+					<div class="items">
+						{#each MEAL_TYPES as type (type)}
+							{@const m = mealAt(day.key, type)}
+							<button type="button" class="itemrow" onclick={() => openMealEditor(day.key, type)}>
+								<span class="mtype type-caption">{MEAL_LABEL[type]}</span>
+								{#if m}
+									<span class="itext type-body">{m.emoji} {m.name}</span>
+								{:else}
+									<span class="itext type-body sub">Add a meal…</span>
+								{/if}
+							</button>
+						{/each}
+					</div>
+					{#if editingMeal && editingMeal.date === day.key}
+						<div class="profform">
+							<div class="sec-head">
+								<h3 class="type-label sec-h">{MEAL_LABEL[editingMeal.type]}</h3>
+								<button type="button" class="iconbtn" aria-label="Cancel" onclick={closeMealEditor}
+									><X size={16} /></button
+								>
+							</div>
+							<input
+								class="in"
+								type="text"
+								placeholder="e.g. Pasta night"
+								bind:value={mealDraft}
+								maxlength="120"
+								onkeydown={(e) => e.key === 'Enter' && saveMeal()}
+							/>
+							<div class="row">
+								<button type="button" class="btn primary grow" disabled={savingMeal} onclick={saveMeal}>
+									{savingMeal ? 'Saving…' : 'Save'}
+								</button>
+								{#if mealAt(editingMeal.date, editingMeal.type)}
+									<button type="button" class="iconbtn danger" aria-label="Clear meal" onclick={clearMeal}
+										><Trash2 size={16} /></button
+									>
+								{/if}
+							</div>
+						</div>
+					{/if}
+				</section>
+			{/each}
 		{/if}
 
 		{#if tab === 'settings'}
@@ -1132,6 +1248,13 @@
 	.tfor {
 		flex: none;
 		color: var(--color-text-tertiary);
+	}
+	.mtype {
+		flex: none;
+		width: 76px;
+		color: var(--color-text-tertiary);
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
 	}
 	.donelabel {
 		margin-top: var(--space-2);

@@ -124,6 +124,7 @@ export async function saveFamilyData(data: FamilyDataPersist): Promise<void> {
 
 export type LocalEventInput = z.infer<typeof LocalEventSchema>;
 export type TaskInput = z.infer<typeof TaskSchema>;
+export type MealInput = z.infer<typeof MealSchema>;
 
 function emptyData(): FamilyDataPersist {
 	return {
@@ -188,4 +189,26 @@ export async function toggleListItemDone(listId: number, itemId: number): Promis
 	item.completed = !item.completed;
 	await saveFamilyData(data);
 	return true;
+}
+
+/** Set (or clear, if name is blank) the meal planned for a date + meal type
+ *  (phone companion) — mirrors the client store's setMeal. */
+export async function setMeal(
+	date: string,
+	mealType: MealInput['mealType'],
+	name: string,
+	emoji: string
+): Promise<void> {
+	const data = (await loadFamilyData()) ?? emptyData();
+	const existing = data.meals.find((m) => m.date === date && m.mealType === mealType);
+	if (!name.trim()) {
+		if (existing) data.meals.splice(data.meals.indexOf(existing), 1);
+	} else if (existing) {
+		existing.name = name.trim();
+		existing.emoji = emoji;
+	} else {
+		const id = data.meals.reduce((m, x) => Math.max(m, x.id), 0) + 1;
+		data.meals.push(MealSchema.parse({ id, date, mealType, name: name.trim(), emoji }));
+	}
+	await saveFamilyData(data);
 }
