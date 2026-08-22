@@ -48,9 +48,13 @@ export const load: PageServerLoad = async ({ url }) => {
 	return {
 		token,
 		familyName: config.family.name,
+		latitude: config.family.latitude,
+		longitude: config.family.longitude,
+		timezone: config.family.timezone,
 		profiles: config.profiles.map((p) => ({
 			id: p.id,
 			name: p.name,
+			age: p.age,
 			color: p.color,
 			avatarEmoji: p.avatarEmoji,
 			photoUpdatedAt: p.photoUpdatedAt

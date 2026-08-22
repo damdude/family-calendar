@@ -2,10 +2,24 @@
 	import { onMount } from 'svelte';
 	import { invalidateAll } from '$app/navigation';
 	import { mirror } from '$lib/stores/mirror.svelte';
-	import { profileColorVar, profileTint } from '$lib/design/colors';
+	import { profileColorVar, profileTint, PROFILE_COLORS } from '$lib/design/colors';
+	import { AVATAR_CHOICES } from '$lib/setup/types';
 	import { formatRange } from '$lib/time';
 	import Avatar from '$lib/components/Avatar.svelte';
-	import { Check, Plus, Smartphone, CalendarDays, ListChecks, SquareCheck } from 'lucide-svelte';
+	import {
+		Check,
+		Plus,
+		Smartphone,
+		CalendarDays,
+		ListChecks,
+		SquareCheck,
+		Settings,
+		Trash2,
+		Search,
+		Pencil,
+		X
+	} from 'lucide-svelte';
+	import type { ProfileColor } from '$lib/types';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -17,13 +31,18 @@
 	});
 
 	let stopped = $state(false);
-	type Tab = 'calendar' | 'lists' | 'tasks';
+	type Tab = 'calendar' | 'lists' | 'tasks' | 'settings';
 	let tab = $state<Tab>('calendar');
 
 	// The display follows whichever tab is active here (not a full mirror —
 	// just which top-level section to show), so an edit made from the phone
 	// is visible on the TV right away without switching it by hand.
-	const TAB_PATH: Record<Tab, string> = { calendar: '/', lists: '/lists', tasks: '/tasks' };
+	const TAB_PATH: Record<Tab, string> = {
+		calendar: '/',
+		lists: '/lists',
+		tasks: '/tasks',
+		settings: '/settings'
+	};
 	$effect(() => {
 		mirror.activePath = TAB_PATH[tab];
 	});
@@ -207,6 +226,159 @@
 	function profileName(id?: number) {
 		return id ? (data.profiles.find((p) => p.id === id)?.name ?? '') : '';
 	}
+
+	// --- Settings: family name ---
+	let familyNameInput = $state(data.familyName ?? '');
+	let savingName = $state(false);
+	async function saveFamilyName() {
+		const name = familyNameInput.trim();
+		if (!name || name === data.familyName) return;
+		savingName = true;
+		try {
+			await fetch('/api/mirror/settings', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ token: data.token, familyName: name })
+			});
+			await invalidateAll();
+		} finally {
+			savingName = false;
+		}
+	}
+
+	// --- Settings: location (also sets timezone from the same pick) ---
+	interface LocResult {
+		name: string;
+		admin1?: string;
+		country?: string;
+		latitude: number;
+		longitude: number;
+		timezone: string;
+	}
+	let locQuery = $state('');
+	let locResults = $state<LocResult[]>([]);
+	let locSearching = $state(false);
+	let locError = $state('');
+	let locSaved = $state(false);
+	let locSearchToken = 0;
+
+	async function searchLocation() {
+		const q = locQuery.trim();
+		if (q.length < 2) {
+			locResults = [];
+			return;
+		}
+		const myToken = ++locSearchToken;
+		locSearching = true;
+		locError = '';
+		try {
+			const r = await fetch(`/api/location-search?q=${encodeURIComponent(q)}`);
+			if (myToken !== locSearchToken) return; // a newer search superseded this one
+			if (r.ok) locResults = (await r.json()).results;
+			else locError = 'Search failed.';
+		} catch {
+			if (myToken === locSearchToken) locError = 'Search failed — check the device is online.';
+		} finally {
+			if (myToken === locSearchToken) locSearching = false;
+		}
+	}
+	let locSearchDebounce: ReturnType<typeof setTimeout>;
+	function onLocInput() {
+		clearTimeout(locSearchDebounce);
+		locSearchDebounce = setTimeout(searchLocation, 400);
+	}
+
+	async function pickLocation(r: LocResult) {
+		locResults = [];
+		locQuery = `${r.name}${r.admin1 ? ', ' + r.admin1 : ''}`;
+		await fetch('/api/mirror/settings', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({
+				token: data.token,
+				latitude: r.latitude,
+				longitude: r.longitude,
+				timezone: r.timezone
+			})
+		});
+		locSaved = true;
+		await invalidateAll();
+		setTimeout(() => (locSaved = false), 2500);
+	}
+
+	// --- Settings: people ---
+	let editingProfileId = $state<number | null>(null);
+	let addingProfile = $state(false);
+	let profName = $state('');
+	let profAge = $state<number | ''>('');
+	let profColor = $state<ProfileColor>('pink');
+	let profAvatar = $state<string>(AVATAR_CHOICES[0]);
+	let savingProfile = $state(false);
+	let profileFormError = $state('');
+
+	function startNewProfile() {
+		editingProfileId = null;
+		addingProfile = true;
+		profName = '';
+		profAge = '';
+		profColor = 'pink';
+		profAvatar = AVATAR_CHOICES[0];
+		profileFormError = '';
+	}
+	function startEditProfile(p: PageData['profiles'][number]) {
+		editingProfileId = p.id;
+		addingProfile = true;
+		profName = p.name;
+		profAge = p.age;
+		profColor = p.color as ProfileColor;
+		profAvatar = p.avatarEmoji;
+		profileFormError = '';
+	}
+	function cancelProfileForm() {
+		addingProfile = false;
+		editingProfileId = null;
+	}
+	async function saveProfile() {
+		const name = profName.trim();
+		if (!name || profAge === '') {
+			profileFormError = 'Add a name and age.';
+			return;
+		}
+		savingProfile = true;
+		profileFormError = '';
+		try {
+			const r = await fetch('/api/mirror/profile', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({
+					token: data.token,
+					id: editingProfileId ?? undefined,
+					name,
+					age: Number(profAge),
+					color: profColor,
+					avatarEmoji: profAvatar
+				})
+			});
+			if (r.ok) {
+				addingProfile = false;
+				editingProfileId = null;
+				await invalidateAll();
+			} else {
+				profileFormError = 'Could not save.';
+			}
+		} finally {
+			savingProfile = false;
+		}
+	}
+	async function removeProfile(id: number) {
+		await fetch('/api/mirror/profile-remove', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ token: data.token, id })
+		});
+		if (editingProfileId === id) cancelProfileForm();
+		await invalidateAll();
+	}
 </script>
 
 <svelte:head>
@@ -239,6 +411,9 @@
 			</button>
 			<button type="button" class="tab" class:on={tab === 'tasks'} onclick={() => (tab = 'tasks')}>
 				<SquareCheck size={16} /> Tasks
+			</button>
+			<button type="button" class="tab" class:on={tab === 'settings'} onclick={() => (tab = 'settings')}>
+				<Settings size={16} /> Settings
 			</button>
 		</nav>
 
@@ -478,6 +653,146 @@
 					{/if}
 				</section>
 			{/if}
+		{/if}
+
+		{#if tab === 'settings'}
+			<section class="card">
+				<h2 class="type-label sec-h">Family name</h2>
+				<div class="row">
+					<input class="in grow" type="text" bind:value={familyNameInput} maxlength="60" />
+					<button
+						type="button"
+						class="btn primary small"
+						disabled={savingName || !familyNameInput.trim() || familyNameInput.trim() === data.familyName}
+						onclick={saveFamilyName}
+					>
+						{savingName ? 'Saving…' : 'Save'}
+					</button>
+				</div>
+			</section>
+
+			<section class="card">
+				<h2 class="type-label sec-h">Location</h2>
+				<p class="type-caption sub">
+					Sets the display's timezone and drives sunrise/sunset (for auto dark mode).
+				</p>
+				<div class="field">
+					<input
+						class="in"
+						type="text"
+						placeholder="Search for a city…"
+						bind:value={locQuery}
+						oninput={onLocInput}
+					/>
+				</div>
+				{#if locSearching}
+					<p class="type-caption sub"><Search size={14} /> Searching…</p>
+				{:else if locError}
+					<p class="type-caption err">{locError}</p>
+				{:else if locResults.length}
+					<div class="items">
+						{#each locResults as r (r.latitude + ',' + r.longitude)}
+							<button type="button" class="itemrow" onclick={() => pickLocation(r)}>
+								<span class="itext type-body"
+									>{r.name}{r.admin1 ? `, ${r.admin1}` : ''}{r.country ? `, ${r.country}` : ''}</span
+								>
+								<span class="tfor type-caption">{r.timezone}</span>
+							</button>
+						{/each}
+					</div>
+				{/if}
+				{#if locSaved}
+					<p class="type-caption saved-msg"><Check size={14} strokeWidth={3} /> Location saved</p>
+				{:else if data.latitude !== undefined && data.longitude !== undefined}
+					<p class="type-caption sub">
+						Current: {data.latitude.toFixed(2)}, {data.longitude.toFixed(2)} ({data.timezone})
+					</p>
+				{/if}
+			</section>
+
+			<section class="card">
+				<div class="sec-head">
+					<h2 class="type-label sec-h">People</h2>
+					{#if !addingProfile}
+						<button type="button" class="addbtn small" onclick={startNewProfile}
+							><Plus size={16} /></button
+						>
+					{/if}
+				</div>
+				<div class="items">
+					{#each data.profiles as p (p.id)}
+						<div class="itemrow proflink">
+							<Avatar profile={p} size={28} ring={false} />
+							<span class="itext type-body">{p.name} · {p.age}</span>
+							<button
+								type="button"
+								class="iconbtn"
+								aria-label="Edit {p.name}"
+								onclick={() => startEditProfile(p)}><Pencil size={15} /></button
+							>
+							<button
+								type="button"
+								class="iconbtn danger"
+								aria-label="Remove {p.name}"
+								onclick={() => removeProfile(p.id)}><Trash2 size={15} /></button
+							>
+						</div>
+					{/each}
+				</div>
+
+				{#if addingProfile}
+					<div class="profform">
+						<div class="sec-head">
+							<h3 class="type-label sec-h">{editingProfileId ? 'Edit person' : 'New person'}</h3>
+							<button type="button" class="iconbtn" aria-label="Cancel" onclick={cancelProfileForm}
+								><X size={16} /></button
+							>
+						</div>
+						<div class="row">
+							<label class="field grow">
+								<span class="type-label lbl">Name</span>
+								<input class="in" type="text" bind:value={profName} maxlength="40" />
+							</label>
+							<label class="field">
+								<span class="type-label lbl">Age</span>
+								<input class="in agein" type="number" min="0" max="120" bind:value={profAge} />
+							</label>
+						</div>
+						<div class="field">
+							<span class="type-label lbl">Color</span>
+							<div class="chips">
+								{#each PROFILE_COLORS as c (c)}
+									<button
+										type="button"
+										class="colordot"
+										class:on={profColor === c}
+										style:background={profileColorVar(c)}
+										aria-label={c}
+										onclick={() => (profColor = c)}
+									></button>
+								{/each}
+							</div>
+						</div>
+						<div class="field">
+							<span class="type-label lbl">Avatar</span>
+							<div class="chips">
+								{#each AVATAR_CHOICES as a (a)}
+									<button
+										type="button"
+										class="emojidot"
+										class:on={profAvatar === a}
+										onclick={() => (profAvatar = a)}>{a}</button
+									>
+								{/each}
+							</div>
+						</div>
+						{#if profileFormError}<p class="type-caption err">{profileFormError}</p>{/if}
+						<button type="button" class="btn primary" disabled={savingProfile} onclick={saveProfile}>
+							{savingProfile ? 'Saving…' : 'Save'}
+						</button>
+					</div>
+				{/if}
+			</section>
 		{/if}
 	</div>
 {/if}
@@ -773,5 +1088,79 @@
 	}
 	.sub {
 		color: var(--color-text-secondary);
+	}
+	.sec-h {
+		color: var(--color-text-secondary);
+	}
+	.sec-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+	}
+	.saved-msg {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		color: var(--color-accent-success);
+	}
+	.btn.small {
+		padding: 11px 16px;
+		font-size: var(--text-base);
+	}
+	.btn.primary:disabled {
+		opacity: 0.5;
+	}
+	.addbtn.small {
+		width: 40px;
+		height: 40px;
+		border-radius: var(--radius-pill);
+	}
+	.proflink {
+		gap: var(--space-3);
+	}
+	.iconbtn {
+		display: grid;
+		place-items: center;
+		width: 34px;
+		height: 34px;
+		border-radius: var(--radius-pill);
+		background: var(--color-surface);
+		color: var(--color-text-secondary);
+		flex: none;
+	}
+	.iconbtn.danger:active {
+		color: var(--color-accent-warning);
+	}
+	.profform {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-3);
+		padding-top: var(--space-3);
+		border-top: 1px solid var(--color-border-subtle);
+	}
+	.agein {
+		width: 80px;
+	}
+	.colordot {
+		width: 34px;
+		height: 34px;
+		border-radius: var(--radius-pill);
+		flex: none;
+	}
+	.colordot.on {
+		box-shadow: 0 0 0 3px var(--color-surface), 0 0 0 5px var(--color-text-primary);
+	}
+	.emojidot {
+		width: 40px;
+		height: 40px;
+		display: grid;
+		place-items: center;
+		font-size: 1.3rem;
+		border-radius: var(--radius-pill);
+		background: var(--color-surface-elevated);
+		flex: none;
+	}
+	.emojidot.on {
+		box-shadow: inset 0 0 0 2px var(--color-text-primary);
 	}
 </style>
