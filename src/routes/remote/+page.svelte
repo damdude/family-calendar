@@ -19,7 +19,8 @@
 		Search,
 		Pencil,
 		X,
-		UtensilsCrossed
+		UtensilsCrossed,
+		BookOpen
 	} from 'lucide-svelte';
 	import type { ProfileColor } from '$lib/types';
 	import type { PageData } from './$types';
@@ -33,7 +34,7 @@
 	});
 
 	let stopped = $state(false);
-	type Tab = 'calendar' | 'lists' | 'tasks' | 'meals' | 'settings';
+	type Tab = 'calendar' | 'lists' | 'tasks' | 'meals' | 'recipes' | 'settings';
 	let tab = $state<Tab>('calendar');
 
 	// The display follows whichever tab is active here (not a full mirror —
@@ -43,6 +44,7 @@
 		calendar: '/',
 		lists: '/lists',
 		tasks: '/tasks',
+		recipes: '/recipes',
 		meals: '/meals',
 		settings: '/settings'
 	};
@@ -474,6 +476,67 @@
 		mealDraft = '';
 		await saveMeal();
 	}
+
+	// --- Recipes ---
+	let addingRecipe = $state(false);
+	let recipeName = $state('');
+	let recipeIngredients = $state('');
+	let recipeSteps = $state('');
+	let savingRecipe = $state(false);
+	let recipeFormError = $state('');
+	let expandedRecipeId = $state<number | null>(null);
+
+	function startNewRecipe() {
+		addingRecipe = true;
+		recipeName = '';
+		recipeIngredients = '';
+		recipeSteps = '';
+		recipeFormError = '';
+	}
+	function cancelRecipeForm() {
+		addingRecipe = false;
+	}
+	async function saveRecipe() {
+		const name = recipeName.trim();
+		const ingredients = recipeIngredients.split('\n').map((s) => s.trim()).filter(Boolean);
+		const steps = recipeSteps.split('\n').map((s) => s.trim()).filter(Boolean);
+		if (!name || ingredients.length === 0 || steps.length === 0) {
+			recipeFormError = 'Add a name, at least one ingredient, and at least one step.';
+			return;
+		}
+		savingRecipe = true;
+		recipeFormError = '';
+		try {
+			const r = await fetch('/api/mirror/recipe', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({
+					token: data.token,
+					name,
+					emoji: autoEmojiFor(name),
+					ingredients,
+					steps
+				})
+			});
+			if (r.ok) {
+				addingRecipe = false;
+				await invalidateAll();
+			} else {
+				recipeFormError = 'Could not save.';
+			}
+		} finally {
+			savingRecipe = false;
+		}
+	}
+	async function removeRecipeItem(id: number) {
+		await fetch('/api/mirror/recipe-remove', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ token: data.token, id })
+		});
+		if (expandedRecipeId === id) expandedRecipeId = null;
+		await invalidateAll();
+	}
 </script>
 
 <svelte:head>
@@ -509,6 +572,9 @@
 			</button>
 			<button type="button" class="tab" class:on={tab === 'meals'} onclick={() => (tab = 'meals')}>
 				<UtensilsCrossed size={16} /> Meals
+			</button>
+			<button type="button" class="tab" class:on={tab === 'recipes'} onclick={() => (tab = 'recipes')}>
+				<BookOpen size={16} /> Recipes
 			</button>
 			<button type="button" class="tab" class:on={tab === 'settings'} onclick={() => (tab = 'settings')}>
 				<Settings size={16} /> Settings
@@ -800,6 +866,77 @@
 					{/if}
 				</section>
 			{/each}
+		{/if}
+
+		{#if tab === 'recipes'}
+			<section class="card">
+				<div class="sec-head">
+					<h2 class="type-label sec-h">Recipes</h2>
+					{#if !addingRecipe}
+						<button type="button" class="addbtn small" onclick={startNewRecipe}
+							><Plus size={16} /></button
+						>
+					{/if}
+				</div>
+				{#if data.recipes.length === 0 && !addingRecipe}
+					<p class="type-body sub empty">No recipes yet.</p>
+				{/if}
+				<div class="items">
+					{#each data.recipes as r (r.id)}
+						<div class="recipeblock">
+							<button
+								type="button"
+								class="itemrow"
+								onclick={() => (expandedRecipeId = expandedRecipeId === r.id ? null : r.id)}
+							>
+								<span class="itext type-body">{r.emoji} {r.name}</span>
+							</button>
+							{#if expandedRecipeId === r.id}
+								<div class="recipedetail">
+									<p class="type-label lbl">Ingredients</p>
+									<ul class="ingredlist type-body">
+										{#each r.ingredients as ing (ing)}<li>{ing}</li>{/each}
+									</ul>
+									<p class="type-label lbl">Steps</p>
+									<ol class="ingredlist type-body">
+										{#each r.steps as s (s)}<li>{s}</li>{/each}
+									</ol>
+									<button type="button" class="btn danger" onclick={() => removeRecipeItem(r.id)}>
+										<Trash2 size={16} /> Remove recipe
+									</button>
+								</div>
+							{/if}
+						</div>
+					{/each}
+				</div>
+
+				{#if addingRecipe}
+					<div class="profform">
+						<div class="sec-head">
+							<h3 class="type-label sec-h">New recipe</h3>
+							<button type="button" class="iconbtn" aria-label="Cancel" onclick={cancelRecipeForm}
+								><X size={16} /></button
+							>
+						</div>
+						<label class="field">
+							<span class="type-label lbl">Name</span>
+							<input class="in" type="text" bind:value={recipeName} maxlength="120" />
+						</label>
+						<label class="field">
+							<span class="type-label lbl">Ingredients (one per line)</span>
+							<textarea class="in taxt" rows="4" bind:value={recipeIngredients}></textarea>
+						</label>
+						<label class="field">
+							<span class="type-label lbl">Steps (one per line)</span>
+							<textarea class="in taxt" rows="4" bind:value={recipeSteps}></textarea>
+						</label>
+						{#if recipeFormError}<p class="type-caption err">{recipeFormError}</p>{/if}
+						<button type="button" class="btn primary" disabled={savingRecipe} onclick={saveRecipe}>
+							{savingRecipe ? 'Saving…' : 'Save'}
+						</button>
+					</div>
+				{/if}
+			</section>
 		{/if}
 
 		{#if tab === 'settings'}
@@ -1258,6 +1395,32 @@
 	}
 	.donelabel {
 		margin-top: var(--space-2);
+	}
+	.recipeblock {
+		display: flex;
+		flex-direction: column;
+	}
+	.recipedetail {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-2);
+		padding: var(--space-3) var(--space-2);
+	}
+	.ingredlist {
+		margin: 0;
+		padding-left: 1.3em;
+		color: var(--color-text-primary);
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+	}
+	.taxt {
+		font-family: inherit;
+		resize: vertical;
+	}
+	.btn.danger {
+		background: color-mix(in srgb, var(--color-accent-warning) 15%, var(--color-surface));
+		color: var(--color-accent-warning);
 	}
 	.addrow {
 		display: flex;

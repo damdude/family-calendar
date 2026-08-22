@@ -125,6 +125,7 @@ export async function saveFamilyData(data: FamilyDataPersist): Promise<void> {
 export type LocalEventInput = z.infer<typeof LocalEventSchema>;
 export type TaskInput = z.infer<typeof TaskSchema>;
 export type MealInput = z.infer<typeof MealSchema>;
+export type RecipeInput = z.infer<typeof RecipeSchema>;
 
 function emptyData(): FamilyDataPersist {
 	return {
@@ -211,4 +212,24 @@ export async function setMeal(
 		data.meals.push(MealSchema.parse({ id, date, mealType, name: name.trim(), emoji }));
 	}
 	await saveFamilyData(data);
+}
+
+/** Append a recipe (phone companion). Assigns an id. */
+export async function appendRecipe(r: Omit<RecipeInput, 'id'>): Promise<RecipeInput> {
+	const data = (await loadFamilyData()) ?? emptyData();
+	const id = data.recipes.reduce((m, x) => Math.max(m, x.id), 0) + 1;
+	const recipe = RecipeSchema.parse({ ...r, id });
+	data.recipes.push(recipe);
+	await saveFamilyData(data);
+	return recipe;
+}
+
+/** Remove a recipe by id (phone companion). Returns false if no such recipe. */
+export async function removeRecipe(id: number): Promise<boolean> {
+	const data = (await loadFamilyData()) ?? emptyData();
+	const i = data.recipes.findIndex((r) => r.id === id);
+	if (i < 0) return false;
+	data.recipes.splice(i, 1);
+	await saveFamilyData(data);
+	return true;
 }
