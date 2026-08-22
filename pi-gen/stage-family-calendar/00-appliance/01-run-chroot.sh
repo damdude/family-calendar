@@ -65,6 +65,13 @@ EnvironmentFile=-${APP_DIR}/.env
 ExecStart=/usr/bin/node ${APP_DIR}/build
 Restart=on-failure
 RestartSec=5
+# Open SSE connections (mirror pairing, live-refresh) and node-cron's timers
+# don't exit promptly on SIGTERM, so a restart was riding systemd's default
+# 90s stop timeout before SIGKILL — every OTA update's restart step (and the
+# health check after it) paid that tax, and slow enough deploys could outrun
+# an SSH session's own timeout and get killed mid-build. 20s is still ample
+# for a graceful exit; anything slower isn't going to finish gracefully anyway.
+TimeoutStopSec=20
 SyslogIdentifier=family-calendar
 
 [Install]
