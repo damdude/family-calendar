@@ -45,6 +45,25 @@
 	// stale the moment someone turns the panel.
 	$effect(() => family.watchOrientation());
 
+	// Weather: family.data.weather was never anything but its hardcoded
+	// "Unavailable" default anywhere in the app until this — every weather
+	// chip (TopBar, Vestaboard, the TV idle screen) reads from the store, so
+	// fetching it once here covers all of them. Refreshed every 30 minutes;
+	// conditions don't change fast enough to warrant more.
+	$effect(() => {
+		async function refreshWeather() {
+			try {
+				const r = await fetch('/api/weather');
+				if (r.ok) family.setWeather(await r.json());
+			} catch {
+				/* offline; next interval retries */
+			}
+		}
+		refreshWeather();
+		const id = setInterval(refreshWeather, 30 * 60_000);
+		return () => clearInterval(id);
+	});
+
 	// --- Screensaver / sleep mode ---
 	let tick = $state(Date.now());
 	let lastActivity = $state(Date.now());

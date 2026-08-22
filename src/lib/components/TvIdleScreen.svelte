@@ -14,7 +14,7 @@
 	 */
 	import { mirror } from '$lib/stores/mirror.svelte';
 	import { family } from '$lib/stores/family.svelte';
-	import { formatClock, formatRange, sameDay } from '$lib/time';
+	import { formatClock, formatRange } from '$lib/time';
 	import Vestaboard from './Vestaboard.svelte';
 	import { Smartphone, CalendarDays } from 'lucide-svelte';
 
@@ -67,16 +67,39 @@
 	const dateStr = $derived(
 		now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })
 	);
+	const weather = $derived(family.data.weather);
 
-	// Tomorrow's agenda, so a glance at the sleeping screen previews the day
-	// ahead without waking the display up.
-	const tomorrowEvents = $derived.by(() => {
-		const tomorrow = new Date(now);
-		tomorrow.setDate(tomorrow.getDate() + 1);
-		return [...family.data.events]
-			.filter((e) => sameDay(e.start, tomorrow))
+	function dayLabel(d: Date): string {
+		const today = new Date(now);
+		today.setHours(0, 0, 0, 0);
+		const that = new Date(d);
+		that.setHours(0, 0, 0, 0);
+		const diffDays = Math.round((that.getTime() - today.getTime()) / 86_400_000);
+		if (diffDays === 0) return 'Today';
+		if (diffDays === 1) return 'Tomorrow';
+		return d.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+	}
+
+	// The rest of what's coming up — not just tomorrow — so a glance at the
+	// sleeping screen previews the days ahead without waking the display up.
+	// Capped at a fixed count rather than a day window: a screensaver isn't
+	// scrollable, so this bounds how tall the list gets regardless of how
+	// busy the calendar is, and naturally spans however many days it takes
+	// to fill that count on a quiet week.
+	const AGENDA_MAX = 8;
+	const upcomingGroups = $derived.by(() => {
+		const upcoming = [...family.data.events]
+			.filter((e) => e.end.getTime() > now.getTime())
 			.sort((a, b) => a.start.getTime() - b.start.getTime())
-			.slice(0, 6);
+			.slice(0, AGENDA_MAX);
+		const groups: { label: string; events: typeof upcoming }[] = [];
+		for (const e of upcoming) {
+			const label = dayLabel(e.start);
+			const last = groups[groups.length - 1];
+			if (last && last.label === label) last.events.push(e);
+			else groups.push({ label, events: [e] });
+		}
+		return groups;
 	});
 </script>
 
@@ -85,7 +108,7 @@
 {:else}
 	<div class="tvidle" role="status" aria-label="Waiting for a phone to connect">
 		<div class="layout" style:transform="translate({pos.x}vmin, {pos.y}vmin)">
-			<div class="content">
+			<div class="top">
 				{#if mirror.qrSvg}
 					<div class="qr">
 						<!-- eslint-disable-next-line svelte/no-at-html-tags -->
@@ -94,20 +117,25 @@
 				{/if}
 				<time class="clock">{formatClock(now, clock24)}</time>
 				<p class="date">{dateStr}</p>
+				{#if weather.icon !== '—'}
+					<p class="weather">{weather.icon} {weather.tempF}° {weather.condition}</p>
+				{/if}
 				<p class="hint"><Smartphone size={18} /> Scan to add events, lists and more</p>
 			</div>
-			{#if tomorrowEvents.length}
-				<div class="tomorrow">
-					<p class="tomorrow-head"><CalendarDays size={16} /> Tomorrow</p>
-					{#each tomorrowEvents as e (e.id)}
-						<div class="trow">
-							<span class="ttime"
-								>{e.allDay ? 'All day' : formatRange(e.start, e.end, clock24)}</span
-							>
-							<div class="tbody">
-								<p class="ttitle">{e.title}</p>
-								{#if e.location}<p class="tloc">{e.location}</p>{/if}
-							</div>
+			{#if upcomingGroups.length}
+				<div class="agenda">
+					{#each upcomingGroups as g (g.label)}
+						<div class="agroup">
+							<p class="agroup-head"><CalendarDays size={14} /> {g.label}</p>
+							{#each g.events as e (e.id)}
+								<div class="arow">
+									<p class="atitle">{e.title}</p>
+									<p class="ameta">
+										{e.allDay ? 'All day' : formatRange(e.start, e.end, clock24)}{#if e.location}
+											· {e.location}{/if}
+									</p>
+								</div>
+							{/each}
 						</div>
 					{/each}
 				</div>
@@ -129,72 +157,77 @@
 	}
 	.layout {
 		display: flex;
+		flex-direction: column;
 		align-items: center;
-		gap: clamp(32px, 6vmin, 96px);
+		gap: clamp(18px, 3.2vmin, 40px);
+		max-height: 92vh;
 		transition: transform 3s ease-in-out;
 	}
-	.content {
+	.top {
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		gap: clamp(12px, 2.5vmin, 28px);
+		gap: clamp(10px, 2vmin, 22px);
 		text-align: center;
+		flex: none;
 	}
-	.tomorrow {
+	.agenda {
 		display: flex;
 		flex-direction: column;
-		gap: clamp(10px, 1.6vmin, 18px);
-		width: clamp(220px, 24vmin, 340px);
-		text-align: left;
+		align-items: center;
+		gap: clamp(10px, 1.8vmin, 20px);
+		text-align: center;
+		width: clamp(260px, 34vmin, 460px);
+		overflow: hidden;
 	}
-	.tomorrow-head {
+	.agroup {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: clamp(4px, 0.8vmin, 8px);
+	}
+	.agroup-head {
 		display: flex;
 		align-items: center;
-		gap: 8px;
-		font-size: clamp(0.85rem, 1.8vmin, 1.15rem);
+		gap: 6px;
+		font-size: clamp(0.7rem, 1.4vmin, 0.95rem);
 		font-weight: 500;
-		opacity: 0.6;
-		margin: 0 0 clamp(4px, 1vmin, 10px);
-		text-transform: uppercase;
-		letter-spacing: 0.04em;
-	}
-	.trow {
-		display: flex;
-		gap: clamp(10px, 1.6vmin, 18px);
-	}
-	.ttime {
-		flex: none;
-		width: clamp(70px, 9vmin, 110px);
-		font-size: clamp(0.8rem, 1.6vmin, 1.05rem);
-		font-variant-numeric: tabular-nums;
 		opacity: 0.55;
-		padding-top: 0.15em;
+		margin: 0 0 clamp(2px, 0.6vmin, 6px);
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
 	}
-	.tbody {
-		min-width: 0;
+	.arow {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 2px;
 	}
-	.ttitle {
-		font-size: clamp(0.9rem, 1.9vmin, 1.2rem);
+	.atitle {
+		font-size: clamp(0.85rem, 1.7vmin, 1.15rem);
 		font-weight: 500;
 		margin: 0;
+		max-width: 100%;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
-	.tloc {
-		font-size: clamp(0.75rem, 1.5vmin, 1rem);
-		opacity: 0.5;
-		margin: 2px 0 0;
+	.ameta {
+		font-size: clamp(0.7rem, 1.3vmin, 0.95rem);
+		font-variant-numeric: tabular-nums;
+		opacity: 0.55;
+		margin: 0;
+		max-width: 100%;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
 	.qr {
-		width: clamp(140px, 22vmin, 320px);
-		height: clamp(140px, 22vmin, 320px);
-		padding: clamp(10px, 1.6vmin, 20px);
+		width: clamp(110px, 16vmin, 240px);
+		height: clamp(110px, 16vmin, 240px);
+		padding: clamp(8px, 1.3vmin, 16px);
 		background: #fff;
-		border-radius: clamp(10px, 1.6vmin, 20px);
+		border-radius: clamp(8px, 1.3vmin, 16px);
 	}
 	.qr :global(svg) {
 		width: 100%;
@@ -202,15 +235,21 @@
 		display: block;
 	}
 	.clock {
-		font-size: clamp(2.4rem, 8vmin, 6rem);
+		font-size: clamp(1.8rem, 5.5vmin, 4.2rem);
 		font-weight: 200;
 		line-height: 1;
 		letter-spacing: -0.02em;
 		font-variant-numeric: tabular-nums;
 	}
 	.date {
-		font-size: clamp(1rem, 2.4vmin, 1.6rem);
+		font-size: clamp(0.9rem, 2vmin, 1.3rem);
 		font-weight: 300;
+		opacity: 0.75;
+		margin: 0;
+	}
+	.weather {
+		font-size: clamp(0.85rem, 1.8vmin, 1.2rem);
+		font-weight: 400;
 		opacity: 0.75;
 		margin: 0;
 	}

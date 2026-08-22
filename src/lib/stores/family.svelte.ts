@@ -485,6 +485,10 @@ class FamilyStore {
 		this.photoIds = ids;
 	}
 
+	setWeather(weather: FamilyData['weather']) {
+		this.data.weather = weather;
+	}
+
 	/** Apply persisted meals + lists + local events + tasks + recipes + rewards. */
 	applyFamilyData(
 		data: {
