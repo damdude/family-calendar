@@ -246,6 +246,37 @@
 		}
 	}
 
+	// --- Settings: display (sleep window, idle screensaver, clock format) ---
+	let sleepStartInput = $state(data.sleepStart ?? '21:00');
+	let sleepEndInput = $state(data.sleepEnd ?? '06:30');
+	let sleepEnabledInput = $state(data.sleepEnabled ?? true);
+	let idleMinutesInput = $state(data.idleMinutes ?? 10);
+	let clock24hInput = $state(data.clock24h ?? false);
+	let savingDisplay = $state(false);
+	let displaySaved = $state(false);
+	async function saveDisplaySettings() {
+		savingDisplay = true;
+		try {
+			await fetch('/api/mirror/app-settings', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({
+					token: data.token,
+					sleepStart: sleepStartInput,
+					sleepEnd: sleepEndInput,
+					sleepEnabled: sleepEnabledInput,
+					idleMinutes: Number(idleMinutesInput),
+					clock24h: clock24hInput
+				})
+			});
+			displaySaved = true;
+			await invalidateAll();
+			setTimeout(() => (displaySaved = false), 2500);
+		} finally {
+			savingDisplay = false;
+		}
+	}
+
 	// --- Settings: location (also sets timezone from the same pick) ---
 	interface LocResult {
 		name: string;
@@ -669,6 +700,61 @@
 						{savingName ? 'Saving…' : 'Save'}
 					</button>
 				</div>
+			</section>
+
+			<section class="card">
+				<h2 class="type-label sec-h">Display</h2>
+				<div class="field">
+					<span class="type-label lbl">Clock</span>
+					<div class="chips">
+						<button
+							type="button"
+							class="chip"
+							class:on={!clock24hInput}
+							onclick={() => (clock24hInput = false)}>12-hour</button
+						>
+						<button
+							type="button"
+							class="chip"
+							class:on={clock24hInput}
+							onclick={() => (clock24hInput = true)}>24-hour</button
+						>
+					</div>
+				</div>
+				<div class="row">
+					<label class="field allday">
+						<span class="type-label lbl">Sleep window</span>
+						<button
+							type="button"
+							class="switch"
+							class:on={sleepEnabledInput}
+							role="switch"
+							aria-checked={sleepEnabledInput}
+							aria-label="Sleep window"
+							onclick={() => (sleepEnabledInput = !sleepEnabledInput)}><span class="knob"
+							></span></button
+						>
+					</label>
+				</div>
+				{#if sleepEnabledInput}
+					<div class="row">
+						<label class="field grow">
+							<span class="type-label lbl">Sleeps at</span>
+							<input class="in" type="time" bind:value={sleepStartInput} />
+						</label>
+						<label class="field grow">
+							<span class="type-label lbl">Wakes at</span>
+							<input class="in" type="time" bind:value={sleepEndInput} />
+						</label>
+					</div>
+				{/if}
+				<label class="field">
+					<span class="type-label lbl">Screensaver after (minutes of inactivity, 0 = only during sleep)</span>
+					<input class="in" type="number" min="0" max="120" bind:value={idleMinutesInput} />
+				</label>
+				<button type="button" class="btn primary" disabled={savingDisplay} onclick={saveDisplaySettings}>
+					{#if displaySaved}<Check size={18} /> Saved{:else}{savingDisplay ? 'Saving…' : 'Save'}{/if}
+				</button>
 			</section>
 
 			<section class="card">
