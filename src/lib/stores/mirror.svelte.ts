@@ -33,6 +33,12 @@ class MirrorControl {
 	qrSvg = $state('');
 	qrUrl = $state('');
 	private qrLoading = false;
+	/** Controller only: the TV-side path matching whichever tab is active on
+	 *  the phone companion page right now (e.g. switching to Lists there
+	 *  should switch the display to /lists too) — not a full mirror of the
+	 *  phone's route, just which top-level section to show. Null until the
+	 *  companion page sets it. */
+	activePath = $state<string | null>(null);
 
 	constructor() {
 		if (!browser) return;
@@ -88,6 +94,7 @@ class MirrorControl {
 		this.token = null;
 		this.connected = false;
 		this.controllerConnected = false;
+		this.activePath = null;
 		if (browser) {
 			localStorage.removeItem(DISPLAY_KEY);
 			sessionStorage.removeItem(CONTROLLER_KEY);

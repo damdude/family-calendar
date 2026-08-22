@@ -20,6 +20,14 @@
 	type Tab = 'calendar' | 'lists' | 'tasks';
 	let tab = $state<Tab>('calendar');
 
+	// The display follows whichever tab is active here (not a full mirror —
+	// just which top-level section to show), so an edit made from the phone
+	// is visible on the TV right away without switching it by hand.
+	const TAB_PATH: Record<Tab, string> = { calendar: '/', lists: '/lists', tasks: '/tasks' };
+	$effect(() => {
+		mirror.activePath = TAB_PATH[tab];
+	});
+
 	function done() {
 		mirror.stop();
 		stopped = true;
