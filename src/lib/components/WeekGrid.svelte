@@ -76,14 +76,17 @@
 			: null
 	);
 
+	// Mixed toward the theme's surface color, not hardcoded white — the same
+	// dark-mode text-visibility bug as EventCard's tint(): a hardcoded-white
+	// mix stayed light while the text flipped to near-white on top of it.
 	function tint(color: ProfileColor, pct = 74) {
-		return `color-mix(in srgb, ${profileColorVar(color)} ${pct}%, white)`;
+		return `color-mix(in srgb, ${profileColorVar(color)} ${pct}%, var(--color-surface))`;
 	}
 
 	function barBackground(e: FamilyEvent): string {
 		const ppl = e.profileIds.map((id) => family.profile(id)).filter((p) => p !== undefined);
 		if (ppl.length === 0) return 'var(--color-accent-allday)';
-		if (ppl.length >= 2) return 'color-mix(in srgb, var(--color-profile-blue) 74%, white)';
+		if (ppl.length >= 2) return 'color-mix(in srgb, var(--color-profile-blue) 74%, var(--color-surface))';
 		return tint(ppl[0].color);
 	}
 

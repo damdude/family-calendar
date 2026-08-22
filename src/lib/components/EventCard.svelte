@@ -16,8 +16,11 @@
 	// icon at a glance, rather than none.
 	const people = $derived(event.profileIds.length === 0 ? family.profiles : assignedPeople);
 
+	// Mixed toward the theme's surface color, not hardcoded white — in dark
+	// mode that stayed a light pastel while the text flipped to near-white on
+	// top of it, making the title unreadable. Confirmed on-device.
 	function tint(color: Parameters<typeof profileColorVar>[0]) {
-		return `color-mix(in srgb, ${profileColorVar(color)} 74%, white)`;
+		return `color-mix(in srgb, ${profileColorVar(color)} 74%, var(--color-surface))`;
 	}
 
 	const background = $derived.by(() => {

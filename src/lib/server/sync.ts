@@ -109,23 +109,25 @@ function dedupKey(e: IcsEvent): string {
 }
 
 /** Pick which family member a group of duplicate copies is actually for.
- *  A copy that landed on exactly one specific person's own calendar is a
- *  strong signal it's theirs. When it landed on more than one person's
- *  calendar (or none), fall back to spotting a family member's name in the
- *  title — otherwise leave it attributed to whichever calendar is chosen for
- *  storage (a shared calendar's profileId, or none). */
+ *  The title is checked first ("look at subject to figure out which child
+ *  this event is for") — a parent can easily have their kid's event on
+ *  their own personal calendar too (invited as an attendee, not because the
+ *  event is about them), which would otherwise make "landed on exactly one
+ *  specific person's calendar" outrank an explicit name in the title.
+ *  Confirmed on-device: a family Google Calendar's recurring practice also
+ *  synced onto the inviting parent's own calendar came out tagged to the
+ *  parent instead of the child actually named in the title. Only when the
+ *  title names nobody does which calendar(s) it landed on decide it. */
 function resolveProfileId(
 	group: FetchedEvent[],
 	profiles: { id: number; name: string }[]
 ): number | undefined {
+	const title = group[0].e.title.toLowerCase();
+	const named = profiles.find((p) => p.name && title.includes(p.name.toLowerCase()));
+	if (named) return named.id;
+
 	const distinct = [...new Set(group.map((g) => g.cal.profileId).filter((id): id is number => !!id))];
-	if (distinct.length === 1) return distinct[0];
-	if (distinct.length > 1) {
-		const title = group[0].e.title.toLowerCase();
-		const named = profiles.find((p) => p.name && title.includes(p.name.toLowerCase()));
-		if (named) return named.id;
-		return distinct[0];
-	}
+	if (distinct.length >= 1) return distinct[0];
 	return group[0].cal.profileId ?? undefined;
 }
 
