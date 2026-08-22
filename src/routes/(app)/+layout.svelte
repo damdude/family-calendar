@@ -21,12 +21,13 @@
 	// read+write store state, so wrap them in untrack() — otherwise the effect
 	// depends on what it mutates and loops forever (freezing the UI).
 	$effect(() => {
-		const { config, progress, familyData, syncedEvents } = data;
+		const { config, progress, familyData, syncedEvents, photoIds } = data;
 		untrack(() => {
 			family.applyConfig(config);
 			family.applyProgress(progress);
 			family.applyFamilyData(familyData);
 			family.applySyncedEvents(syncedEvents);
+			family.applyPhotoIds(photoIds);
 		});
 	});
 

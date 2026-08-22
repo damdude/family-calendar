@@ -28,33 +28,46 @@
 
 	const bestStreak = $derived(Math.max(0, ...family.data.routines.map((r) => r.streak.current)));
 
-	// Photo rotation — profiles that have an uploaded photo.
-	const photoProfiles = $derived(family.profiles.filter((p) => p.photoUpdatedAt));
+	// Photo rotation — profile avatars, plus the shared family album.
+	interface Slide {
+		src: string;
+		caption?: string;
+	}
+	const slides = $derived.by((): Slide[] => {
+		const avatarSlides = family.profiles
+			.filter((p) => p.photoUpdatedAt)
+			.map((p) => ({ src: `/media/avatar/${p.id}?v=${p.photoUpdatedAt}`, caption: p.name }));
+		const albumSlides = family.photoIds.map((id) => ({ src: `/media/photo/${id}` }));
+		// Interleaved rather than concatenated so a big album doesn't bury
+		// everyone's avatar photos behind dozens of vacation pictures.
+		const out: Slide[] = [];
+		const max = Math.max(avatarSlides.length, albumSlides.length);
+		for (let i = 0; i < max; i++) {
+			if (avatarSlides[i]) out.push(avatarSlides[i]);
+			if (albumSlides[i]) out.push(albumSlides[i]);
+		}
+		return out;
+	});
 	let photoIndex = $state(0);
 	$effect(() => {
-		if (mode !== 'photos' || photoProfiles.length === 0) return;
+		if (mode !== 'photos' || slides.length === 0) return;
 		const id = setInterval(() => {
-			photoIndex = (photoIndex + 1) % photoProfiles.length;
+			photoIndex = (photoIndex + 1) % slides.length;
 		}, 8000);
 		return () => clearInterval(id);
 	});
-	const showPhotos = $derived(mode === 'photos' && photoProfiles.length > 0);
-	const current = $derived(photoProfiles[photoIndex % Math.max(1, photoProfiles.length)]);
+	const showPhotos = $derived(mode === 'photos' && slides.length > 0);
+	const current = $derived(slides[photoIndex % Math.max(1, slides.length)]);
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="saver" class:photos={showPhotos} onpointerdown={() => ondismiss?.()}>
 	{#if showPhotos && current}
-		<img
-			class="bg"
-			src="/media/avatar/{current.id}?v={current.photoUpdatedAt}"
-			alt=""
-			aria-hidden="true"
-		/>
+		<img class="bg" src={current.src} alt="" aria-hidden="true" />
 		<div class="scrim"></div>
 		<div class="overlay">
 			<time class="clock-sm">{timeStr}</time>
-			<span class="name-sm">{current.name}</span>
+			{#if current.caption}<span class="name-sm">{current.caption}</span>{/if}
 		</div>
 	{:else}
 		<div class="clockface">

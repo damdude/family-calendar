@@ -86,6 +86,11 @@ class FamilyStore {
 	progress = $state<ProgressData>(emptyProgress());
 	localEvents = $state<LocalEvent[]>([]);
 	localCalendars = $state<LocalCalendar[]>(DEFAULT_LOCAL_CALENDARS);
+	/** Ids of the shared family-album photos (Photos tab) — for the photo
+	 *  screensaver, which mixes these in alongside profile avatars. Not part
+	 *  of `data`/FamilyData since it's device asset metadata, not editable
+	 *  family content. */
+	photoIds = $state<number[]>([]);
 	/** 'tv' (no touch — drive from a phone) or 'touch'; null before first boot's pick. */
 	displayMode = $state<DisplayMode | null>(null);
 	/** Family chose to set up Wi-Fi later. */
@@ -474,6 +479,10 @@ class FamilyStore {
 		const list = this.data.lists.find((l) => l.id === listId);
 		const it = list?.items.find((i) => i.id === itemId);
 		if (it) it.completed = !it.completed;
+	}
+
+	applyPhotoIds(ids: number[]) {
+		this.photoIds = ids;
 	}
 
 	/** Apply persisted meals + lists + local events + tasks + recipes + rewards. */

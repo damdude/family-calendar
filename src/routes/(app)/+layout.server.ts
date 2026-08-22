@@ -2,6 +2,7 @@ import { redirect } from '@sveltejs/kit';
 import { loadConfig } from '$lib/server/config';
 import { loadProgress } from '$lib/server/progress';
 import { loadFamilyData } from '$lib/server/familydata';
+import { listPhotos } from '$lib/server/photos';
 import { getSyncedEventsLean } from '$lib/server/db/repo';
 import type { LayoutServerLoad } from './$types';
 
@@ -20,6 +21,7 @@ export const load: LayoutServerLoad = async () => {
 		config,
 		progress: await loadProgress(),
 		familyData: await loadFamilyData(),
-		syncedEvents: getSyncedEventsLean(from, to)
+		syncedEvents: getSyncedEventsLean(from, to),
+		photoIds: (await listPhotos()).map((p) => p.id)
 	};
 };
