@@ -156,17 +156,26 @@ export interface SyncedEvent {
 	 *  deduped from a copy synced onto more than one family member's
 	 *  calendar, tagging it with whichever one it's actually for. */
 	profileId?: number;
+	/** True when `profileId` came from a manual phone reassignment rather
+	 *  than the sync step's own dedup guess — see setEventProfileOverride. */
+	profileOverridden?: boolean;
 }
 
+/** True (default) leaves an existing manual override alone on conflict — set
+ *  false only from the code path that's re-applying a snapshotted override
+ *  across a full calendar rebuild (syncIcal), where there's no existing row
+ *  to preserve. */
 export function upsertEvent(e: SyncedEvent): void {
 	getDb()
 		.prepare(
 			`INSERT INTO events
-				(calendar_id, external_id, start_ts, end_ts, all_day, title, description_encrypted, location, profile_id, updated_at)
-			 VALUES (@calendarId, @externalId, @startTs, @endTs, @allDay, @title, @desc, @location, @profileId, @now)
+				(calendar_id, external_id, start_ts, end_ts, all_day, title, description_encrypted, location, profile_id, profile_overridden, updated_at)
+			 VALUES (@calendarId, @externalId, @startTs, @endTs, @allDay, @title, @desc, @location, @profileId, @profileOverridden, @now)
 			 ON CONFLICT(calendar_id, external_id) DO UPDATE SET
 				start_ts=@startTs, end_ts=@endTs, all_day=@allDay, title=@title,
-				description_encrypted=@desc, location=@location, profile_id=@profileId, updated_at=@now`
+				description_encrypted=@desc, location=@location, updated_at=@now,
+				profile_id = CASE WHEN events.profile_overridden = 1 THEN events.profile_id ELSE @profileId END,
+				profile_overridden = MAX(events.profile_overridden, @profileOverridden)`
 		)
 		.run({
 			calendarId: e.calendarId,
@@ -178,8 +187,46 @@ export function upsertEvent(e: SyncedEvent): void {
 			desc: e.description ? encryptString(e.description) : null,
 			location: e.location ?? null,
 			profileId: e.profileId ?? null,
+			profileOverridden: e.profileOverridden ? 1 : 0,
 			now: Math.floor(Date.now() / 1000)
 		});
+}
+
+/** Manually override which profile a synced event belongs to (phone
+ *  companion) — survives the next sync (see upsertEvent). `null` clears the
+ *  override back to the sync step's own guess / the calendar's default.
+ *  Returns false if no such event. */
+export function setEventProfileOverride(id: number, profileId: number | null): boolean {
+	const info = getDb()
+		.prepare('UPDATE events SET profile_id = ?, profile_overridden = ? WHERE id = ?')
+		.run(profileId, profileId === null ? 0 : 1, id);
+	return info.changes > 0;
+}
+
+/** Snapshot of manually-overridden events among the given calendars, keyed by
+ *  `title|startTs|endTs` (the same dedup key sync.ts groups fetched events
+ *  by) so a full ICS-calendar rebuild (clear + re-insert) can reapply them —
+ *  the row's own id doesn't survive that rebuild, but this key does as long
+ *  as the title/time didn't change. */
+export function getOverriddenProfilesByDedupKey(calendarIds: number[]): Map<string, number> {
+	const out = new Map<string, number>();
+	if (calendarIds.length === 0) return out;
+	const placeholders = calendarIds.map(() => '?').join(',');
+	const rows = getDb()
+		.prepare(
+			`SELECT title, start_ts, end_ts, profile_id FROM events
+			 WHERE calendar_id IN (${placeholders}) AND profile_overridden = 1 AND profile_id IS NOT NULL`
+		)
+		.all(...calendarIds) as Array<{
+		title: string | null;
+		start_ts: number;
+		end_ts: number;
+		profile_id: number;
+	}>;
+	for (const r of rows) {
+		out.set(`${(r.title ?? '').trim().toLowerCase()}|${r.start_ts}|${r.end_ts}`, r.profile_id);
+	}
+	return out;
 }
 
 export interface EventRow {

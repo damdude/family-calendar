@@ -101,8 +101,35 @@
 		};
 	}
 
+	// Synced events (from an external calendar) can't have their title/time
+	// edited here — the next sync would just overwrite that — but WHO it's
+	// for is a local call, so that's the one field reassignable on them.
+	let reassigningEvent = $state<{ id: number; title: string; profileId: number | null } | null>(
+		null
+	);
+	let savingReassign = $state(false);
+	function reassignEvent(profileId: number | null) {
+		if (!reassigningEvent) return;
+		savingReassign = true;
+		fetch('/api/mirror/event-profile', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ token: data.token, id: reassigningEvent.id, profileId })
+		})
+			.then(async (r) => {
+				if (r.ok) {
+					reassigningEvent = null;
+					await invalidateAll();
+				}
+			})
+			.finally(() => (savingReassign = false));
+	}
+
 	function editEvent(e: PageData['events'][number]) {
-		if (e.id < LOCAL_ID_BASE) return; // synced from an external calendar — read-only here
+		if (e.id < LOCAL_ID_BASE) {
+			reassigningEvent = { id: e.id, title: e.title, profileId: e.profileIds[0] ?? null };
+			return;
+		}
 		editingEventId = e.id - LOCAL_ID_BASE;
 		title = e.title;
 		allDay = e.allDay;
@@ -428,7 +455,8 @@
 
 	async function pickLocation(r: LocResult) {
 		locResults = [];
-		locQuery = `${r.name}${r.admin1 ? ', ' + r.admin1 : ''}`;
+		const name = `${r.name}${r.admin1 ? ', ' + r.admin1 : ''}`;
+		locQuery = name;
 		await fetch('/api/mirror/settings', {
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
@@ -436,7 +464,8 @@
 				token: data.token,
 				latitude: r.latitude,
 				longitude: r.longitude,
-				timezone: r.timezone
+				timezone: r.timezone,
+				locationName: name
 			})
 		});
 		locSaved = true;
@@ -1037,6 +1066,48 @@
 				</div>
 			</section>
 
+			{#if reassigningEvent}
+				<section class="card">
+					<div class="sec-head">
+						<h3 class="type-label sec-h">Move "{reassigningEvent.title}" to…</h3>
+						<button
+							type="button"
+							class="iconbtn"
+							aria-label="Cancel"
+							onclick={() => (reassigningEvent = null)}><X size={16} /></button
+						>
+					</div>
+					<p class="type-caption sub">
+						This event is synced from a calendar, so its title and time can't be changed here —
+						but who it's for can.
+					</p>
+					<div class="chips">
+						<button
+							type="button"
+							class="chip"
+							class:on={reassigningEvent.profileId === null}
+							disabled={savingReassign}
+							onclick={() => reassignEvent(null)}>Unassigned</button
+						>
+						{#each data.profiles as p (p.id)}
+							<button
+								type="button"
+								class="chip"
+								class:on={reassigningEvent.profileId === p.id}
+								style:background={reassigningEvent.profileId === p.id
+									? profileTint(p.color, 45)
+									: ''}
+								style:box-shadow={reassigningEvent.profileId === p.id
+									? `inset 0 0 0 2px ${profileColorVar(p.color)}`
+									: ''}
+								disabled={savingReassign}
+								onclick={() => reassignEvent(p.id)}>{p.avatarEmoji} {p.name}</button
+							>
+						{/each}
+					</div>
+				</section>
+			{/if}
+
 			<h2 class="type-label section-h">What's coming up</h2>
 			{#if groups.length === 0}
 				<p class="type-body sub empty">Nothing in the next two weeks.</p>
@@ -1046,13 +1117,7 @@
 						<div class="group">
 							<p class="glabel type-caption">{g.label}</p>
 							{#each g.events as e (e.id)}
-								<button
-									type="button"
-									class="erow"
-									class:editable={e.id >= LOCAL_ID_BASE}
-									disabled={e.id < LOCAL_ID_BASE}
-									onclick={() => editEvent(e)}
-								>
+								<button type="button" class="erow editable" onclick={() => editEvent(e)}>
 									<div class="etime type-caption">
 										{e.allDay
 											? 'All day'
@@ -1841,6 +1906,8 @@
 				{/if}
 				{#if locSaved}
 					<p class="type-caption saved-msg"><Check size={14} strokeWidth={3} /> Location saved</p>
+				{:else if data.locationName}
+					<p class="type-caption sub">Current: {data.locationName} ({data.timezone})</p>
 				{:else if data.latitude !== undefined && data.longitude !== undefined}
 					<p class="type-caption sub">
 						Current: {data.latitude.toFixed(2)}, {data.longitude.toFixed(2)} ({data.timezone})
@@ -2132,9 +2199,6 @@
 	}
 	.erow.editable:active {
 		background: var(--color-surface-elevated);
-	}
-	.erow:disabled {
-		opacity: 1; /* synced (read-only) events look the same, just not tappable */
 	}
 	.etime {
 		flex: none;

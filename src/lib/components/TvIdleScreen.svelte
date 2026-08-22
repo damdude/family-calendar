@@ -14,9 +14,9 @@
 	 */
 	import { mirror } from '$lib/stores/mirror.svelte';
 	import { family } from '$lib/stores/family.svelte';
-	import { formatClock } from '$lib/time';
+	import { formatClock, formatRange, sameDay } from '$lib/time';
 	import Vestaboard from './Vestaboard.svelte';
-	import { Smartphone } from 'lucide-svelte';
+	import { Smartphone, CalendarDays } from 'lucide-svelte';
 
 	// Drift through a small set of offsets so the QR/clock never sits on
 	// exactly the same pixels for too long.
@@ -58,22 +58,51 @@
 	const dateStr = $derived(
 		now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })
 	);
+
+	// Tomorrow's agenda, so a glance at the sleeping screen previews the day
+	// ahead without waking the display up.
+	const tomorrowEvents = $derived.by(() => {
+		const tomorrow = new Date(now);
+		tomorrow.setDate(tomorrow.getDate() + 1);
+		return [...family.data.events]
+			.filter((e) => sameDay(e.start, tomorrow))
+			.sort((a, b) => a.start.getTime() - b.start.getTime())
+			.slice(0, 6);
+	});
 </script>
 
 {#if showFlourish}
 	<Vestaboard />
 {:else}
 	<div class="tvidle" role="status" aria-label="Waiting for a phone to connect">
-		<div class="content" style:transform="translate({pos.x}vmin, {pos.y}vmin)">
-			{#if mirror.qrSvg}
-				<div class="qr">
-					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-					{@html mirror.qrSvg}
+		<div class="layout" style:transform="translate({pos.x}vmin, {pos.y}vmin)">
+			<div class="content">
+				{#if mirror.qrSvg}
+					<div class="qr">
+						<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+						{@html mirror.qrSvg}
+					</div>
+				{/if}
+				<time class="clock">{formatClock(now, clock24)}</time>
+				<p class="date">{dateStr}</p>
+				<p class="hint"><Smartphone size={18} /> Scan to add events, lists and more</p>
+			</div>
+			{#if tomorrowEvents.length}
+				<div class="tomorrow">
+					<p class="tomorrow-head"><CalendarDays size={16} /> Tomorrow</p>
+					{#each tomorrowEvents as e (e.id)}
+						<div class="trow">
+							<span class="ttime"
+								>{e.allDay ? 'All day' : formatRange(e.start, e.end, clock24)}</span
+							>
+							<div class="tbody">
+								<p class="ttitle">{e.title}</p>
+								{#if e.location}<p class="tloc">{e.location}</p>{/if}
+							</div>
+						</div>
+					{/each}
 				</div>
 			{/if}
-			<time class="clock">{formatClock(now, clock24)}</time>
-			<p class="date">{dateStr}</p>
-			<p class="hint"><Smartphone size={18} /> Scan to add events, lists and more</p>
 		</div>
 	</div>
 {/if}
@@ -89,13 +118,67 @@
 		place-items: center;
 		overflow: hidden;
 	}
+	.layout {
+		display: flex;
+		align-items: center;
+		gap: clamp(32px, 6vmin, 96px);
+		transition: transform 3s ease-in-out;
+	}
 	.content {
 		display: flex;
 		flex-direction: column;
 		align-items: center;
 		gap: clamp(12px, 2.5vmin, 28px);
 		text-align: center;
-		transition: transform 3s ease-in-out;
+	}
+	.tomorrow {
+		display: flex;
+		flex-direction: column;
+		gap: clamp(10px, 1.6vmin, 18px);
+		width: clamp(220px, 24vmin, 340px);
+		text-align: left;
+	}
+	.tomorrow-head {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		font-size: clamp(0.85rem, 1.8vmin, 1.15rem);
+		font-weight: 500;
+		opacity: 0.6;
+		margin: 0 0 clamp(4px, 1vmin, 10px);
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+	}
+	.trow {
+		display: flex;
+		gap: clamp(10px, 1.6vmin, 18px);
+	}
+	.ttime {
+		flex: none;
+		width: clamp(70px, 9vmin, 110px);
+		font-size: clamp(0.8rem, 1.6vmin, 1.05rem);
+		font-variant-numeric: tabular-nums;
+		opacity: 0.55;
+		padding-top: 0.15em;
+	}
+	.tbody {
+		min-width: 0;
+	}
+	.ttitle {
+		font-size: clamp(0.9rem, 1.9vmin, 1.2rem);
+		font-weight: 500;
+		margin: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.tloc {
+		font-size: clamp(0.75rem, 1.5vmin, 1rem);
+		opacity: 0.5;
+		margin: 2px 0 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 	.qr {
 		width: clamp(140px, 22vmin, 320px);
@@ -131,7 +214,7 @@
 		margin: 0;
 	}
 	@media (prefers-reduced-motion: reduce) {
-		.content {
+		.layout {
 			transition: none;
 		}
 	}

@@ -51,6 +51,7 @@ export const load: PageServerLoad = async ({ url }) => {
 		latitude: config.family.latitude,
 		longitude: config.family.longitude,
 		timezone: config.family.timezone,
+		locationName: config.family.locationName,
 		sleepStart: config.app.sleep.start,
 		sleepEnd: config.app.sleep.end,
 		sleepEnabled: config.app.sleep.enabled,

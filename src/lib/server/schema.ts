@@ -51,7 +51,11 @@ const PersistedFamilySchema = z.object({
 	// Optional — drives the sunrise/sunset calculation for the auto light/dark
 	// theme. Falls back to a reasonable default (src/lib/sun.ts) when unset.
 	latitude: z.number().min(-90).max(90).optional(),
-	longitude: z.number().min(-180).max(180).optional()
+	longitude: z.number().min(-180).max(180).optional(),
+	// Human-readable "City, State" from the location picker's geocoding
+	// result — display only, never used for calculation (latitude/longitude
+	// are the source of truth for sunrise/sunset).
+	locationName: z.string().max(120).optional()
 });
 
 // --- Persisted app config ---

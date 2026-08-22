@@ -12,6 +12,7 @@ import {
 	clearCalendarEvents,
 	getCalendars,
 	getOAuthToken,
+	getOverriddenProfilesByDedupKey,
 	saveOAuthToken,
 	setCalendarSynced,
 	upsertCalendar,
@@ -163,17 +164,25 @@ export async function syncIcal(): Promise<number> {
 		else groups.set(key, [f]);
 	}
 
+	// A manual phone reassignment (setEventProfileOverride) lives on a row
+	// that's about to be deleted and re-inserted below — id-based upsertEvent
+	// preservation (the profile_overridden CASE) can't help here since there's
+	// no existing row left to reference by the time it runs. Snapshot by
+	// dedup key first so it can be reapplied after the rebuild.
+	const overrides = getOverriddenProfilesByDedupKey(okCals.map((c) => c.id));
+
 	for (const cal of okCals) clearCalendarEvents(cal.id);
 
 	let count = 0;
-	for (const group of groups.values()) {
+	for (const [key, group] of groups) {
 		// Only collapse a "duplicate" when it actually spans more than one
 		// calendar — that's the invite-copy scenario. Two same-titled,
 		// same-timed entries within a single feed are left alone rather than
 		// risking silently dropping a genuinely separate event.
 		const spansCalendars = new Set(group.map((g) => g.cal.id)).size > 1;
 		const toStore = spansCalendars ? [group[0]] : group;
-		const profileId = spansCalendars ? resolveProfileId(group, profiles) : undefined;
+		const autoProfileId = spansCalendars ? resolveProfileId(group, profiles) : undefined;
+		const override = overrides.get(key);
 
 		for (const { cal, e } of toStore) {
 			upsertEvent({
@@ -185,7 +194,8 @@ export async function syncIcal(): Promise<number> {
 				title: e.title,
 				description: e.description,
 				location: e.location,
-				profileId: profileId ?? cal.profileId ?? undefined
+				profileId: override ?? autoProfileId ?? cal.profileId ?? undefined,
+				profileOverridden: override !== undefined
 			});
 			count += 1;
 		}

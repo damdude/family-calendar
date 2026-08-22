@@ -71,5 +71,18 @@ export const migrations: Migration[] = [
 			-- calendar happened to be picked for storage.
 			ALTER TABLE events ADD COLUMN profile_id INTEGER;
 		`
+	},
+	{
+		version: 3,
+		name: 'event_profile_overridden_flag',
+		sql: `
+			-- Distinguishes a MANUAL profile reassignment (phone companion) from
+			-- profile_id merely holding the sync step's own dedup guess — without
+			-- this flag, upsertEvent had no way to tell the two apart, so the
+			-- next sync (every 15 min) always overwrote a manual reassignment
+			-- with its own guess. Once set, upsertEvent leaves profile_id alone
+			-- until explicitly cleared.
+			ALTER TABLE events ADD COLUMN profile_overridden INTEGER NOT NULL DEFAULT 0;
+		`
 	}
 ];
