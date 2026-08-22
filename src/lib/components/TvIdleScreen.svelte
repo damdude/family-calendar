@@ -18,6 +18,15 @@
 	import Vestaboard from './Vestaboard.svelte';
 	import { Smartphone, CalendarDays } from 'lucide-svelte';
 
+	// Redundant with PhoneMirrorPanel's own ensureQr() call — that component
+	// is unmounted while this screen shows, so if its fetch happened to fail
+	// (e.g. a deploy's restart landed mid-request) nothing else was ever
+	// re-triggering it, leaving THE most QR-dependent screen on the device
+	// permanently without one. ensureQr() itself is a no-op once qrSvg is set.
+	$effect(() => {
+		mirror.ensureQr();
+	});
+
 	// Drift through a small set of offsets so the QR/clock never sits on
 	// exactly the same pixels for too long.
 	const POSITIONS = [

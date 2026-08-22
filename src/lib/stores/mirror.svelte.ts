@@ -63,22 +63,36 @@ class MirrorControl {
 	/** Fetch the pairing QR once per display session (idempotent — safe to
 	 *  call from every place that wants to show it). Re-issuing would orphan
 	 *  a phone that already scanned the current one, so this never re-fetches
-	 *  once a QR exists. */
+	 *  once a QR exists.
+	 *
+	 *  Retries on failure instead of giving up silently: this is only ever
+	 *  triggered by a component's mount effect (PhoneMirrorPanel, and
+	 *  TvIdleScreen as a redundant safety net below), so a single failed
+	 *  fetch — e.g. one that happened to land in the few seconds a deploy's
+	 *  `systemctl restart` was cycling the server — used to leave qrSvg empty
+	 *  for the rest of that browser session: nothing else ever calls this
+	 *  again once the component that first did is unmounted (e.g. the TV
+	 *  going idle swaps PhoneMirrorPanel out for TvIdleScreen), so the kiosk
+	 *  was stuck showing the idle screen with no QR until someone manually
+	 *  reloaded it. Confirmed as the cause of exactly that on-device. */
 	async ensureQr() {
 		if (this.qrSvg || this.qrLoading) return;
 		this.qrLoading = true;
 		try {
 			const r = await fetch('/api/mirror/start', { method: 'POST' });
-			if (!r.ok) return;
+			if (!r.ok) throw new Error(`mirror/start ${r.status}`);
 			const d = await r.json();
 			this.qrSvg = d.qrSvg;
 			this.qrUrl = d.url;
 			this.becomeDisplay(d.token);
 		} catch {
-			/* offline — no QR to show; next call retries */
-		} finally {
-			this.qrLoading = false;
+			setTimeout(() => {
+				this.qrLoading = false;
+				this.ensureQr();
+			}, 15_000);
+			return;
 		}
+		this.qrLoading = false;
 	}
 
 	/** This device (a scanned phone) becomes the controller. */
