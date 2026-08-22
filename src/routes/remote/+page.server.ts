@@ -68,6 +68,10 @@ export const load: PageServerLoad = async ({ url }) => {
 		lists: familyData?.lists ?? [],
 		tasks: familyData?.tasks ?? [],
 		meals: familyData?.meals ?? [],
-		recipes: familyData?.recipes ?? []
+		recipes: familyData?.recipes ?? [],
+		// Full config, for the phone Settings tab's advanced sections (features,
+		// orientation, routines, updates, parental lock, …) — those are posted
+		// back wholesale to /api/config, same as the desktop Settings page.
+		config
 	};
 };

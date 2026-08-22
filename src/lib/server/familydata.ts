@@ -126,6 +126,7 @@ export type LocalEventInput = z.infer<typeof LocalEventSchema>;
 export type TaskInput = z.infer<typeof TaskSchema>;
 export type MealInput = z.infer<typeof MealSchema>;
 export type RecipeInput = z.infer<typeof RecipeSchema>;
+export type ListInput = z.infer<typeof ListSchema>;
 
 function emptyData(): FamilyDataPersist {
 	return {
@@ -167,6 +168,55 @@ export async function appendListItem(listId: number, text: string): Promise<bool
 	if (!list) return false;
 	const id = list.items.reduce((m, x) => Math.max(m, x.id), 0) + 1;
 	list.items.push({ id, text, completed: false });
+	await saveFamilyData(data);
+	return true;
+}
+
+/** Replace an existing local event's fields (phone companion edit). Returns
+ *  false if no such event. */
+export async function updateLocalEvent(
+	id: number,
+	e: Omit<LocalEventInput, 'id'>
+): Promise<boolean> {
+	const data = (await loadFamilyData()) ?? emptyData();
+	const i = data.localEvents.findIndex((x) => x.id === id);
+	if (i < 0) return false;
+	data.localEvents[i] = LocalEventSchema.parse({ ...e, id });
+	await saveFamilyData(data);
+	return true;
+}
+
+/** Remove a local event by id (phone companion). Returns false if no such
+ *  event. */
+export async function removeLocalEvent(id: number): Promise<boolean> {
+	const data = (await loadFamilyData()) ?? emptyData();
+	const i = data.localEvents.findIndex((x) => x.id === id);
+	if (i < 0) return false;
+	data.localEvents.splice(i, 1);
+	await saveFamilyData(data);
+	return true;
+}
+
+/** Create a new list (phone companion). Assigns an id. */
+export async function addList(
+	name: string,
+	kind: ListInput['kind'],
+	icon: string
+): Promise<ListInput> {
+	const data = (await loadFamilyData()) ?? emptyData();
+	const id = data.lists.reduce((m, x) => Math.max(m, x.id), 0) + 1;
+	const list = ListSchema.parse({ id, name, kind, icon, items: [] });
+	data.lists.push(list);
+	await saveFamilyData(data);
+	return list;
+}
+
+/** Remove a task by id (phone companion). Returns false if no such task. */
+export async function removeTask(id: number): Promise<boolean> {
+	const data = (await loadFamilyData()) ?? emptyData();
+	const i = data.tasks.findIndex((t) => t.id === id);
+	if (i < 0) return false;
+	data.tasks.splice(i, 1);
 	await saveFamilyData(data);
 	return true;
 }

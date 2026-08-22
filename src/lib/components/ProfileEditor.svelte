@@ -3,6 +3,7 @@
 	import type { Profile, ProfileColor } from '$lib/types';
 	import { PROFILE_COLORS, profileColorVar } from '$lib/design/colors';
 	import { AVATAR_CHOICES } from '$lib/setup/types';
+	import { ageFromDOB } from '$lib/time';
 	import Avatar from './Avatar.svelte';
 	import { Camera, X, Plus } from 'lucide-svelte';
 
@@ -48,15 +49,15 @@
 
 	// Add-person form
 	let newName = $state('');
-	let newAge = $state<number | null>(null);
+	let newDob = $state('');
 	let newColor = $state<ProfileColor>('pink');
 	let newAvatar = $state<string>(AVATAR_CHOICES[0]);
 
 	function addProfile() {
 		const name = newName.trim();
-		if (!name || newAge === null) return;
+		if (!name || !newDob) return;
 		const id = family.data.profiles.reduce((m, p) => Math.max(m, p.id), 0) + 1;
-		const age = Number(newAge);
+		const age = ageFromDOB(newDob);
 		family.data.profiles.push({
 			id,
 			name,
@@ -69,7 +70,7 @@
 		// Give kids sensible starter routines from the age library.
 		family.seedRoutinesForProfile(id, age);
 		newName = '';
-		newAge = null;
+		newDob = '';
 		onChange();
 	}
 </script>
@@ -112,7 +113,7 @@
 
 	<div class="addrow">
 		<input class="name" type="text" placeholder="Name" bind:value={newName} maxlength="40" />
-		<input class="age" type="number" placeholder="Age" min="0" max="120" bind:value={newAge} />
+		<input class="age" type="date" placeholder="Date of birth" bind:value={newDob} />
 		<div class="swatches">
 			{#each PROFILE_COLORS as c (c)}
 				<button
@@ -125,12 +126,7 @@
 				></button>
 			{/each}
 		</div>
-		<button
-			type="button"
-			class="add"
-			disabled={!newName.trim() || newAge === null}
-			onclick={addProfile}
-		>
+		<button type="button" class="add" disabled={!newName.trim() || !newDob} onclick={addProfile}>
 			<Plus size={16} /> Add
 		</button>
 	</div>
@@ -221,7 +217,7 @@
 		min-width: 120px;
 	}
 	.age {
-		width: 80px;
+		width: 148px;
 		padding: 8px 12px;
 		border-radius: var(--radius-sm);
 		border: 1px solid var(--color-border-subtle);

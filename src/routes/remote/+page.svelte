@@ -5,8 +5,12 @@
 	import { profileColorVar, profileTint, PROFILE_COLORS } from '$lib/design/colors';
 	import { AVATAR_CHOICES } from '$lib/setup/types';
 	import { autoEmojiFor } from '$lib/meals';
-	import { formatRange } from '$lib/time';
+	import { formatRange, ageFromDOB } from '$lib/time';
 	import Avatar from '$lib/components/Avatar.svelte';
+	import GoogleConnect from '$lib/components/GoogleConnect.svelte';
+	import StoragePanel from '$lib/components/StoragePanel.svelte';
+	import { routinesOn } from '$lib/types';
+	import type { FeatureFlags } from '$lib/config';
 	import {
 		Check,
 		Plus,
@@ -20,7 +24,10 @@
 		Pencil,
 		X,
 		UtensilsCrossed,
-		BookOpen
+		BookOpen,
+		Wifi,
+		RefreshCw,
+		Link as LinkIcon
 	} from 'lucide-svelte';
 	import type { ProfileColor } from '$lib/types';
 	import type { PageData } from './$types';
@@ -57,7 +64,11 @@
 		stopped = true;
 	}
 
-	// --- Calendar: add event ---
+	// --- Calendar: add/edit event ---
+	// Local events are offset by this on the server (src/routes/remote/+page.server.ts)
+	// so they never collide with synced-calendar ids in the merged agenda list.
+	// Only ids at/above this offset are ours to edit or delete.
+	const LOCAL_ID_BASE = 1_000_000;
 	function pad(n: number) {
 		return String(n).padStart(2, '0');
 	}
@@ -72,6 +83,7 @@
 	let savingEvent = $state(false);
 	let eventAdded = $state(false);
 	let eventError = $state('');
+	let editingEventId = $state<number | null>(null); // raw local id (no LOCAL_ID_BASE offset), null = adding new
 
 	function toggleProfile(id: number) {
 		profileIds = profileIds.includes(id) ? profileIds.filter((x) => x !== id) : [...profileIds, id];
@@ -80,6 +92,39 @@
 		const [y, m, day] = d.split('-').map(Number);
 		const [hh, mm] = t.split(':').map(Number);
 		return Math.floor(new Date(y, m - 1, day, hh, mm).getTime() / 1000);
+	}
+	function fromTs(t: number): { date: string; time: string } {
+		const d = new Date(t * 1000);
+		return {
+			date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
+			time: `${pad(d.getHours())}:${pad(d.getMinutes())}`
+		};
+	}
+
+	function editEvent(e: PageData['events'][number]) {
+		if (e.id < LOCAL_ID_BASE) return; // synced from an external calendar — read-only here
+		editingEventId = e.id - LOCAL_ID_BASE;
+		title = e.title;
+		allDay = e.allDay;
+		const s = fromTs(e.startTs);
+		const en = fromTs(e.endTs);
+		date = s.date;
+		startTime = s.time;
+		endTime = en.time;
+		location = e.location ?? '';
+		profileIds = [...e.profileIds];
+		eventError = '';
+	}
+	function cancelEventForm() {
+		editingEventId = null;
+		title = '';
+		location = '';
+		profileIds = [];
+		allDay = false;
+		date = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+		startTime = `${pad(now.getHours())}:00`;
+		endTime = `${pad(now.getHours() + 1)}:00`;
+		eventError = '';
 	}
 
 	async function addEvent() {
@@ -106,6 +151,7 @@
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({
 					token: data.token,
+					id: editingEventId ?? undefined,
 					title: title.trim(),
 					startTs,
 					endTs,
@@ -115,15 +161,31 @@
 				})
 			});
 			if (r.ok) {
+				const wasEdit = editingEventId !== null;
 				eventAdded = true;
-				title = '';
-				location = '';
-				profileIds = [];
+				cancelEventForm();
 				await invalidateAll(); // pull the fresh event into "What's coming up"
-				setTimeout(() => (eventAdded = false), 2500);
+				if (!wasEdit) setTimeout(() => (eventAdded = false), 2500);
+				else eventAdded = false;
 			} else {
-				eventError = (await r.json().catch(() => ({})))?.message ?? 'Could not add.';
+				eventError = (await r.json().catch(() => ({})))?.message ?? 'Could not save.';
 			}
+		} finally {
+			savingEvent = false;
+		}
+	}
+
+	async function removeEvent() {
+		if (editingEventId === null) return;
+		savingEvent = true;
+		try {
+			await fetch('/api/mirror/event-remove', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ token: data.token, id: editingEventId })
+			});
+			cancelEventForm();
+			await invalidateAll();
 		} finally {
 			savingEvent = false;
 		}
@@ -189,6 +251,35 @@
 		}
 	}
 
+	const LIST_KIND_ICON: Record<'grocery' | 'todo' | 'packing' | 'custom', string> = {
+		grocery: '🛒',
+		todo: '✅',
+		packing: '🧳',
+		custom: '📋'
+	};
+	let newListOpen = $state(false);
+	let newListName = $state('');
+	let newListKind = $state<'grocery' | 'todo' | 'packing' | 'custom'>('todo');
+	let savingList = $state(false);
+	async function createList() {
+		const name = newListName.trim();
+		if (!name) return;
+		savingList = true;
+		try {
+			await fetch('/api/mirror/list', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ token: data.token, name, kind: newListKind, icon: LIST_KIND_ICON[newListKind] })
+			});
+			newListName = '';
+			newListKind = 'todo';
+			newListOpen = false;
+			await invalidateAll();
+		} finally {
+			savingList = false;
+		}
+	}
+
 	// --- Tasks ---
 	let newTaskText = $state('');
 	let taskProfileId = $state<number | ''>('');
@@ -224,6 +315,17 @@
 			await invalidateAll();
 		} finally {
 			savingTask = false;
+		}
+	}
+	async function removeTask(id: number) {
+		try {
+			await fetch('/api/mirror/task-remove', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ token: data.token, id })
+			});
+		} finally {
+			await invalidateAll();
 		}
 	}
 	const openTasks = $derived(data.tasks.filter((t) => !t.done));
@@ -346,17 +448,18 @@
 	let editingProfileId = $state<number | null>(null);
 	let addingProfile = $state(false);
 	let profName = $state('');
-	let profAge = $state<number | ''>('');
+	let profDob = $state('');
 	let profColor = $state<ProfileColor>('pink');
 	let profAvatar = $state<string>(AVATAR_CHOICES[0]);
 	let savingProfile = $state(false);
 	let profileFormError = $state('');
+	const profAgePreview = $derived(profDob ? ageFromDOB(profDob) : null);
 
 	function startNewProfile() {
 		editingProfileId = null;
 		addingProfile = true;
 		profName = '';
-		profAge = '';
+		profDob = '';
 		profColor = 'pink';
 		profAvatar = AVATAR_CHOICES[0];
 		profileFormError = '';
@@ -365,7 +468,10 @@
 		editingProfileId = p.id;
 		addingProfile = true;
 		profName = p.name;
-		profAge = p.age;
+		// Only age is persisted, not a real birth date — approximate one (Jan 1
+		// of the birth year) so the picker has a sane starting point; editing
+		// this recalculates age same as a fresh add.
+		profDob = `${new Date().getFullYear() - p.age}-01-01`;
 		profColor = p.color as ProfileColor;
 		profAvatar = p.avatarEmoji;
 		profileFormError = '';
@@ -376,8 +482,8 @@
 	}
 	async function saveProfile() {
 		const name = profName.trim();
-		if (!name || profAge === '') {
-			profileFormError = 'Add a name and age.';
+		if (!name || !profDob) {
+			profileFormError = 'Add a name and date of birth.';
 			return;
 		}
 		savingProfile = true;
@@ -390,7 +496,7 @@
 					token: data.token,
 					id: editingProfileId ?? undefined,
 					name,
-					age: Number(profAge),
+					age: ageFromDOB(profDob),
 					color: profColor,
 					avatarEmoji: profAvatar
 				})
@@ -537,6 +643,244 @@
 		if (expandedRecipeId === id) expandedRecipeId = null;
 		await invalidateAll();
 	}
+
+	// --- Settings: advanced (full config, posted wholesale — same as desktop) ---
+	let cfg = $state(structuredClone(data.config));
+	let cfgSaveTimer: ReturnType<typeof setTimeout>;
+	let cfgSaved = $state(false);
+	function persistCfg() {
+		clearTimeout(cfgSaveTimer);
+		cfgSaveTimer = setTimeout(async () => {
+			try {
+				await fetch('/api/config', {
+					method: 'POST',
+					headers: { 'content-type': 'application/json' },
+					body: JSON.stringify(cfg)
+				});
+				cfgSaved = true;
+				setTimeout(() => (cfgSaved = false), 1400);
+			} catch {
+				/* offline; will re-save on next change */
+			}
+		}, 400);
+	}
+
+	const featureLabels: Record<keyof FeatureFlags, string> = {
+		calendar: 'Calendar',
+		lists: 'Lists',
+		tasks: 'Tasks',
+		rewards: 'Rewards',
+		meals: 'Meal planning',
+		recipes: 'Recipes',
+		photos: 'Photos',
+		sleep: 'Sleep mode',
+		routines: 'Kid routines',
+		feelings: "Today's Feelings",
+		sitesOfInterest: 'Sites of Interest'
+	};
+	const featureKeys = Object.keys(featureLabels) as (keyof FeatureFlags)[];
+	function toggleFeature(k: keyof FeatureFlags) {
+		cfg.app.features[k] = !cfg.app.features[k];
+		persistCfg();
+	}
+
+	async function setDisplayMode(mode: 'tv' | 'touch') {
+		cfg.displayMode = mode;
+		await fetch('/api/display-mode', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ displayMode: mode })
+		}).catch(() => {});
+	}
+
+	// --- Settings: Wi-Fi (native inputs — no on-screen keyboard needed on a phone) ---
+	interface WifiNetwork {
+		ssid: string;
+		signal: number;
+		secured: boolean;
+		active: boolean;
+	}
+	let wifiStatus = $state<{ online: boolean; ssid: string | null } | null>(null);
+	let wifiOpen = $state(false);
+	let wifiNetworks = $state<WifiNetwork[]>([]);
+	let wifiScanning = $state(false);
+	let wifiSelected = $state<WifiNetwork | null>(null);
+	let wifiPassword = $state('');
+	let wifiJoining = $state(false);
+	let wifiError = $state('');
+	async function loadWifiStatus() {
+		try {
+			const r = await fetch('/api/net/status');
+			if (r.ok) wifiStatus = await r.json();
+		} catch {
+			/* keep last known state */
+		}
+	}
+	async function scanWifi() {
+		wifiScanning = true;
+		wifiError = '';
+		try {
+			const r = await fetch('/api/net/wifi/scan');
+			if (r.ok) wifiNetworks = (await r.json()).networks ?? [];
+		} catch {
+			wifiError = "Couldn't scan for networks.";
+		} finally {
+			wifiScanning = false;
+		}
+	}
+	async function joinWifi() {
+		if (!wifiSelected) return;
+		wifiJoining = true;
+		wifiError = '';
+		try {
+			const r = await fetch('/api/net/wifi/join', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ ssid: wifiSelected.ssid, password: wifiPassword })
+			});
+			const res = await r.json();
+			if (res.ok) {
+				wifiOpen = false;
+				wifiSelected = null;
+				wifiPassword = '';
+				await loadWifiStatus();
+			} else {
+				wifiError = res.message ?? 'Could not join that network.';
+			}
+		} catch {
+			wifiError = 'Could not join that network.';
+		} finally {
+			wifiJoining = false;
+		}
+	}
+
+	// --- Settings: calendars (subscribe by iCal/webcal link) ---
+	interface CalendarLink {
+		id: number;
+		name: string;
+		externalId: string;
+		profileId?: number;
+	}
+	let calendars = $state<CalendarLink[]>([]);
+	let calLoaded = $state(false);
+	let calUrl = $state('');
+	let calName = $state('');
+	let calProfileId = $state<number | ''>('');
+	let savingCal = $state(false);
+	let calError = $state('');
+	async function loadCalendars() {
+		try {
+			const r = await fetch('/api/calendars');
+			if (r.ok) calendars = await r.json();
+			calLoaded = true;
+		} catch {
+			/* keep last known list */
+		}
+	}
+	async function addCalendar() {
+		const url = calUrl.trim();
+		if (!url) return;
+		savingCal = true;
+		calError = '';
+		try {
+			const r = await fetch('/api/calendars', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({
+					url,
+					name: calName.trim(),
+					profileId: calProfileId === '' ? undefined : Number(calProfileId)
+				})
+			});
+			if (r.ok) {
+				calUrl = '';
+				calName = '';
+				calProfileId = '';
+				await loadCalendars();
+			} else {
+				calError = (await r.json().catch(() => ({})))?.message ?? 'Could not add that calendar.';
+			}
+		} finally {
+			savingCal = false;
+		}
+	}
+
+	// --- Settings: software updates ---
+	let updateVersion = $state<{ commit: string; dirty: boolean } | null>(null);
+	let checkingUpdate = $state(false);
+	let updateMsg = $state('');
+	async function loadUpdateVersion() {
+		try {
+			const r = await fetch('/api/update');
+			if (r.ok) updateVersion = await r.json();
+		} catch {
+			/* keep last known */
+		}
+	}
+	async function checkUpdates() {
+		checkingUpdate = true;
+		updateMsg = '';
+		try {
+			const r = await fetch('/api/update', { method: 'POST' });
+			updateMsg = r.ok ? 'Checking for updates…' : 'Could not start update check.';
+		} finally {
+			checkingUpdate = false;
+		}
+	}
+
+	// --- Settings: parental lock ---
+	let pinSet = $state(false);
+	let showPinForm = $state(false);
+	let newPin = $state('');
+	let currentPin = $state('');
+	let pinMsg = $state('');
+	async function loadPinStatus() {
+		try {
+			const r = await fetch('/api/pin');
+			if (r.ok) pinSet = (await r.json())?.pinSet ?? false;
+		} catch {
+			/* keep last known */
+		}
+	}
+	async function savePin() {
+		pinMsg = '';
+		const r = await fetch('/api/pin', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ pin: newPin, current: currentPin || undefined })
+		});
+		if (r.ok) {
+			pinSet = true;
+			showPinForm = false;
+			newPin = '';
+			currentPin = '';
+			pinMsg = 'PIN saved.';
+		} else {
+			pinMsg = (await r.json().catch(() => ({})))?.message ?? 'Could not save PIN.';
+		}
+	}
+	function toggleParentalLock() {
+		if (!cfg.app.kiosk.parentalLock && !pinSet) {
+			showPinForm = true;
+			pinMsg = 'Set a PIN first to enable the lock.';
+			return;
+		}
+		cfg.app.kiosk.parentalLock = !cfg.app.kiosk.parentalLock;
+		persistCfg();
+	}
+
+	let settingsExtrasLoaded = $state(false);
+	function loadSettingsExtras() {
+		if (settingsExtrasLoaded) return;
+		settingsExtrasLoaded = true;
+		loadWifiStatus();
+		loadCalendars();
+		loadUpdateVersion();
+		loadPinStatus();
+	}
+	$effect(() => {
+		if (tab === 'settings') loadSettingsExtras();
+	});
 </script>
 
 <svelte:head>
@@ -583,6 +927,14 @@
 
 		{#if tab === 'calendar'}
 			<section class="card">
+				<div class="sec-head">
+					<h3 class="type-label sec-h">{editingEventId !== null ? 'Edit event' : 'New event'}</h3>
+					{#if editingEventId !== null}
+						<button type="button" class="iconbtn" aria-label="Cancel" onclick={cancelEventForm}
+							><X size={16} /></button
+						>
+					{/if}
+				</div>
 				<label class="field">
 					<span class="type-label lbl">Title</span>
 					<input
@@ -658,11 +1010,31 @@
 				</label>
 
 				{#if eventError}<p class="type-caption err">{eventError}</p>{/if}
-				<button type="button" class="btn primary" disabled={savingEvent} onclick={addEvent}>
-					{#if eventAdded}<Check size={18} /> Added{:else}<Plus size={18} />{savingEvent
-							? 'Adding…'
-							: 'Add event'}{/if}
-				</button>
+				<div class="row">
+					<button
+						type="button"
+						class="btn primary grow"
+						disabled={savingEvent}
+						onclick={addEvent}
+					>
+						{#if eventAdded}<Check size={18} /> {editingEventId !== null
+								? 'Saved'
+								: 'Added'}{:else}<Plus size={18} />{savingEvent
+								? 'Saving…'
+								: editingEventId !== null
+									? 'Save changes'
+									: 'Add event'}{/if}
+					</button>
+					{#if editingEventId !== null}
+						<button
+							type="button"
+							class="iconbtn danger"
+							aria-label="Delete event"
+							disabled={savingEvent}
+							onclick={removeEvent}><Trash2 size={16} /></button
+						>
+					{/if}
+				</div>
 			</section>
 
 			<h2 class="type-label section-h">What's coming up</h2>
@@ -674,7 +1046,13 @@
 						<div class="group">
 							<p class="glabel type-caption">{g.label}</p>
 							{#each g.events as e (e.id)}
-								<div class="erow">
+								<button
+									type="button"
+									class="erow"
+									class:editable={e.id >= LOCAL_ID_BASE}
+									disabled={e.id < LOCAL_ID_BASE}
+									onclick={() => editEvent(e)}
+								>
 									<div class="etime type-caption">
 										{e.allDay
 											? 'All day'
@@ -691,7 +1069,7 @@
 											{/each}
 										</div>
 									{/if}
-								</div>
+								</button>
 							{/each}
 						</div>
 					{/each}
@@ -700,9 +1078,60 @@
 		{/if}
 
 		{#if tab === 'lists'}
-			{#if data.lists.length === 0}
-				<p class="type-body sub empty">No lists yet — create one on the display.</p>
+			{#if data.lists.length === 0 && !newListOpen}
+				<p class="type-body sub empty">No lists yet.</p>
+			{/if}
+			{#if !newListOpen}
+				<button type="button" class="btn secondary" onclick={() => (newListOpen = true)}>
+					<Plus size={16} /> New list
+				</button>
 			{:else}
+				<section class="card">
+					<div class="sec-head">
+						<h3 class="type-label sec-h">New list</h3>
+						<button
+							type="button"
+							class="iconbtn"
+							aria-label="Cancel"
+							onclick={() => (newListOpen = false)}><X size={16} /></button
+						>
+					</div>
+					<label class="field">
+						<span class="type-label lbl">Name</span>
+						<input
+							class="in"
+							type="text"
+							placeholder="e.g. Camping packing list"
+							bind:value={newListName}
+							maxlength="60"
+							onkeydown={(e) => e.key === 'Enter' && createList()}
+						/>
+					</label>
+					<div class="field">
+						<span class="type-label lbl">Type</span>
+						<div class="chips">
+							{#each Object.entries(LIST_KIND_ICON) as [kind, icon] (kind)}
+								<button
+									type="button"
+									class="chip"
+									class:on={newListKind === kind}
+									onclick={() => (newListKind = kind as typeof newListKind)}
+									>{icon} {kind}</button
+								>
+							{/each}
+						</div>
+					</div>
+					<button
+						type="button"
+						class="btn primary"
+						disabled={!newListName.trim() || savingList}
+						onclick={createList}
+					>
+						<Plus size={18} />{savingList ? 'Creating…' : 'Create list'}
+					</button>
+				</section>
+			{/if}
+			{#if data.lists.length > 0}
 				{#each data.lists as list (list.id)}
 					<section class="card">
 						<h2 class="type-label listname"><span>{list.icon}</span> {list.name}</h2>
@@ -795,12 +1224,21 @@
 					{#if openTasks.length}
 						<div class="items">
 							{#each openTasks as t (t.id)}
-								<button type="button" class="itemrow" onclick={() => toggleTask(t.id)}>
-									<span class="check"></span>
-									<span class="itext type-body">{t.text}</span>
-									{#if t.profileId}<span class="tfor type-caption">{profileName(t.profileId)}</span
-										>{/if}
-								</button>
+								<div class="itemrow taskrow">
+									<button type="button" class="itemtoggle" onclick={() => toggleTask(t.id)}>
+										<span class="check"></span>
+										<span class="itext type-body">{t.text}</span>
+										{#if t.profileId}<span class="tfor type-caption"
+												>{profileName(t.profileId)}</span
+											>{/if}
+									</button>
+									<button
+										type="button"
+										class="iconbtn danger"
+										aria-label="Delete task"
+										onclick={() => removeTask(t.id)}><Trash2 size={15} /></button
+									>
+								</div>
 							{/each}
 						</div>
 					{/if}
@@ -808,10 +1246,18 @@
 						<p class="type-caption glabel donelabel">Done</p>
 						<div class="items">
 							{#each doneTasks as t (t.id)}
-								<button type="button" class="itemrow done" onclick={() => toggleTask(t.id)}>
-									<span class="check on"><Check size={14} strokeWidth={3} /></span>
-									<span class="itext type-body">{t.text}</span>
-								</button>
+								<div class="itemrow taskrow done">
+									<button type="button" class="itemtoggle" onclick={() => toggleTask(t.id)}>
+										<span class="check on"><Check size={14} strokeWidth={3} /></span>
+										<span class="itext type-body">{t.text}</span>
+									</button>
+									<button
+										type="button"
+										class="iconbtn danger"
+										aria-label="Delete task"
+										onclick={() => removeTask(t.id)}><Trash2 size={15} /></button
+									>
+								</div>
 							{/each}
 						</div>
 					{/if}
@@ -956,6 +1402,121 @@
 			</section>
 
 			<section class="card">
+				<div class="sec-head">
+					<h2 class="type-label sec-h">Wi-Fi</h2>
+					<p class="type-caption sub">
+						{#if wifiStatus === null}Checking…{:else if wifiStatus.online}Connected{wifiStatus.ssid
+								? ` to "${wifiStatus.ssid}"`
+								: ''}.{:else}Not connected.{/if}
+					</p>
+				</div>
+				{#if !wifiOpen}
+					<button
+						type="button"
+						class="btn secondary"
+						onclick={() => {
+							wifiOpen = true;
+							scanWifi();
+						}}
+					>
+						<Wifi size={16} />{wifiStatus?.online ? 'Change network' : 'Connect to Wi-Fi'}
+					</button>
+				{:else if wifiSelected}
+					<div class="field">
+						<span class="type-label lbl"
+							>{wifiSelected.secured ? 'Password for' : 'Join'} "{wifiSelected.ssid}"</span
+						>
+						{#if wifiSelected.secured}
+							<input class="in" type="password" bind:value={wifiPassword} placeholder="Wi-Fi password" />
+						{/if}
+					</div>
+					{#if wifiError}<p class="type-caption err">{wifiError}</p>{/if}
+					<div class="row">
+						<button
+							type="button"
+							class="btn primary grow"
+							disabled={wifiJoining}
+							onclick={joinWifi}
+						>
+							{wifiJoining ? 'Joining…' : 'Join'}
+						</button>
+						<button
+							type="button"
+							class="iconbtn"
+							aria-label="Cancel"
+							onclick={() => {
+								wifiSelected = null;
+								wifiPassword = '';
+							}}><X size={16} /></button
+						>
+					</div>
+				{:else}
+					<div class="row">
+						<span class="type-caption sub grow">{wifiScanning ? 'Scanning…' : 'Nearby networks'}</span>
+						<button type="button" class="iconbtn" aria-label="Rescan" onclick={scanWifi}
+							><RefreshCw size={15} /></button
+						>
+					</div>
+					{#if wifiNetworks.length}
+						<div class="items">
+							{#each wifiNetworks as n (n.ssid)}
+								<button
+									type="button"
+									class="itemrow"
+									onclick={() => {
+										wifiSelected = n;
+										wifiPassword = '';
+									}}
+								>
+									<span class="itext type-body">{n.ssid}{n.active ? ' (current)' : ''}</span>
+									{#if n.secured}<span class="tfor type-caption">🔒</span>{/if}
+								</button>
+							{/each}
+						</div>
+					{/if}
+					{#if wifiError}<p class="type-caption err">{wifiError}</p>{/if}
+					<button type="button" class="iconbtn cancel-text" onclick={() => (wifiOpen = false)}
+						>Cancel</button
+					>
+				{/if}
+			</section>
+
+			<section class="card">
+				<h2 class="type-label sec-h">Screen type</h2>
+				<div class="chips">
+					<button
+						type="button"
+						class="chip"
+						class:on={(cfg.displayMode ?? 'tv') === 'tv'}
+						onclick={() => setDisplayMode('tv')}>TV / Monitor</button
+					>
+					<button
+						type="button"
+						class="chip"
+						class:on={cfg.displayMode === 'touch'}
+						onclick={() => setDisplayMode('touch')}>Touchscreen</button
+					>
+				</div>
+			</section>
+
+			<section class="card">
+				<h2 class="type-label sec-h">Display orientation</h2>
+				<div class="chips">
+					{#each [{ v: 'auto', label: 'Auto' }, { v: 'landscape', label: 'Landscape' }, { v: 'portrait', label: 'Portrait' }] as opt (opt.v)}
+						<button
+							type="button"
+							class="chip"
+							class:on={cfg.app.view.orientation === opt.v}
+							onclick={() => {
+								cfg.app.view.orientation = opt.v as 'auto' | 'landscape' | 'portrait';
+								persistCfg();
+							}}>{opt.label}</button
+						>
+					{/each}
+				</div>
+			</section>
+
+			<section class="card">
 				<h2 class="type-label sec-h">Display</h2>
 				<div class="field">
 					<span class="type-label lbl">Clock</span>
@@ -1008,6 +1569,244 @@
 				<button type="button" class="btn primary" disabled={savingDisplay} onclick={saveDisplaySettings}>
 					{#if displaySaved}<Check size={18} /> Saved{:else}{savingDisplay ? 'Saving…' : 'Save'}{/if}
 				</button>
+			</section>
+
+			<section class="card">
+				<div class="row">
+					<span class="type-label grow">Week starts on</span>
+					<div class="chips">
+						<button
+							type="button"
+							class="chip"
+							class:on={cfg.app.view.weekStartsOn === 1}
+							onclick={() => {
+								cfg.app.view.weekStartsOn = 1;
+								persistCfg();
+							}}>Monday</button
+						>
+						<button
+							type="button"
+							class="chip"
+							class:on={cfg.app.view.weekStartsOn === 0}
+							onclick={() => {
+								cfg.app.view.weekStartsOn = 0;
+								persistCfg();
+							}}>Sunday</button
+						>
+					</div>
+				</div>
+				<div class="row">
+					<span class="type-label grow">Celebrations</span>
+					<button
+						type="button"
+						class="switch"
+						class:on={cfg.app.celebrations}
+						role="switch"
+						aria-checked={cfg.app.celebrations}
+						aria-label="Celebrations"
+						onclick={() => {
+							cfg.app.celebrations = !cfg.app.celebrations;
+							persistCfg();
+						}}><span class="knob"></span></button
+					>
+				</div>
+				<div class="row">
+					<span class="type-label grow"
+						>Read-only display <span class="type-caption sub">edits from a phone only</span></span
+					>
+					<button
+						type="button"
+						class="switch"
+						class:on={cfg.app.kiosk.readOnly}
+						role="switch"
+						aria-checked={cfg.app.kiosk.readOnly}
+						aria-label="Read-only display"
+						onclick={() => {
+							cfg.app.kiosk.readOnly = !cfg.app.kiosk.readOnly;
+							persistCfg();
+						}}><span class="knob"></span></button
+					>
+				</div>
+				{#if cfgSaved}<p class="type-caption saved-msg"><Check size={14} strokeWidth={3} /> Saved</p>{/if}
+			</section>
+
+			{#if cfg.profiles.length}
+				<section class="card">
+					<h2 class="type-label sec-h">Routines</h2>
+					<p class="type-caption sub">Age-appropriate morning &amp; evening routines.</p>
+					{#each cfg.profiles as p (p.id)}
+						{@const on = routinesOn(p)}
+						<div class="row">
+							<span class="type-body grow">{p.name}</span>
+							<button
+								type="button"
+								class="switch"
+								class:on
+								role="switch"
+								aria-checked={on}
+								aria-label="Routines for {p.name}"
+								onclick={() => {
+									p.routinesEnabled = !on;
+									persistCfg();
+								}}><span class="knob"></span></button
+							>
+						</div>
+					{/each}
+				</section>
+			{/if}
+
+			<section class="card">
+				<h2 class="type-label sec-h">Features</h2>
+				<p class="type-caption sub">Turn a feature off to hide its tab on the display.</p>
+				{#each featureKeys as k (k)}
+					<div class="row">
+						<span class="type-label grow">{featureLabels[k]}</span>
+						<button
+							type="button"
+							class="switch"
+							class:on={cfg.app.features[k]}
+							role="switch"
+							aria-checked={cfg.app.features[k]}
+							aria-label={featureLabels[k]}
+							onclick={() => toggleFeature(k)}><span class="knob"></span></button
+						>
+					</div>
+				{/each}
+			</section>
+
+			<section class="card">
+				<h2 class="type-label sec-h">Calendars</h2>
+				<p class="type-caption sub">Subscribe to any calendar by iCal/webcal link.</p>
+				<label class="field">
+					<span class="type-label lbl">Link</span>
+					<input class="in" type="text" placeholder="https://…/basic.ics" bind:value={calUrl} />
+				</label>
+				<label class="field">
+					<span class="type-label lbl">Name (optional)</span>
+					<input class="in" type="text" bind:value={calName} maxlength="60" />
+				</label>
+				{#if data.profiles.length}
+					<label class="field">
+						<span class="type-label lbl">For</span>
+						<select class="in" bind:value={calProfileId}>
+							<option value="">Household</option>
+							{#each data.profiles as p (p.id)}
+								<option value={p.id}>{p.name}</option>
+								{/each}
+							</select>
+						</label>
+					{/if}
+				{#if calError}<p class="type-caption err">{calError}</p>{/if}
+				<button
+					type="button"
+					class="btn primary"
+					disabled={!calUrl.trim() || savingCal}
+					onclick={addCalendar}
+				>
+					<LinkIcon size={16} />{savingCal ? 'Adding…' : 'Subscribe'}
+				</button>
+				{#if calLoaded && calendars.length}
+					<div class="items">
+						{#each calendars as c (c.id)}
+							<div class="itemrow">
+								<span class="itext type-body">{c.name}</span>
+							</div>
+						{/each}
+					</div>
+				{/if}
+				<div class="divider"></div>
+				<GoogleConnect />
+			</section>
+
+			<section class="card">
+				<h2 class="type-label sec-h">Software updates</h2>
+				<div class="row">
+					<span class="type-label grow"
+						>Version <span class="type-caption sub"
+							>{updateVersion
+								? updateVersion.commit + (updateVersion.dirty ? ' (modified)' : '')
+								: '…'}</span
+						></span
+					>
+					<button type="button" class="iconbtn" disabled={checkingUpdate} onclick={checkUpdates}
+						><RefreshCw size={15} /></button
+					>
+				</div>
+				<div class="row">
+					<span class="type-label grow"
+						>Automatic updates <span class="type-caption sub"
+							>every {cfg.app.updates.intervalHours}h</span
+						></span
+					>
+					<button
+						type="button"
+						class="switch"
+						class:on={!cfg.app.updates.paused}
+						role="switch"
+						aria-checked={!cfg.app.updates.paused}
+						aria-label="Automatic updates"
+						onclick={() => {
+							cfg.app.updates.paused = !cfg.app.updates.paused;
+							persistCfg();
+						}}><span class="knob"></span></button
+					>
+				</div>
+				{#if updateMsg}<p class="type-caption sub">{updateMsg}</p>{/if}
+			</section>
+
+			<section class="card">
+				<h2 class="type-label sec-h">Data storage</h2>
+				<p class="type-caption sub">Keep personal data local on this device, or on a NAS folder.</p>
+				<StoragePanel />
+			</section>
+
+			<section class="card">
+				<h2 class="type-label sec-h">Parental lock</h2>
+				<p class="type-caption sub">Require a PIN to open Settings on the display.</p>
+				<div class="row">
+					<span class="type-label grow"
+						>Lock Settings <span class="type-caption sub"
+							>{pinSet ? 'PIN is set' : 'no PIN yet'}</span
+						></span
+					>
+					<button
+						type="button"
+						class="switch"
+						class:on={cfg.app.kiosk.parentalLock}
+						role="switch"
+						aria-checked={cfg.app.kiosk.parentalLock}
+						aria-label="Lock Settings"
+						onclick={toggleParentalLock}><span class="knob"></span></button
+					>
+				</div>
+				<div class="row">
+					<span class="type-label grow">{pinSet ? 'Change PIN' : 'Set a PIN'}</span>
+					<button type="button" class="btn primary small" onclick={() => (showPinForm = !showPinForm)}
+						>{showPinForm ? 'Cancel' : pinSet ? 'Change' : 'Set PIN'}</button
+					>
+				</div>
+				{#if showPinForm}
+					<div class="row">
+						{#if pinSet}
+							<input
+								class="in grow"
+								type="password"
+								inputmode="numeric"
+								placeholder="Current PIN"
+								bind:value={currentPin}
+							/>
+						{/if}
+						<input
+							class="in grow"
+							type="password"
+							inputmode="numeric"
+							placeholder="New PIN (4–8 digits)"
+							bind:value={newPin}
+						/>
+					</div>
+					<button type="button" class="btn primary" onclick={savePin}>Save PIN</button>
+				{/if}
+				{#if pinMsg}<p class="type-caption sub">{pinMsg}</p>{/if}
 			</section>
 
 			<section class="card">
@@ -1093,8 +1892,11 @@
 								<input class="in" type="text" bind:value={profName} maxlength="40" />
 							</label>
 							<label class="field">
-								<span class="type-label lbl">Age</span>
-								<input class="in agein" type="number" min="0" max="120" bind:value={profAge} />
+								<span class="type-label lbl">Date of birth</span>
+								<input class="in agein" type="date" bind:value={profDob} />
+								{#if profAgePreview !== null}
+									<span class="type-caption agepreview">{profAgePreview} yrs old</span>
+								{/if}
 							</label>
 						</div>
 						<div class="field">
@@ -1242,6 +2044,10 @@
 		background: var(--color-surface-elevated);
 		font-weight: var(--weight-medium);
 	}
+	.chip.on {
+		background: var(--color-text-primary);
+		color: var(--color-surface);
+	}
 	.switch {
 		width: 52px;
 		height: 30px;
@@ -1278,6 +2084,12 @@
 	.btn.primary:disabled {
 		opacity: 0.6;
 	}
+	.btn.secondary {
+		width: 100%;
+		background: var(--color-surface);
+		color: var(--color-text-primary);
+		box-shadow: var(--shadow-card);
+	}
 	.err {
 		color: var(--color-accent-warning);
 	}
@@ -1306,10 +2118,23 @@
 		display: flex;
 		align-items: center;
 		gap: var(--space-3);
+		width: 100%;
 		padding: var(--space-3);
 		background: var(--color-surface);
 		border-radius: var(--radius-md);
 		box-shadow: var(--shadow-card);
+		text-align: left;
+		font: inherit;
+		color: inherit;
+	}
+	.erow.editable {
+		cursor: pointer;
+	}
+	.erow.editable:active {
+		background: var(--color-surface-elevated);
+	}
+	.erow:disabled {
+		opacity: 1; /* synced (read-only) events look the same, just not tappable */
 	}
 	.etime {
 		flex: none;
@@ -1385,6 +2210,18 @@
 	.tfor {
 		flex: none;
 		color: var(--color-text-tertiary);
+	}
+	.taskrow {
+		padding: 4px 4px 4px 10px;
+	}
+	.itemtoggle {
+		display: flex;
+		align-items: center;
+		gap: var(--space-3);
+		flex: 1;
+		min-width: 0;
+		padding: 6px 0;
+		text-align: left;
 	}
 	.mtype {
 		flex: none;
@@ -1475,6 +2312,21 @@
 		gap: 4px;
 		color: var(--color-accent-success);
 	}
+	.divider {
+		height: 1px;
+		background: var(--color-border-subtle);
+		margin: var(--space-1) 0;
+	}
+	.cancel-text {
+		width: auto;
+		height: auto;
+		border-radius: 0;
+		background: none;
+		align-self: center;
+		color: var(--color-text-tertiary);
+		font-weight: var(--weight-medium);
+		font-size: var(--text-sm);
+	}
 	.btn.small {
 		padding: 11px 16px;
 		font-size: var(--text-base);
@@ -1511,7 +2363,10 @@
 		border-top: 1px solid var(--color-border-subtle);
 	}
 	.agein {
-		width: 80px;
+		width: 148px;
+	}
+	.agepreview {
+		color: var(--color-text-tertiary);
 	}
 	.colordot {
 		width: 34px;

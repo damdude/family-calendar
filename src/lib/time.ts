@@ -153,3 +153,16 @@ export function isYesterday(key: string, ref = new Date()): boolean {
 	y.setDate(y.getDate() - 1);
 	return key === dateKey(y);
 }
+
+/** Age in whole years from a YYYY-MM-DD date of birth. Profiles only store a
+ *  point-in-time age (used for routine seeding + role), so this is computed
+ *  at entry time rather than persisted as a birth date. */
+export function ageFromDOB(dob: string, ref = new Date()): number {
+	const born = parseDateKey(dob);
+	let age = ref.getFullYear() - born.getFullYear();
+	const beforeBirthday =
+		ref.getMonth() < born.getMonth() ||
+		(ref.getMonth() === born.getMonth() && ref.getDate() < born.getDate());
+	if (beforeBirthday) age--;
+	return Math.max(0, age);
+}
