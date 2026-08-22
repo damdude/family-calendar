@@ -8,6 +8,7 @@ import crypto from 'node:crypto';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { DATA_DIR } from './paths';
+import { atomicWriteFile } from './atomicWrite';
 
 const FILE = path.join(DATA_DIR, 'admin.json');
 
@@ -36,9 +37,7 @@ export async function setPin(pin: string): Promise<void> {
 	const salt = crypto.randomBytes(16);
 	const rec: PinRecord = { salt: salt.toString('hex'), hash: hash(pin, salt).toString('hex') };
 	await fsp.mkdir(DATA_DIR, { recursive: true });
-	const tmp = `${FILE}.tmp`;
-	await fsp.writeFile(tmp, JSON.stringify(rec), { mode: 0o600 });
-	await fsp.rename(tmp, FILE);
+	await atomicWriteFile(FILE, JSON.stringify(rec), { mode: 0o600 });
 }
 
 export async function verifyPin(pin: string): Promise<boolean> {

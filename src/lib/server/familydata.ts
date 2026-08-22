@@ -8,6 +8,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
 import { DATA_DIR } from './paths';
+import { atomicWriteFile } from './atomicWrite';
 
 const MealSchema = z.object({
 	id: z.number().int(),
@@ -91,6 +92,14 @@ const RewardClaimSchema = z.object({
 	ts: z.number().int()
 });
 
+const RewardSchema = z.object({
+	id: z.number().int(),
+	name: z.string().max(120),
+	starCost: z.number().int().min(1).max(1000),
+	active: z.boolean().default(true),
+	icon: z.string().max(8).default('🎁')
+});
+
 export const FamilyDataSchema = z.object({
 	meals: z.array(MealSchema).max(200),
 	lists: z.array(ListSchema).max(50),
@@ -99,7 +108,8 @@ export const FamilyDataSchema = z.object({
 	tasks: z.array(TaskSchema).max(500).default([]),
 	recipes: z.array(RecipeSchema).max(200).default([]),
 	stars: z.array(StarBalanceSchema).max(50).default([]),
-	rewardClaims: z.array(RewardClaimSchema).max(1000).default([])
+	rewardClaims: z.array(RewardClaimSchema).max(1000).default([]),
+	rewards: z.array(RewardSchema).max(50).default([])
 });
 
 export type FamilyDataPersist = z.infer<typeof FamilyDataSchema>;
@@ -117,9 +127,7 @@ export async function loadFamilyData(): Promise<FamilyDataPersist | null> {
 export async function saveFamilyData(data: FamilyDataPersist): Promise<void> {
 	const validated = FamilyDataSchema.parse(data);
 	await fsp.mkdir(DATA_DIR, { recursive: true });
-	const tmp = `${FILE}.tmp`;
-	await fsp.writeFile(tmp, JSON.stringify(validated, null, 2), 'utf8');
-	await fsp.rename(tmp, FILE);
+	await atomicWriteFile(FILE, JSON.stringify(validated, null, 2), 'utf8');
 }
 
 export type LocalEventInput = z.infer<typeof LocalEventSchema>;
@@ -127,6 +135,7 @@ export type TaskInput = z.infer<typeof TaskSchema>;
 export type MealInput = z.infer<typeof MealSchema>;
 export type RecipeInput = z.infer<typeof RecipeSchema>;
 export type ListInput = z.infer<typeof ListSchema>;
+export type RewardInput = z.infer<typeof RewardSchema>;
 
 function emptyData(): FamilyDataPersist {
 	return {
@@ -137,7 +146,8 @@ function emptyData(): FamilyDataPersist {
 		tasks: [],
 		recipes: [],
 		stars: [],
-		rewardClaims: []
+		rewardClaims: [],
+		rewards: []
 	};
 }
 
@@ -217,6 +227,73 @@ export async function removeTask(id: number): Promise<boolean> {
 	const i = data.tasks.findIndex((t) => t.id === id);
 	if (i < 0) return false;
 	data.tasks.splice(i, 1);
+	await saveFamilyData(data);
+	return true;
+}
+
+/** Add stars to a profile's balance (e.g. a completed routine). Creates the
+ *  balance row if this is their first. Returns the new total. */
+export async function awardStars(profileId: number, amount: number): Promise<number> {
+	const data = (await loadFamilyData()) ?? emptyData();
+	let balance = data.stars.find((s) => s.profileId === profileId);
+	if (!balance) {
+		balance = { profileId, stars: 0 };
+		data.stars.push(balance);
+	}
+	balance.stars += amount;
+	await saveFamilyData(data);
+	return balance.stars;
+}
+
+/** Create or edit a reward on the ladder (phone companion / desktop). */
+export async function saveReward(
+	r: Omit<RewardInput, 'id'> & { id?: number }
+): Promise<RewardInput> {
+	const data = (await loadFamilyData()) ?? emptyData();
+	if (r.id !== undefined) {
+		const i = data.rewards.findIndex((x) => x.id === r.id);
+		if (i < 0) throw new Error('reward not found');
+		data.rewards[i] = RewardSchema.parse({ ...r, id: r.id });
+		await saveFamilyData(data);
+		return data.rewards[i];
+	}
+	const id = data.rewards.reduce((m, x) => Math.max(m, x.id), 0) + 1;
+	const reward = RewardSchema.parse({ ...r, id });
+	data.rewards.push(reward);
+	await saveFamilyData(data);
+	return reward;
+}
+
+/** Remove a reward from the ladder. Returns false if no such reward. */
+export async function removeReward(id: number): Promise<boolean> {
+	const data = (await loadFamilyData()) ?? emptyData();
+	const i = data.rewards.findIndex((r) => r.id === id);
+	if (i < 0) return false;
+	data.rewards.splice(i, 1);
+	await saveFamilyData(data);
+	return true;
+}
+
+/** Redeem a reward: deduct stars and record the claim (phone companion —
+ *  mirrors family.svelte.ts's claimReward for the desktop). Returns false if
+ *  the reward doesn't exist or the balance can't cover it. */
+export async function claimReward(rewardId: number, profileId: number): Promise<boolean> {
+	const data = (await loadFamilyData()) ?? emptyData();
+	const reward = data.rewards.find((r) => r.id === rewardId);
+	if (!reward) return false;
+	const balance = data.stars.find((s) => s.profileId === profileId);
+	if (!balance || balance.stars < reward.starCost) return false;
+	balance.stars -= reward.starCost;
+	const id = data.rewardClaims.reduce((m, x) => Math.max(m, x.id), 0) + 1;
+	data.rewardClaims.push({
+		id,
+		rewardId,
+		profileId,
+		rewardName: reward.name,
+		icon: reward.icon,
+		starCost: reward.starCost,
+		ts: Date.now()
+	});
 	await saveFamilyData(data);
 	return true;
 }

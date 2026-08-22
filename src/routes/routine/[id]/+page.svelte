@@ -37,7 +37,8 @@
 	const allDone = $derived(total > 0 && doneCount === total);
 	const progress = $derived(total ? (doneCount / total) * 100 : 0);
 
-	// Toggle a step, then persist the day's completion set and sync the streak.
+	// Toggle a step, then persist the day's completion set and sync the streak
+	// (and star balance, when this toggle is what completed the routine).
 	async function onToggle(stepId: number) {
 		family.toggleStep(routineId, stepId);
 		try {
@@ -47,12 +48,14 @@
 				body: JSON.stringify({
 					date: dateKey(),
 					doneStepIds: family.doneStepIds(routineId),
-					total
+					total,
+					profileId: routine?.profileId
 				})
 			});
 			if (res.ok) {
 				const p = await res.json();
 				family.setStreak(routineId, p.streakCurrent, p.streakLongest, p.lastCompletedDate);
+				if (p.stars !== undefined && profile) family.setStars(profile.id, p.stars);
 			}
 		} catch {
 			/* offline; next toggle re-syncs */

@@ -8,6 +8,7 @@
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { DATA_DIR } from './paths';
+import { atomicWriteFile } from './atomicWrite';
 import { scrapeUrl } from './scraper';
 
 export interface SiteEntry {
@@ -35,9 +36,7 @@ async function load(): Promise<SitesData> {
 
 async function save(data: SitesData): Promise<void> {
 	await fsp.mkdir(DATA_DIR, { recursive: true });
-	const tmp = `${FILE}.tmp`;
-	await fsp.writeFile(tmp, JSON.stringify(data, null, 2), 'utf8');
-	await fsp.rename(tmp, FILE);
+	await atomicWriteFile(FILE, JSON.stringify(data, null, 2), 'utf8');
 }
 
 export async function getSites(profileId?: number): Promise<SitesData> {

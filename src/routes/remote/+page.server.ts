@@ -2,7 +2,10 @@ import { error } from '@sveltejs/kit';
 import { isMirrorToken } from '$lib/server/mirror';
 import { loadConfig } from '$lib/server/config';
 import { loadFamilyData } from '$lib/server/familydata';
+import { loadProgress } from '$lib/server/progress';
 import { getSyncedEventsLean } from '$lib/server/db/repo';
+import { generateAllRoutines } from '$lib/kid/routineLibrary';
+import { dateKey } from '$lib/time';
 import type { PageServerLoad } from './$types';
 
 /** id offset so a synced event and a local event never collide as a list key
@@ -17,6 +20,14 @@ export const load: PageServerLoad = async ({ url }) => {
 
 	const config = await loadConfig();
 	const familyData = await loadFamilyData();
+	const progress = await loadProgress();
+	const today = dateKey();
+	const routines = generateAllRoutines(config.profiles).map((r) => ({
+		...r,
+		doneStepIds: progress.routines[r.id]?.completions[today] ?? [],
+		streakCurrent: progress.routines[r.id]?.streakCurrent ?? 0,
+		streakLongest: progress.routines[r.id]?.streakLongest ?? 0
+	}));
 
 	const now = Math.floor(Date.now() / 1000);
 	const from = now - 3600; // small back-window so an event already in progress still shows
@@ -61,6 +72,7 @@ export const load: PageServerLoad = async ({ url }) => {
 			id: p.id,
 			name: p.name,
 			age: p.age,
+			role: p.role,
 			color: p.color,
 			avatarEmoji: p.avatarEmoji,
 			photoUpdatedAt: p.photoUpdatedAt
@@ -70,6 +82,9 @@ export const load: PageServerLoad = async ({ url }) => {
 		tasks: familyData?.tasks ?? [],
 		meals: familyData?.meals ?? [],
 		recipes: familyData?.recipes ?? [],
+		rewards: familyData?.rewards ?? [],
+		stars: familyData?.stars ?? [],
+		routines,
 		// Full config, for the phone Settings tab's advanced sections (features,
 		// orientation, routines, updates, parental lock, …) — those are posted
 		// back wholesale to /api/config, same as the desktop Settings page.

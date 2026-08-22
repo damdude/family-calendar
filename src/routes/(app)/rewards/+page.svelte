@@ -2,21 +2,43 @@
 	import { family } from '$lib/stores/family.svelte';
 	import Avatar from '$lib/components/Avatar.svelte';
 	import StarTally from '$lib/components/StarTally.svelte';
+	import { Plus, Trash2, Settings, X } from 'lucide-svelte';
 
-	// Children who participate in the rewards economy.
-	const kids = $derived(
-		family.profiles.filter((p) => family.data.stars.some((s) => s.profileId === p.id))
-	);
+	const REWARD_ICONS = ['🎁', '🍦', '🎮', '🎬', '🍕', '🏖️', '📱', '🧸'];
+
+	// Kids participate in the rewards economy by default — showing everyone
+	// (even at 0 stars, before their first completed routine) rather than only
+	// once they've already earned something, which used to make the whole
+	// ladder look broken on a fresh install.
+	const kids = $derived(family.profiles.filter((p) => p.role === 'child'));
 	const ladder = $derived(
 		family.data.rewards.filter((r) => r.active).sort((a, b) => a.starCost - b.starCost)
 	);
 
 	let justClaimed = $state('');
 	let toastTimer: ReturnType<typeof setTimeout>;
+
+	// --- Manage the reward ladder ---
+	let managing = $state(false);
+	let newName = $state('');
+	let newIcon = $state('🎁');
+	let newCost = $state<number | ''>('');
+	function addReward() {
+		if (!newName.trim() || newCost === '') return;
+		family.addReward(newName, newIcon, Number(newCost));
+		newName = '';
+		newIcon = '🎁';
+		newCost = '';
+	}
 </script>
 
 <div class="rewards-page">
-	<h1 class="type-title page-title">Rewards</h1>
+	<div class="pagehead">
+		<h1 class="type-title page-title">Rewards</h1>
+		<button type="button" class="managebtn" onclick={() => (managing = !managing)}>
+			{#if managing}<X size={16} /> Done{:else}<Settings size={16} /> Manage{/if}
+		</button>
+	</div>
 
 	<section class="stars-row">
 		{#each kids as kid (kid.id)}
@@ -72,6 +94,74 @@
 		</ul>
 	</section>
 
+	{#if managing}
+		<section class="managepane">
+			<h2 class="type-heading">Manage rewards</h2>
+			<ul class="manageList">
+				{#each family.data.rewards as reward (reward.id)}
+					<li class="mrow" class:inactive={!reward.active}>
+						<span class="ricon">{reward.icon}</span>
+						<input
+							class="minput name"
+							type="text"
+							bind:value={reward.name}
+							onchange={() => family.persistFamilyData()}
+							maxlength="120"
+						/>
+						<input
+							class="minput mcost"
+							type="number"
+							min="1"
+							max="1000"
+							bind:value={reward.starCost}
+							onchange={() => family.persistFamilyData()}
+						/>
+						<button
+							type="button"
+							class="switch"
+							class:on={reward.active}
+							role="switch"
+							aria-checked={reward.active}
+							aria-label="Active"
+							onclick={() => {
+								reward.active = !reward.active;
+								family.persistFamilyData();
+							}}><span class="knob"></span></button
+						>
+						<button
+							type="button"
+							class="iconbtn danger"
+							aria-label="Remove {reward.name}"
+							onclick={() => family.removeReward(reward.id)}><Trash2 size={15} /></button
+						>
+					</li>
+				{/each}
+				{#if family.data.rewards.length === 0}
+					<p class="type-body sub empty">No rewards yet — add one below.</p>
+				{/if}
+			</ul>
+			<div class="addrow">
+				<div class="chips">
+					{#each REWARD_ICONS as a (a)}
+						<button
+							type="button"
+							class="emojidot"
+							class:on={newIcon === a}
+							onclick={() => (newIcon = a)}>{a}</button
+						>
+					{/each}
+				</div>
+				<div class="row">
+					<input class="minput name" type="text" placeholder="Reward name" bind:value={newName} maxlength="120" />
+					<input class="minput mcost" type="number" placeholder="⭐" min="1" max="1000" bind:value={newCost} />
+					<button type="button" class="addbtn" disabled={!newName.trim() || newCost === ''} onclick={addReward}
+						><Plus size={16} /> Add</button
+					>
+				</div>
+			</div>
+		</section>
+	{/if}
+
 	{#if justClaimed}
 		<div class="toast" role="status">🎉 {justClaimed}</div>
 	{/if}
@@ -86,6 +176,23 @@
 	}
 	.page-title {
 		color: var(--color-text-primary);
+	}
+	.pagehead {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+	}
+	.managebtn {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 8px 14px;
+		border-radius: var(--radius-pill);
+		background: var(--color-surface);
+		color: var(--color-text-secondary);
+		box-shadow: var(--shadow-card);
+		font-weight: var(--weight-medium);
+		font-size: var(--text-sm);
 	}
 	.stars-row {
 		display: flex;
@@ -190,5 +297,118 @@
 		color: var(--color-surface);
 		font-weight: var(--weight-semibold);
 		box-shadow: var(--shadow-float);
+	}
+	.managepane {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-3);
+		padding: var(--space-4);
+		border-radius: var(--radius-lg);
+		background: var(--color-surface);
+		box-shadow: var(--shadow-card);
+	}
+	.manageList {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-2);
+	}
+	.mrow {
+		display: flex;
+		align-items: center;
+		gap: var(--space-3);
+		padding: var(--space-2);
+		border-radius: var(--radius-md);
+		background: var(--color-surface-elevated);
+	}
+	.mrow.inactive {
+		opacity: 0.5;
+	}
+	.minput {
+		padding: 8px 10px;
+		border-radius: var(--radius-sm);
+		border: 1px solid var(--color-border-subtle);
+		background: var(--color-surface);
+		color: var(--color-text-primary);
+	}
+	.minput.name {
+		flex: 1;
+		min-width: 0;
+	}
+	.minput.mcost {
+		width: 72px;
+	}
+	.empty {
+		color: var(--color-text-tertiary);
+	}
+	.addrow {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-3);
+		padding-top: var(--space-3);
+		border-top: 1px solid var(--color-border-hairline);
+	}
+	.addrow .row {
+		display: flex;
+		gap: var(--space-2);
+	}
+	.emojidot {
+		width: 32px;
+		height: 32px;
+		border-radius: var(--radius-pill);
+		background: var(--color-surface-elevated);
+		font-size: 1.1rem;
+	}
+	.emojidot.on {
+		box-shadow: 0 0 0 2px var(--color-text-primary);
+	}
+	.addbtn {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		padding: 8px 14px;
+		border-radius: var(--radius-pill);
+		background: var(--color-text-primary);
+		color: var(--color-surface);
+		font-weight: var(--weight-semibold);
+		white-space: nowrap;
+	}
+	.addbtn:disabled {
+		opacity: 0.45;
+	}
+	.switch {
+		width: 44px;
+		height: 26px;
+		border-radius: var(--radius-pill);
+		background: var(--color-border-subtle);
+		padding: 3px;
+		display: flex;
+		flex: none;
+	}
+	.switch.on {
+		background: var(--color-accent-success);
+		justify-content: flex-end;
+	}
+	.knob {
+		width: 20px;
+		height: 20px;
+		border-radius: var(--radius-pill);
+		background: white;
+		box-shadow: var(--shadow-card);
+	}
+	.iconbtn {
+		display: grid;
+		place-items: center;
+		width: 30px;
+		height: 30px;
+		border-radius: var(--radius-pill);
+		background: var(--color-surface);
+		color: var(--color-text-tertiary);
+		flex: none;
+	}
+	.iconbtn.danger:active {
+		color: var(--color-accent-warning);
 	}
 </style>

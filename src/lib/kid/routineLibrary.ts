@@ -9,6 +9,7 @@
  */
 
 import type { RoutineIcon, RoutineTimeOfDay } from '$lib/types';
+import { routinesOn } from '$lib/types';
 
 export interface LibraryStep {
 	icon: RoutineIcon;
@@ -114,4 +115,59 @@ export function defaultRoutinesForAge(age: number): LibraryRoutine[] {
 	if (age < 5) return preReader;
 	if (age <= 10) return schoolAge;
 	return olderKid;
+}
+
+export interface GeneratedStep {
+	id: number;
+	icon: RoutineIcon;
+	label: string;
+	estimatedMinutes: number;
+	order: number;
+}
+export interface GeneratedRoutine {
+	id: number;
+	profileId: number;
+	name: string;
+	timeOfDay: RoutineTimeOfDay;
+	steps: GeneratedStep[];
+}
+
+/** Deterministically regenerate every enabled profile's routines in one pass.
+ *  Routines have no server persistence of their own (routinesEnabled is the
+ *  thing that's saved) — both the display (family.svelte.ts's per-profile
+ *  seedRoutinesForProfile, called once per profile in config.profiles order)
+ *  and the phone companion's server-side load need to land on the SAME ids
+ *  for a step toggle on one to match the right progress.json entry read by
+ *  the other, so this mirrors that exact iteration/numbering scheme: only
+ *  profiles with routines on are visited, in the given array's order, with
+ *  routine/step ids assigned incrementally as they're encountered. */
+export function generateAllRoutines(
+	profiles: { id: number; age: number; role: 'parent' | 'child'; routinesEnabled?: boolean }[]
+): GeneratedRoutine[] {
+	const out: GeneratedRoutine[] = [];
+	let rid = 0;
+	let sid = 0;
+	for (const p of profiles) {
+		if (!routinesOn(p)) continue;
+		for (const lr of defaultRoutinesForAge(p.age)) {
+			rid += 1;
+			out.push({
+				id: rid,
+				profileId: p.id,
+				name: lr.name,
+				timeOfDay: lr.timeOfDay,
+				steps: lr.steps.map((ls, i) => {
+					sid += 1;
+					return {
+						id: sid,
+						icon: ls.icon,
+						label: ls.label,
+						estimatedMinutes: ls.estimatedMinutes,
+						order: i + 1
+					};
+				})
+			});
+		}
+	}
+	return out;
 }

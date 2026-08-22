@@ -25,6 +25,9 @@
 		X,
 		UtensilsCrossed,
 		BookOpen,
+		Sparkles,
+		Gift,
+		Star,
 		Wifi,
 		RefreshCw,
 		Link as LinkIcon
@@ -41,7 +44,15 @@
 	});
 
 	let stopped = $state(false);
-	type Tab = 'calendar' | 'lists' | 'tasks' | 'meals' | 'recipes' | 'settings';
+	type Tab =
+		| 'calendar'
+		| 'lists'
+		| 'tasks'
+		| 'meals'
+		| 'recipes'
+		| 'routines'
+		| 'rewards'
+		| 'settings';
 	let tab = $state<Tab>('calendar');
 
 	// The display follows whichever tab is active here (not a full mirror —
@@ -53,6 +64,8 @@
 		tasks: '/tasks',
 		recipes: '/recipes',
 		meals: '/meals',
+		routines: '/routines',
+		rewards: '/rewards',
 		settings: '/settings'
 	};
 	$effect(() => {
@@ -673,6 +686,130 @@
 		await invalidateAll();
 	}
 
+	// --- Routines ---
+	function starsFor(profileId: number): number {
+		return data.stars.find((s) => s.profileId === profileId)?.stars ?? 0;
+	}
+	// A kid tapping through a checklist fires several toggles in quick
+	// succession — each one waiting on `data` (only refreshed by a full
+	// invalidateAll round trip) to compute its new step list would read the
+	// same stale snapshot and clobber the others, silently dropping all but
+	// the last tap. This local overlay is the accumulating source of truth
+	// for in-flight taps instead; it's only cleared once the routine
+	// actually completes, since that's the one moment streak/stars also need
+	// a real refresh anyway.
+	let routineOverrides = $state<Record<number, number[]>>({});
+	function doneStepsFor(routine: PageData['routines'][number]): number[] {
+		return routineOverrides[routine.id] ?? routine.doneStepIds;
+	}
+	async function toggleRoutineStep(routine: PageData['routines'][number], stepId: number) {
+		const current = doneStepsFor(routine);
+		const doneStepIds = current.includes(stepId)
+			? current.filter((id) => id !== stepId)
+			: [...current, stepId];
+		routineOverrides[routine.id] = doneStepIds;
+		try {
+			const r = await fetch(`/api/routine/${routine.id}`, {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({
+					date: new Date().toISOString().slice(0, 10),
+					doneStepIds,
+					total: routine.steps.length,
+					profileId: routine.profileId
+				})
+			});
+			if (r.ok) {
+				const p = await r.json();
+				if (p.stars !== undefined) {
+					// Just completed — refresh streak + star balance, and the
+					// override can drop now that `data` will match it.
+					await invalidateAll();
+					delete routineOverrides[routine.id];
+				}
+			}
+		} catch {
+			/* offline; the override stays as the optimistic truth for now */
+		}
+	}
+	const routinesByProfile = $derived.by(() => {
+		const out: { profile: PageData['profiles'][number]; routines: PageData['routines'] }[] = [];
+		for (const p of data.profiles) {
+			const rs = data.routines.filter((r) => r.profileId === p.id);
+			if (rs.length) out.push({ profile: p, routines: rs });
+		}
+		return out;
+	});
+
+	// --- Rewards ---
+	let rewardsManaging = $state(false);
+	let newRewardName = $state('');
+	let newRewardIcon = $state('🎁');
+	let newRewardCost = $state<number | ''>('');
+	let savingReward = $state(false);
+	let claimedToast = $state('');
+	const rewardKids = $derived(data.profiles.filter((p) => p.role === 'child'));
+	const activeRewards = $derived(
+		[...data.rewards].filter((r) => r.active).sort((a, b) => a.starCost - b.starCost)
+	);
+	async function addReward() {
+		if (!newRewardName.trim() || newRewardCost === '') return;
+		savingReward = true;
+		try {
+			await fetch('/api/mirror/reward', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({
+					token: data.token,
+					name: newRewardName.trim(),
+					icon: newRewardIcon,
+					starCost: Number(newRewardCost)
+				})
+			});
+			newRewardName = '';
+			newRewardIcon = '🎁';
+			newRewardCost = '';
+			await invalidateAll();
+		} finally {
+			savingReward = false;
+		}
+	}
+	async function toggleRewardActive(reward: PageData['rewards'][number]) {
+		await fetch('/api/mirror/reward', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({
+				token: data.token,
+				id: reward.id,
+				name: reward.name,
+				icon: reward.icon,
+				starCost: reward.starCost,
+				active: !reward.active
+			})
+		});
+		await invalidateAll();
+	}
+	async function removeReward(id: number) {
+		await fetch('/api/mirror/reward-remove', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ token: data.token, id })
+		});
+		await invalidateAll();
+	}
+	async function claimReward(rewardId: number, profileId: number, kidName: string, rewardName: string) {
+		const r = await fetch('/api/mirror/reward-claim', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ token: data.token, rewardId, profileId })
+		});
+		if (r.ok) {
+			claimedToast = `${kidName} claimed ${rewardName}!`;
+			setTimeout(() => (claimedToast = ''), 2600);
+			await invalidateAll();
+		}
+	}
+
 	// --- Settings: advanced (full config, posted wholesale — same as desktop) ---
 	let cfg = $state(structuredClone(data.config));
 	let cfgSaveTimer: ReturnType<typeof setTimeout>;
@@ -948,6 +1085,14 @@
 			</button>
 			<button type="button" class="tab" class:on={tab === 'recipes'} onclick={() => (tab = 'recipes')}>
 				<BookOpen size={16} /> Recipes
+			</button>
+			{#if data.routines.length}
+				<button type="button" class="tab" class:on={tab === 'routines'} onclick={() => (tab = 'routines')}>
+					<Sparkles size={16} /> Routines
+				</button>
+			{/if}
+			<button type="button" class="tab" class:on={tab === 'rewards'} onclick={() => (tab = 'rewards')}>
+				<Gift size={16} /> Rewards
 			</button>
 			<button type="button" class="tab" class:on={tab === 'settings'} onclick={() => (tab = 'settings')}>
 				<Settings size={16} /> Settings
@@ -1448,6 +1593,176 @@
 					</div>
 				{/if}
 			</section>
+		{/if}
+
+		{#if tab === 'routines'}
+			{#if routinesByProfile.length === 0}
+				<p class="type-body sub empty">No one has routines turned on right now.</p>
+			{:else}
+				{#each routinesByProfile as { profile: p, routines: rs } (p.id)}
+					<section class="card">
+						<div class="sec-head">
+							<h2 class="type-label sec-h">{p.avatarEmoji} {p.name}</h2>
+							<span class="type-caption sub">⭐ {starsFor(p.id)}</span>
+						</div>
+						{#each rs as routine (routine.id)}
+							{@const doneStepIds = doneStepsFor(routine)}
+							{@const doneCount = doneStepIds.length}
+							{@const total = routine.steps.length}
+							<div class="routineblock">
+								<div class="row">
+									<span class="type-label grow"
+										>{routine.name}
+										<span class="type-caption sub">{doneCount}/{total}</span></span
+									>
+									{#if routine.streakCurrent > 0}
+										<span class="type-caption streak">🔥 {routine.streakCurrent}</span>
+									{/if}
+								</div>
+								<div class="items">
+									{#each routine.steps as step (step.id)}
+										{@const done = doneStepIds.includes(step.id)}
+										<button
+											type="button"
+											class="itemrow"
+											class:done
+											onclick={() => toggleRoutineStep(routine, step.id)}
+										>
+											<span class="check" class:on={done}
+												>{#if done}<Check size={14} strokeWidth={3} />{/if}</span
+											>
+											<span class="itext type-body">{step.label}</span>
+										</button>
+									{/each}
+								</div>
+							</div>
+						{/each}
+					</section>
+				{/each}
+			{/if}
+		{/if}
+
+		{#if tab === 'rewards'}
+			{#if rewardKids.length}
+				<section class="card">
+					<h2 class="type-label sec-h">Stars</h2>
+					<div class="starsrow">
+						{#each rewardKids as kid (kid.id)}
+							<div class="starkid">
+								<span class="type-body">{kid.avatarEmoji} {kid.name}</span>
+								<span class="type-label starcount">⭐ {starsFor(kid.id)}</span>
+							</div>
+						{/each}
+					</div>
+				</section>
+			{/if}
+
+			<section class="card">
+				<div class="sec-head">
+					<h2 class="type-label sec-h">Reward Ladder</h2>
+					<button type="button" class="iconbtn" aria-label="Manage rewards" onclick={() => (rewardsManaging = !rewardsManaging)}
+						>{#if rewardsManaging}<X size={16} />{:else}<Pencil size={15} />{/if}</button
+					>
+				</div>
+				{#if !rewardsManaging}
+					{#if activeRewards.length === 0}
+						<p class="type-body sub empty">No rewards yet — tap the pencil to add one.</p>
+					{:else}
+						<div class="items">
+							{#each activeRewards as reward (reward.id)}
+								<div class="rewardrow">
+									<span class="ricon">{reward.icon}</span>
+									<div class="rmain">
+										<p class="type-body">{reward.name}</p>
+										<p class="type-caption sub">{reward.starCost} ⭐</p>
+									</div>
+									<div class="chips">
+										{#each rewardKids as kid (kid.id)}
+											{@const canClaim = starsFor(kid.id) >= reward.starCost}
+											<button
+												type="button"
+												class="chip"
+												class:on={canClaim}
+												disabled={!canClaim}
+												onclick={() => claimReward(reward.id, kid.id, kid.name, reward.name)}
+												>{kid.avatarEmoji}</button
+											>
+										{/each}
+									</div>
+								</div>
+							{/each}
+						</div>
+					{/if}
+				{:else}
+					<div class="items">
+						{#each data.rewards as reward (reward.id)}
+							<div class="rewardrow" class:inactive={!reward.active}>
+								<span class="ricon">{reward.icon}</span>
+								<div class="rmain">
+									<p class="type-body">{reward.name}</p>
+									<p class="type-caption sub">{reward.starCost} ⭐</p>
+								</div>
+								<button
+									type="button"
+									class="switch"
+									class:on={reward.active}
+									role="switch"
+									aria-checked={reward.active}
+									aria-label="Active"
+									onclick={() => toggleRewardActive(reward)}><span class="knob"></span></button
+								>
+								<button
+									type="button"
+									class="iconbtn danger"
+									aria-label="Remove {reward.name}"
+									onclick={() => removeReward(reward.id)}><Trash2 size={15} /></button
+								>
+							</div>
+						{/each}
+					</div>
+					<div class="rewardaddform">
+						<input
+							class="in"
+							type="text"
+							placeholder="Reward name"
+							bind:value={newRewardName}
+							maxlength="120"
+						/>
+						<div class="chips">
+							{#each ['🎁', '🍦', '🎮', '🎬', '🍕', '🏖️', '📱', '🧸'] as a (a)}
+								<button
+									type="button"
+									class="emojidot"
+									class:on={newRewardIcon === a}
+									onclick={() => (newRewardIcon = a)}>{a}</button
+								>
+							{/each}
+						</div>
+						<div class="row">
+							<input
+								class="in grow"
+								type="number"
+								placeholder="Star cost"
+								min="1"
+								max="1000"
+								bind:value={newRewardCost}
+							/>
+							<button
+								type="button"
+								class="btn primary"
+								disabled={!newRewardName.trim() || newRewardCost === '' || savingReward}
+								onclick={addReward}
+							>
+								<Plus size={16} />{savingReward ? 'Adding…' : 'Add'}
+							</button>
+						</div>
+					</div>
+				{/if}
+			</section>
+
+			{#if claimedToast}
+				<p class="type-caption saved-msg"><Star size={14} strokeWidth={3} /> {claimedToast}</p>
+			{/if}
 		{/if}
 
 		{#if tab === 'settings'}
@@ -2049,18 +2364,24 @@
 		background: var(--color-surface-elevated);
 		padding: 4px;
 		border-radius: var(--radius-pill);
+		overflow-x: auto;
+		scrollbar-width: none;
+	}
+	.tabs::-webkit-scrollbar {
+		display: none;
 	}
 	.tab {
-		flex: 1;
+		flex: none;
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
 		gap: 6px;
-		padding: 9px 10px;
+		padding: 9px 12px;
 		border-radius: var(--radius-pill);
 		color: var(--color-text-secondary);
 		font-weight: var(--weight-semibold);
 		font-size: var(--text-sm);
+		white-space: nowrap;
 	}
 	.tab.on {
 		background: var(--color-surface);
@@ -2453,5 +2774,60 @@
 	}
 	.emojidot.on {
 		box-shadow: inset 0 0 0 2px var(--color-text-primary);
+	}
+	.routineblock {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-2);
+		padding-top: var(--space-3);
+		border-top: 1px solid var(--color-border-hairline);
+	}
+	.streak {
+		color: var(--color-text-tertiary);
+		flex: none;
+	}
+	.starsrow {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-2);
+	}
+	.starkid {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 8px 4px;
+		border-bottom: 1px solid var(--color-border-hairline);
+	}
+	.starkid:last-child {
+		border-bottom: none;
+	}
+	.starcount {
+		color: var(--color-text-primary);
+	}
+	.rewardrow {
+		display: flex;
+		align-items: center;
+		gap: var(--space-3);
+		padding: var(--space-3);
+		border-radius: var(--radius-md);
+		background: var(--color-surface-elevated);
+	}
+	.rewardrow.inactive {
+		opacity: 0.5;
+	}
+	.ricon {
+		font-size: 1.6rem;
+		flex: none;
+	}
+	.rmain {
+		flex: 1;
+		min-width: 0;
+	}
+	.rewardaddform {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-3);
+		padding-top: var(--space-3);
+		border-top: 1px solid var(--color-border-hairline);
 	}
 </style>

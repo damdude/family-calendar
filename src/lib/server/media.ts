@@ -7,6 +7,7 @@
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { DATA_DIR } from './paths';
+import { atomicWriteFile } from './atomicWrite';
 import { encrypt, decrypt } from './crypto';
 
 const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
@@ -20,9 +21,7 @@ export async function saveAvatar(id: number, mime: string, bytes: Buffer): Promi
 	const container = Buffer.concat([Buffer.from([mimeBuf.length]), mimeBuf, bytes]);
 	const enc = encrypt(container);
 	await fsp.mkdir(UPLOAD_DIR, { recursive: true });
-	const tmp = `${avatarFile(id)}.tmp`;
-	await fsp.writeFile(tmp, enc);
-	await fsp.rename(tmp, avatarFile(id));
+	await atomicWriteFile(avatarFile(id), enc);
 }
 
 export async function readAvatar(id: number): Promise<{ mime: string; bytes: Buffer } | null> {

@@ -243,6 +243,15 @@ class FamilyStore {
 		return this.data.stars.find((s) => s.profileId === id)?.stars ?? 0;
 	}
 
+	/** Reflect a star award from the server (routine completion) without a
+	 *  full reload — sets rather than increments so it can't drift out of
+	 *  sync with the persisted total. */
+	setStars(profileId: number, stars: number) {
+		const existing = this.data.stars.find((s) => s.profileId === profileId);
+		if (existing) existing.stars = stars;
+		else this.data.stars.push({ profileId, stars });
+	}
+
 	feelingFor(id: number) {
 		return this.data.feelingsToday.find((f) => f.profileId === id);
 	}
@@ -478,6 +487,7 @@ class FamilyStore {
 			recipes?: FamilyData['recipes'];
 			stars?: FamilyData['stars'];
 			rewardClaims?: FamilyData['rewardClaims'];
+			rewards?: FamilyData['rewards'];
 		} | null
 	) {
 		if (!data) return;
@@ -487,6 +497,7 @@ class FamilyStore {
 		this.data.recipes = data.recipes ?? [];
 		this.data.stars = data.stars ?? [];
 		this.data.rewardClaims = data.rewardClaims ?? [];
+		this.data.rewards = data.rewards ?? [];
 		this.localEvents = data.localEvents ?? [];
 		this.localCalendars = data.localCalendars?.length ? data.localCalendars : DEFAULT_LOCAL_CALENDARS;
 		this.materializeLocalEvents();
@@ -502,7 +513,8 @@ class FamilyStore {
 			tasks: this.data.tasks,
 			recipes: this.data.recipes,
 			stars: this.data.stars,
-			rewardClaims: this.data.rewardClaims
+			rewardClaims: this.data.rewardClaims,
+			rewards: this.data.rewards
 		};
 	}
 
@@ -532,6 +544,23 @@ class FamilyStore {
 	// --- Rewards ---
 	reward(id: number): Reward | undefined {
 		return this.data.rewards.find((r) => r.id === id);
+	}
+	/** Add a reward to the ladder (Settings). */
+	addReward(name: string, icon: string, starCost: number) {
+		if (!name.trim() || starCost < 1) return;
+		this.data.rewards.push({
+			id: this.nextId(this.data.rewards),
+			name: name.trim(),
+			icon,
+			starCost: Math.round(starCost),
+			active: true
+		});
+		this.persistFamilyData();
+	}
+	removeReward(id: number) {
+		const i = this.data.rewards.findIndex((r) => r.id === id);
+		if (i >= 0) this.data.rewards.splice(i, 1);
+		this.persistFamilyData();
 	}
 	/** Rewards a child can currently afford, cheapest first. */
 	nextReward(profileId: number): Reward | undefined {
