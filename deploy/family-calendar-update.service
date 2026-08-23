@@ -1,4 +1,6 @@
-# One-shot OTA update check (invoked by family-calendar-update.timer).
+# One-shot OTA update CHECK — fetch + compare only, never installs (invoked
+# by family-calendar-update.timer, or on demand via POST /api/update).
+# Installing is family-calendar-install.service, a separate unit.
 [Unit]
 Description=Family Calendar OTA update check
 After=network-online.target
@@ -8,4 +10,4 @@ Wants=network-online.target
 Type=oneshot
 User=pi
 WorkingDirectory=/home/pi/family-calendar
-ExecStart=/home/pi/family-calendar/scripts/update.sh
+ExecStart=/home/pi/family-calendar/scripts/update.sh check

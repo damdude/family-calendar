@@ -983,10 +983,21 @@
 		await loadCalendars();
 	}
 
-	// --- Settings: software updates ---
-	let updateVersion = $state<{ commit: string; dirty: boolean } | null>(null);
+	// --- Settings: software updates (two-step: check, then an explicit install) ---
+	interface UpdateState {
+		status: 'idle' | 'available' | 'installing' | 'failed';
+		currentCommit?: string;
+		targetCommit?: string;
+		notes?: string[];
+		error?: string;
+		progress?: number;
+	}
+	let updateVersion = $state<{ commit: string; dirty: boolean; update: UpdateState | null } | null>(
+		null
+	);
 	let checkingUpdate = $state(false);
-	let updateMsg = $state('');
+	let installingUpdate = $state(false);
+	let updatePollTimer: ReturnType<typeof setInterval>;
 	async function loadUpdateVersion() {
 		try {
 			const r = await fetch('/api/update');
@@ -997,14 +1008,30 @@
 	}
 	async function checkUpdates() {
 		checkingUpdate = true;
-		updateMsg = '';
 		try {
-			const r = await fetch('/api/update', { method: 'POST' });
-			updateMsg = r.ok ? 'Checking for updates…' : 'Could not start update check.';
+			await fetch('/api/update', { method: 'POST' });
+			setTimeout(loadUpdateVersion, 1500);
 		} finally {
 			checkingUpdate = false;
 		}
 	}
+	async function installUpdateNow() {
+		installingUpdate = true;
+		try {
+			await fetch('/api/update/install', { method: 'POST' });
+			await loadUpdateVersion();
+		} finally {
+			installingUpdate = false;
+		}
+	}
+	let dismissedUpdateTarget = $state<string | null>(null);
+	function dismissUpdateNow() {
+		dismissedUpdateTarget = updateVersion?.update?.targetCommit ?? null;
+	}
+	const showUpdateAvailable = $derived(
+		updateVersion?.update?.status === 'available' &&
+			updateVersion.update.targetCommit !== dismissedUpdateTarget
+	);
 
 	// --- Settings: parental lock ---
 	let pinSet = $state(false);
@@ -1058,6 +1085,14 @@
 	}
 	$effect(() => {
 		if (tab === 'settings') loadSettingsExtras();
+	});
+	// Keep the update status fresh while Settings is open — a background
+	// weekly check, or an install in progress, both change server-side with
+	// no user action here to trigger a refetch otherwise.
+	$effect(() => {
+		if (tab !== 'settings') return;
+		updatePollTimer = setInterval(loadUpdateVersion, 5000);
+		return () => clearInterval(updatePollTimer);
 	});
 </script>
 
@@ -2139,8 +2174,7 @@
 				</div>
 				<div class="row">
 					<span class="type-label grow"
-						>Automatic updates <span class="type-caption sub"
-							>every {cfg.app.updates.intervalHours}h</span
+						>Automatic checks <span class="type-caption sub">weekly — installing is separate</span
 						></span
 					>
 					<button
@@ -2149,14 +2183,59 @@
 						class:on={!cfg.app.updates.paused}
 						role="switch"
 						aria-checked={!cfg.app.updates.paused}
-						aria-label="Automatic updates"
+						aria-label="Automatic checks"
 						onclick={() => {
 							cfg.app.updates.paused = !cfg.app.updates.paused;
 							persistCfg();
 						}}><span class="knob"></span></button
 					>
 				</div>
-				{#if updateMsg}<p class="type-caption sub">{updateMsg}</p>{/if}
+
+				{#if updateVersion?.update?.status === 'installing'}
+					<div class="updateblock">
+						<p class="type-label">Installing update…</p>
+						<div class="progressbar">
+							<div class="progressfill" style:width="{updateVersion.update.progress ?? 0}%"></div>
+						</div>
+						<p class="type-caption sub">
+							{updateVersion.update.progress ?? 0}% — the display will restart itself when it's
+							done.
+						</p>
+					</div>
+				{:else if showUpdateAvailable && updateVersion?.update}
+					<div class="updateblock">
+						<p class="type-label">Update available</p>
+						{#if updateVersion.update.notes?.length}
+							<ul class="releasenotes">
+								{#each updateVersion.update.notes as n (n)}<li class="type-caption">{n}</li>{/each}
+							</ul>
+						{/if}
+						<div class="row">
+							<button
+								type="button"
+								class="btn primary small"
+								disabled={installingUpdate}
+								onclick={installUpdateNow}
+							>
+								{installingUpdate ? 'Starting…' : 'Install now'}
+							</button>
+							<button type="button" class="laterbtn" onclick={dismissUpdateNow}>Later</button>
+						</div>
+					</div>
+				{:else if updateVersion?.update?.status === 'failed'}
+					<div class="updateblock warn">
+						<p class="type-label">Update failed</p>
+						<p class="type-caption sub">{updateVersion.update.error ?? 'Something went wrong.'}</p>
+						<button
+							type="button"
+							class="btn primary small"
+							disabled={checkingUpdate}
+							onclick={checkUpdates}
+						>
+							<RefreshCw size={15} /> Try again
+						</button>
+					</div>
+				{/if}
 			</section>
 
 			<section class="card">
@@ -2874,5 +2953,54 @@
 		gap: var(--space-3);
 		padding-top: var(--space-3);
 		border-top: 1px solid var(--color-border-hairline);
+	}
+	.updateblock {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-2);
+		padding: var(--space-3);
+		border-radius: var(--radius-md);
+		background: var(--color-surface-elevated);
+	}
+	.updateblock.warn {
+		background: color-mix(in srgb, var(--color-accent-warning) 12%, var(--color-surface));
+	}
+	.progressbar {
+		height: 8px;
+		border-radius: var(--radius-pill);
+		background: var(--color-border-subtle);
+		overflow: hidden;
+	}
+	.progressfill {
+		height: 100%;
+		border-radius: var(--radius-pill);
+		background: var(--color-accent-success);
+		transition: width 0.6s ease;
+	}
+	.releasenotes {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+	}
+	.releasenotes li {
+		padding-left: 14px;
+		position: relative;
+		color: var(--color-text-secondary);
+	}
+	.releasenotes li::before {
+		content: '›';
+		position: absolute;
+		left: 0;
+		color: var(--color-text-tertiary);
+	}
+	.laterbtn {
+		padding: 8px 14px;
+		border-radius: var(--radius-pill);
+		color: var(--color-text-tertiary);
+		font-weight: var(--weight-medium);
+		font-size: var(--text-sm);
 	}
 </style>

@@ -1,0 +1,22 @@
+# One-shot OTA update INSTALL — pulls, builds, and restarts the update a
+# prior check found (data/update-state.json status "available"). Only ever
+# started on demand (POST /api/update/install, from the family's explicit
+# "Install" tap after reading the release notes) — never enabled/timer-
+# triggered, so it has no [Install] section.
+#
+# Install: sudo cp deploy/family-calendar-install.service /etc/systemd/system/
+#          sudo systemctl daemon-reload
+[Unit]
+Description=Family Calendar OTA update install
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=pi
+WorkingDirectory=/home/pi/family-calendar
+ExecStart=/home/pi/family-calendar/scripts/update.sh install
+# npm ci + a from-source better-sqlite3 rebuild + vite build reliably run
+# long on Pi hardware — give it real headroom instead of systemd's 90s
+# default killing a healthy in-progress build.
+TimeoutStartSec=900

@@ -107,8 +107,11 @@ WantedBy=graphical.target
 UNIT
 
 # --- OTA update units (from the repo) ---
+# Two units: -update (check only, weekly timer) and -install (the actual
+# pull/build/restart, only ever started on demand — no timer/[Install]).
 install -m 644 "${APP_DIR}/deploy/family-calendar-update.service" /etc/systemd/system/ 2>/dev/null || true
 install -m 644 "${APP_DIR}/deploy/family-calendar-update.timer" /etc/systemd/system/ 2>/dev/null || true
+install -m 644 "${APP_DIR}/deploy/family-calendar-install.service" /etc/systemd/system/ 2>/dev/null || true
 chmod +x "${APP_DIR}/scripts/update.sh" 2>/dev/null || true
 
 # --- NAS mount helper (privileged; called by the app to mount SMB shares) ---
@@ -158,6 +161,8 @@ ${DASH_USER} ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart family-calendar, \
   /usr/bin/systemctl restart family-calendar-wifi.service, \
   /usr/bin/systemctl start family-calendar-update.service, \
   /usr/bin/systemctl start --no-block family-calendar-update.service, \
+  /usr/bin/systemctl start family-calendar-install.service, \
+  /usr/bin/systemctl start --no-block family-calendar-install.service, \
   /usr/local/bin/fc-nas-mount, \
   /usr/local/bin/fc-wifi-join, \
   /usr/bin/systemctl reboot, /sbin/reboot

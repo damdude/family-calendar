@@ -1,12 +1,15 @@
-# Runs the OTA update check every 4 hours (and shortly after boot).
+# Runs the OTA update CHECK (fetch + compare only, never installs) once a
+# week, plus shortly after boot. Installing is a separate, explicit step —
+# see family-calendar-install.service — triggered by the family from
+# Settings once they've seen the release notes this writes out.
 # Install: sudo cp deploy/family-calendar-update.{service,timer} /etc/systemd/system/
 #          sudo systemctl daemon-reload && sudo systemctl enable --now family-calendar-update.timer
 [Unit]
-Description=Family Calendar OTA update timer
+Description=Family Calendar OTA update check timer
 
 [Timer]
 OnBootSec=10min
-OnUnitActiveSec=4h
+OnCalendar=weekly
 Persistent=true
 
 [Install]

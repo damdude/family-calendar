@@ -85,26 +85,74 @@
 		persist();
 	}
 
-	// Update status.
-	let version = $state<{ commit: string; dirty: boolean } | null>(null);
+	// --- Update status (two-step: check, then an explicit install) ---
+	interface UpdateState {
+		status: 'idle' | 'available' | 'installing' | 'failed';
+		currentCommit?: string;
+		targetCommit?: string;
+		notes?: string[];
+		error?: string;
+		progress?: number;
+	}
+	let version = $state<{ commit: string; dirty: boolean; update: UpdateState | null } | null>(
+		null
+	);
 	let checking = $state(false);
-	let checkMsg = $state('');
+	let installing = $state(false);
+	let pollTimer: ReturnType<typeof setInterval>;
+
+	async function loadVersion() {
+		try {
+			const r = await fetch('/api/update');
+			if (r.ok) version = await r.json();
+		} catch {
+			/* offline; next poll retries */
+		}
+	}
 	$effect(() => {
-		fetch('/api/update')
-			.then((r) => (r.ok ? r.json() : null))
-			.then((v) => (version = v))
-			.catch(() => {});
+		loadVersion();
+		// Keep polling always (not just while installing) — a weekly automatic
+		// check can flip status to "available" in the background with no one
+		// having clicked anything, and this is how that gets noticed.
+		pollTimer = setInterval(loadVersion, 5000);
+		return () => clearInterval(pollTimer);
 	});
+
 	async function checkUpdates() {
 		checking = true;
-		checkMsg = '';
 		try {
-			const r = await fetch('/api/update', { method: 'POST' });
-			checkMsg = r.ok ? 'Checking for updates…' : 'Could not start update check.';
+			await fetch('/api/update', { method: 'POST' });
+			// The check itself finishes in well under a second (just a git
+			// fetch) — one short delay then a reload is simpler and just as
+			// accurate as trying to detect completion some other way.
+			setTimeout(loadVersion, 1500);
 		} finally {
 			checking = false;
 		}
 	}
+
+	async function installUpdate() {
+		installing = true;
+		try {
+			await fetch('/api/update/install', { method: 'POST' });
+			await loadVersion();
+		} finally {
+			installing = false;
+		}
+	}
+
+	// "Later" only quiets the banner for this specific pending version, this
+	// session — the update itself stays recorded server-side and the banner
+	// comes back the moment a genuinely different check result shows up
+	// (still polling means a background weekly check finding something
+	// wouldn't otherwise ever surface).
+	let dismissedTarget = $state<string | null>(null);
+	function dismissUpdate() {
+		dismissedTarget = version?.update?.targetCommit ?? null;
+	}
+	const showAvailable = $derived(
+		version?.update?.status === 'available' && version.update.targetCommit !== dismissedTarget
+	);
 
 	// Persist store snapshot to config.json (debounced) on any change.
 	let saveTimer: ReturnType<typeof setTimeout>;
@@ -451,8 +499,7 @@
 				</div>
 				<div class="row">
 					<span class="type-label"
-						>Automatic updates <span class="hint type-caption"
-							>every {family.config.updates.intervalHours}h</span
+						>Automatic checks <span class="hint type-caption">weekly — installing is separate</span
 						></span
 					>
 					<button
@@ -461,7 +508,7 @@
 						class:on={!family.config.updates.paused}
 						role="switch"
 						aria-checked={!family.config.updates.paused}
-						aria-label="Automatic updates"
+						aria-label="Automatic checks"
 						onclick={() => {
 							family.config.updates.paused = !family.config.updates.paused;
 							persist();
@@ -470,8 +517,48 @@
 						<span class="knob"></span>
 					</button>
 				</div>
-				{#if checkMsg}<p class="type-caption hint">{checkMsg}</p>{/if}
 			</div>
+
+			<!-- Right under the settings above, as its own block: install progress. -->
+			{#if version?.update?.status === 'installing'}
+				<div class="updateblock installing">
+					<p class="type-label">Installing update…</p>
+					<div class="progressbar">
+						<div class="progressfill" style:width="{version.update.progress ?? 0}%"></div>
+					</div>
+					<p class="type-caption hint">
+						{version.update.progress ?? 0}% — the display will restart itself when it's done.
+					</p>
+				</div>
+			{:else if showAvailable && version?.update}
+				<div class="updateblock available">
+					<p class="type-label">Update available</p>
+					{#if version.update.notes?.length}
+						<ul class="releasenotes">
+							{#each version.update.notes as n (n)}<li class="type-caption">{n}</li>{/each}
+						</ul>
+					{/if}
+					<div class="row">
+						<button
+							type="button"
+							class="pairbtn small"
+							disabled={installing}
+							onclick={installUpdate}
+						>
+							{installing ? 'Starting…' : 'Install now'}
+						</button>
+						<button type="button" class="laterbtn" onclick={dismissUpdate}>Later</button>
+					</div>
+				</div>
+			{:else if version?.update?.status === 'failed'}
+				<div class="updateblock failed">
+					<p class="type-label">Update failed</p>
+					<p class="type-caption hint">{version.update.error ?? 'Something went wrong.'}</p>
+					<button type="button" class="pairbtn small" disabled={checking} onclick={checkUpdates}>
+						<RefreshCw size={15} /> Try again
+					</button>
+				</div>
+			{/if}
 		</section>
 
 		<!-- Storage -->
@@ -608,6 +695,56 @@
 		display: block;
 		color: var(--color-text-tertiary);
 		font-weight: var(--weight-regular);
+	}
+	.updateblock {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-2);
+		padding: var(--space-4);
+		margin-top: var(--space-2);
+		border-radius: var(--radius-md);
+		background: var(--color-surface-elevated);
+	}
+	.updateblock.failed {
+		background: color-mix(in srgb, var(--color-accent-warning) 12%, var(--color-surface));
+	}
+	.progressbar {
+		height: 8px;
+		border-radius: var(--radius-pill);
+		background: var(--color-border-subtle);
+		overflow: hidden;
+	}
+	.progressfill {
+		height: 100%;
+		border-radius: var(--radius-pill);
+		background: var(--color-accent-success);
+		transition: width 0.6s ease;
+	}
+	.releasenotes {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+	}
+	.releasenotes li {
+		padding-left: 14px;
+		position: relative;
+		color: var(--color-text-secondary);
+	}
+	.releasenotes li::before {
+		content: '›';
+		position: absolute;
+		left: 0;
+		color: var(--color-text-tertiary);
+	}
+	.laterbtn {
+		padding: 8px 14px;
+		border-radius: var(--radius-pill);
+		color: var(--color-text-tertiary);
+		font-weight: var(--weight-medium);
+		font-size: var(--text-sm);
 	}
 	.pinform {
 		display: flex;
