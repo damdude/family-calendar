@@ -13,6 +13,8 @@ export interface UpdateState {
 	targetCommit?: string;
 	notes?: string[];
 	error?: string;
+	progress?: number;
+	installedAt?: number;
 	checkedAt?: number;
 }
 

@@ -977,6 +977,7 @@
 		notes?: string[];
 		error?: string;
 		progress?: number;
+		installedAt?: number;
 	}
 	let updateVersion = $state<{ commit: string; dirty: boolean; update: UpdateState | null } | null>(
 		null
@@ -1018,6 +1019,17 @@
 		updateVersion?.update?.status === 'available' &&
 			updateVersion.update.targetCommit !== dismissedUpdateTarget
 	);
+	const lastUpdatedLabel = $derived.by(() => {
+		const t = updateVersion?.update?.installedAt;
+		if (!t) return 'never (still on the version this device was built with)';
+		return new Date(t).toLocaleString(undefined, {
+			month: 'short',
+			day: 'numeric',
+			year: 'numeric',
+			hour: 'numeric',
+			minute: '2-digit'
+		});
+	});
 
 	// --- Settings: parental lock ---
 	let pinSet = $state(false);
@@ -2129,6 +2141,11 @@
 					>
 					<button type="button" class="iconbtn" disabled={checkingUpdate} onclick={checkUpdates}
 						><RefreshCw size={15} /></button
+					>
+				</div>
+				<div class="row">
+					<span class="type-label grow"
+						>Last updated <span class="type-caption sub">{lastUpdatedLabel}</span></span
 					>
 				</div>
 				<div class="row">

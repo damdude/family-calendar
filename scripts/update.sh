@@ -35,13 +35,24 @@ cd "$APP_DIR" || exit 1
 log() { echo "[update $(date +%FT%T)] $*"; }
 
 # Writes data/update-state.json. Args: status current target notes(newline-
-# joined subjects) error progress(0-100). Passed via env vars (not argv) so
-# commit subjects with quotes/special characters can't break shell parsing.
+# joined subjects) error progress(0-100) installed(1 on a just-completed
+# install, else blank). Passed via env vars (not argv) so commit subjects
+# with quotes/special characters can't break shell parsing.
 write_state() {
-	FC_STATUS="$1" FC_CURRENT="${2:-}" FC_TARGET="${3:-}" FC_NOTES="${4:-}" FC_ERROR="${5:-}" FC_PROGRESS="${6:-}" \
+	FC_STATUS="$1" FC_CURRENT="${2:-}" FC_TARGET="${3:-}" FC_NOTES="${4:-}" FC_ERROR="${5:-}" FC_PROGRESS="${6:-}" FC_INSTALLED="${7:-}" \
 		node -e '
 			const fs = require("fs");
 			const notes = process.env.FC_NOTES ? process.env.FC_NOTES.split("\n").filter(Boolean) : [];
+			// installedAt only ever moves forward on a completed install (the
+			// final write_state call of a successful run) — every other call
+			// (checks, "installing" progress ticks, failures) carries the
+			// previous value forward so "last updated" reflects the last
+			// successful install, not the last check or attempt.
+			let installedAt;
+			try {
+				installedAt = JSON.parse(fs.readFileSync("data/update-state.json", "utf8")).installedAt;
+			} catch {}
+			if (process.env.FC_INSTALLED === "1") installedAt = Date.now();
 			const state = {
 				status: process.env.FC_STATUS,
 				currentCommit: process.env.FC_CURRENT || undefined,
@@ -49,6 +60,7 @@ write_state() {
 				notes,
 				error: process.env.FC_ERROR || undefined,
 				progress: process.env.FC_PROGRESS ? Number(process.env.FC_PROGRESS) : undefined,
+				installedAt,
 				checkedAt: Date.now()
 			};
 			fs.mkdirSync("data", { recursive: true });
@@ -211,4 +223,4 @@ fi
 
 rm -rf build.prev
 log "update complete ($REMOTE)"
-write_state "idle" "$REMOTE" "" "" "" 100
+write_state "idle" "$REMOTE" "" "" "" 100 1

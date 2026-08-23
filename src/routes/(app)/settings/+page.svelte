@@ -93,6 +93,7 @@
 		notes?: string[];
 		error?: string;
 		progress?: number;
+		installedAt?: number;
 	}
 	let version = $state<{ commit: string; dirty: boolean; update: UpdateState | null } | null>(
 		null
@@ -153,6 +154,17 @@
 	const showAvailable = $derived(
 		version?.update?.status === 'available' && version.update.targetCommit !== dismissedTarget
 	);
+	const lastUpdatedLabel = $derived.by(() => {
+		const t = version?.update?.installedAt;
+		if (!t) return 'never (still on the version this device was built with)';
+		return new Date(t).toLocaleString(undefined, {
+			month: 'short',
+			day: 'numeric',
+			year: 'numeric',
+			hour: 'numeric',
+			minute: '2-digit'
+		});
+	});
 
 	// Persist store snapshot to config.json (debounced) on any change.
 	let saveTimer: ReturnType<typeof setTimeout>;
@@ -496,6 +508,11 @@
 					<button type="button" class="pairbtn small" disabled={checking} onclick={checkUpdates}>
 						<RefreshCw size={15} /> Check now
 					</button>
+				</div>
+				<div class="row">
+					<span class="type-label">Last updated <span class="hint type-caption">{lastUpdatedLabel}</span
+						></span
+					>
 				</div>
 				<div class="row">
 					<span class="type-label"
