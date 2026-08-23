@@ -1,22 +1,23 @@
 <script lang="ts">
 	/**
-	 * TV mode's idle-time screen: a QR inviting phone control, plus the date
-	 * and time, instead of the old clock/photos screensaver. Disappears the
-	 * moment a phone actually pairs — the live dashboard, following their
-	 * navigation, is what's useful to show then — and reappears automatically
-	 * once they disconnect (handled by the caller; this component only
-	 * renders while that's true).
+	 * TV mode's idle-time screen: a QR inviting phone control, plus the date,
+	 * weather, and the next two days' events — instead of the old clock/photos
+	 * screensaver. Disappears the moment a phone actually pairs — the live
+	 * dashboard, following their navigation, is what's useful to show then —
+	 * and reappears automatically once they disconnect (handled by the
+	 * caller; this component only renders while that's true).
+	 *
+	 * The periodic Vestaboard flourish lives one level up (the root layout)
+	 * now, since it needs to interrupt the daytime calendar view too, not
+	 * just this screen.
 	 *
 	 * Anti-burn-in: the whole layout gently drifts between a few positions on
-	 * a timer, and — periodically — swaps to a few seconds of the
-	 * Vestaboard's flipping animation before returning, so the panel is never
-	 * showing one static frame for hours on end.
+	 * a timer, so the panel is never showing one static frame for hours on end.
 	 */
 	import { mirror } from '$lib/stores/mirror.svelte';
 	import { family } from '$lib/stores/family.svelte';
-	import { formatClock, formatRange } from '$lib/time';
-	import Vestaboard from './Vestaboard.svelte';
-	import { Smartphone, CalendarDays } from 'lucide-svelte';
+	import { formatClock, formatRange, sameDay } from '$lib/time';
+	import { Smartphone } from 'lucide-svelte';
 
 	// Redundant with PhoneMirrorPanel's own ensureQr() call — that component
 	// is unmounted while this screen shows, so if its fetch happened to fail
@@ -44,20 +45,6 @@
 	});
 	const pos = $derived(POSITIONS[posIndex]);
 
-	// Every few minutes, a brief Vestaboard flourish instead of the plain QR.
-	const FLOURISH_EVERY_MS = 4 * 60_000;
-	const FLOURISH_DURATION_MS = 9_000;
-	let showFlourish = $state(false);
-	$effect(() => {
-		const id = setInterval(() => (showFlourish = true), FLOURISH_EVERY_MS);
-		return () => clearInterval(id);
-	});
-	$effect(() => {
-		if (!showFlourish) return;
-		const id = setTimeout(() => (showFlourish = false), FLOURISH_DURATION_MS);
-		return () => clearTimeout(id);
-	});
-
 	let now = $state(new Date());
 	$effect(() => {
 		const id = setInterval(() => (now = new Date()), 1000);
@@ -69,80 +56,82 @@
 	);
 	const weather = $derived(family.data.weather);
 
-	function dayLabel(d: Date): string {
-		const today = new Date(now);
-		today.setHours(0, 0, 0, 0);
-		const that = new Date(d);
-		that.setHours(0, 0, 0, 0);
-		const diffDays = Math.round((that.getTime() - today.getTime()) / 86_400_000);
-		if (diffDays === 0) return 'Today';
-		if (diffDays === 1) return 'Tomorrow';
-		return d.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+	// Exactly the next two days — tomorrow on the left, the day after on the
+	// right — so the QR stays the visual focus and this reads at a glance
+	// rather than turning into a scroll-free wall of a whole week.
+	function dayEvents(offset: number) {
+		const d = new Date(now);
+		d.setDate(d.getDate() + offset);
+		return [...family.data.events]
+			.filter((e) => sameDay(e.start, d))
+			.sort((a, b) => a.start.getTime() - b.start.getTime());
 	}
-
-	// The rest of what's coming up — not just tomorrow — so a glance at the
-	// sleeping screen previews the days ahead without waking the display up.
-	// Capped at a fixed count rather than a day window: a screensaver isn't
-	// scrollable, so this bounds how tall the list gets regardless of how
-	// busy the calendar is, and naturally spans however many days it takes
-	// to fill that count on a quiet week.
-	const AGENDA_MAX = 8;
-	const upcomingGroups = $derived.by(() => {
-		const upcoming = [...family.data.events]
-			.filter((e) => e.end.getTime() > now.getTime())
-			.sort((a, b) => a.start.getTime() - b.start.getTime())
-			.slice(0, AGENDA_MAX);
-		const groups: { label: string; events: typeof upcoming }[] = [];
-		for (const e of upcoming) {
-			const label = dayLabel(e.start);
-			const last = groups[groups.length - 1];
-			if (last && last.label === label) last.events.push(e);
-			else groups.push({ label, events: [e] });
-		}
-		return groups;
+	const col1 = $derived(dayEvents(1));
+	const col2 = $derived(dayEvents(2));
+	const col1Label = $derived('Tomorrow');
+	const col2Label = $derived.by(() => {
+		const d = new Date(now);
+		d.setDate(d.getDate() + 2);
+		return d.toLocaleDateString(undefined, { weekday: 'long' });
 	});
 </script>
 
-{#if showFlourish}
-	<Vestaboard />
-{:else}
-	<div class="tvidle" role="status" aria-label="Waiting for a phone to connect">
-		<div class="layout" style:transform="translate({pos.x}vmin, {pos.y}vmin)">
-			<div class="top">
-				{#if mirror.qrSvg}
-					<div class="qr">
-						<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-						{@html mirror.qrSvg}
-					</div>
-				{/if}
-				<time class="clock">{formatClock(now, clock24)}</time>
-				<p class="date">{dateStr}</p>
-				{#if weather.icon !== '—'}
-					<p class="weather">{weather.icon} {weather.tempF}° {weather.condition}</p>
-				{/if}
-				<p class="hint"><Smartphone size={18} /> Scan to add events, lists and more</p>
-			</div>
-			{#if upcomingGroups.length}
-				<div class="agenda">
-					{#each upcomingGroups as g (g.label)}
-						<div class="agroup">
-							<p class="agroup-head"><CalendarDays size={14} /> {g.label}</p>
-							{#each g.events as e (e.id)}
-								<div class="arow">
-									<p class="atitle">{e.title}</p>
-									<p class="ameta">
-										{e.allDay ? 'All day' : formatRange(e.start, e.end, clock24)}{#if e.location}
-											· {e.location}{/if}
-									</p>
-								</div>
-							{/each}
-						</div>
-					{/each}
+<div class="tvidle" role="status" aria-label="Waiting for a phone to connect">
+	<div class="layout" style:transform="translate({pos.x}vmin, {pos.y}vmin)">
+		<div class="top">
+			{#if mirror.qrSvg}
+				<div class="qr">
+					<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+					{@html mirror.qrSvg}
 				</div>
 			{/if}
+			<time class="clock">{formatClock(now, clock24)}</time>
+			<p class="date">{dateStr}</p>
+			{#if weather.icon !== '—'}
+				<p class="weather">{weather.icon} {weather.tempF}° {weather.condition}</p>
+			{/if}
+			<p class="hint"><Smartphone size={18} /> Scan to add events, lists and more</p>
 		</div>
+
+		{#if col1.length || col2.length}
+			<div class="days">
+				<div class="daycol">
+					<p class="daycol-head">{col1Label}</p>
+					{#if col1.length === 0}
+						<p class="empty">Nothing planned</p>
+					{:else}
+						{#each col1 as e (e.id)}
+							<div class="erow">
+								<p class="etitle">{e.title}</p>
+								<p class="emeta">
+									{e.allDay ? 'All day' : formatRange(e.start, e.end, clock24)}{#if e.location}
+										· {e.location}{/if}
+								</p>
+							</div>
+						{/each}
+					{/if}
+				</div>
+				<div class="divider" aria-hidden="true"></div>
+				<div class="daycol">
+					<p class="daycol-head">{col2Label}</p>
+					{#if col2.length === 0}
+						<p class="empty">Nothing planned</p>
+					{:else}
+						{#each col2 as e (e.id)}
+							<div class="erow">
+								<p class="etitle">{e.title}</p>
+								<p class="emeta">
+									{e.allDay ? 'All day' : formatRange(e.start, e.end, clock24)}{#if e.location}
+										· {e.location}{/if}
+								</p>
+							</div>
+						{/each}
+					{/if}
+				</div>
+			</div>
+		{/if}
 	</div>
-{/if}
+</div>
 
 <style>
 	.tvidle {
@@ -159,7 +148,7 @@
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		gap: clamp(18px, 3.2vmin, 40px);
+		gap: clamp(20px, 3.5vmin, 44px);
 		max-height: 92vh;
 		transition: transform 3s ease-in-out;
 	}
@@ -171,63 +160,12 @@
 		text-align: center;
 		flex: none;
 	}
-	.agenda {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: clamp(10px, 1.8vmin, 20px);
-		text-align: center;
-		width: clamp(260px, 34vmin, 460px);
-		overflow: hidden;
-	}
-	.agroup {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: clamp(4px, 0.8vmin, 8px);
-	}
-	.agroup-head {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		font-size: clamp(0.7rem, 1.4vmin, 0.95rem);
-		font-weight: 500;
-		opacity: 0.55;
-		margin: 0 0 clamp(2px, 0.6vmin, 6px);
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-	}
-	.arow {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: 2px;
-	}
-	.atitle {
-		font-size: clamp(0.85rem, 1.7vmin, 1.15rem);
-		font-weight: 500;
-		margin: 0;
-		max-width: 100%;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-	.ameta {
-		font-size: clamp(0.7rem, 1.3vmin, 0.95rem);
-		font-variant-numeric: tabular-nums;
-		opacity: 0.55;
-		margin: 0;
-		max-width: 100%;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
 	.qr {
-		width: clamp(110px, 16vmin, 240px);
-		height: clamp(110px, 16vmin, 240px);
-		padding: clamp(8px, 1.3vmin, 16px);
+		width: clamp(140px, 20vmin, 280px);
+		height: clamp(140px, 20vmin, 280px);
+		padding: clamp(10px, 1.5vmin, 18px);
 		background: #fff;
-		border-radius: clamp(8px, 1.3vmin, 16px);
+		border-radius: clamp(10px, 1.5vmin, 18px);
 	}
 	.qr :global(svg) {
 		width: 100%;
@@ -235,20 +173,20 @@
 		display: block;
 	}
 	.clock {
-		font-size: clamp(1.8rem, 5.5vmin, 4.2rem);
+		font-size: clamp(2.2rem, 7vmin, 5.4rem);
 		font-weight: 200;
 		line-height: 1;
 		letter-spacing: -0.02em;
 		font-variant-numeric: tabular-nums;
 	}
 	.date {
-		font-size: clamp(0.9rem, 2vmin, 1.3rem);
+		font-size: clamp(0.95rem, 2.2vmin, 1.5rem);
 		font-weight: 300;
 		opacity: 0.75;
 		margin: 0;
 	}
 	.weather {
-		font-size: clamp(0.85rem, 1.8vmin, 1.2rem);
+		font-size: clamp(0.9rem, 2vmin, 1.4rem);
 		font-weight: 400;
 		opacity: 0.75;
 		margin: 0;
@@ -260,6 +198,61 @@
 		font-size: clamp(0.85rem, 1.8vmin, 1.15rem);
 		opacity: 0.6;
 		margin: 0;
+	}
+
+	/* Two-column next-two-days summary. */
+	.days {
+		display: flex;
+		align-items: stretch;
+		gap: clamp(20px, 3vmin, 48px);
+		width: clamp(420px, 56vmin, 900px);
+		max-width: 92vw;
+	}
+	.daycol {
+		flex: 1;
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
+		gap: clamp(10px, 1.5vmin, 18px);
+		text-align: center;
+	}
+	.divider {
+		flex: none;
+		width: 1px;
+		background: rgba(255, 255, 255, 0.35);
+	}
+	.daycol-head {
+		font-size: clamp(0.75rem, 1.5vmin, 1rem);
+		font-weight: 600;
+		opacity: 0.65;
+		margin: 0 0 clamp(2px, 0.5vmin, 6px);
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+	}
+	.empty {
+		font-size: clamp(0.8rem, 1.5vmin, 1.05rem);
+		opacity: 0.4;
+		margin: 0;
+	}
+	.erow {
+		display: flex;
+		flex-direction: column;
+		gap: 3px;
+	}
+	.etitle {
+		font-size: clamp(0.85rem, 1.7vmin, 1.15rem);
+		font-weight: 500;
+		margin: 0;
+		/* Wrap instead of truncating — a long title should stay fully
+		   readable on a screen nobody can scroll or tap to expand. */
+		overflow-wrap: break-word;
+	}
+	.emeta {
+		font-size: clamp(0.7rem, 1.3vmin, 0.95rem);
+		font-variant-numeric: tabular-nums;
+		opacity: 0.55;
+		margin: 0;
+		overflow-wrap: break-word;
 	}
 	@media (prefers-reduced-motion: reduce) {
 		.layout {

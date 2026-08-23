@@ -33,7 +33,22 @@
 	}
 
 	const weekStart = $derived.by(() => {
-		const base = startOfWeek(new Date(), family.config.view.weekStartsOn);
+		const today = new Date();
+		// Sunday, viewing the actual current week: a plain Mon-Sun grid would
+		// end on today, showing an entire week almost completely in the past.
+		// Shift the 7-day window forward instead — Wed of the week just
+		// finishing through Tue of next week — so it still closes out the
+		// last few days of this week but also previews what's coming next
+		// week, which is the more useful thing to see stood in front of the
+		// display on a Sunday. Only for the current week (weekOffset 0);
+		// navigating to a past/future week always shows a plain Mon-Sun.
+		if (weekOffset === 0 && today.getDay() === 0) {
+			const wed = new Date(today);
+			wed.setHours(0, 0, 0, 0);
+			wed.setDate(wed.getDate() - 4);
+			return wed;
+		}
+		const base = startOfWeek(today, family.config.view.weekStartsOn);
 		base.setDate(base.getDate() + weekOffset * 7);
 		return base;
 	});

@@ -6,6 +6,7 @@
 	import TopBar from '$lib/components/TopBar.svelte';
 	import Screensaver from '$lib/components/Screensaver.svelte';
 	import TvIdleScreen from '$lib/components/TvIdleScreen.svelte';
+	import Vestaboard from '$lib/components/Vestaboard.svelte';
 	import PhoneMirrorPanel from '$lib/components/PhoneMirrorPanel.svelte';
 	import { dragScroll } from '$lib/actions/dragScroll';
 	import { isWithinWindow } from '$lib/time';
@@ -95,25 +96,50 @@
 	// A dismiss always guarantees a real window of "definitely off" — a tap
 	// resetting `lastActivity` isn't enough on its own to prove the screen
 	// actually comes back, since `tick`/`lastActivity` can already be stale by
-	// the moment screensaverActive first turns true (e.g. switching this
-	// screen from TV to touch mode after it sat idle — TV mode is exempt from
-	// the screensaver entirely, so nothing had been resetting the idle clock —
-	// which otherwise reads as "the screensaver came on and touch does
-	// nothing," since every recomputation immediately re-triggers it.
+	// the moment screensaverActive first turns true — which otherwise reads
+	// as "the screensaver came on and touch does nothing," since every
+	// recomputation immediately re-triggers it.
 	let snoozedUntil = $state(0);
-	// Same idle/sleep-window/"Sleep now" condition drives both modes' idle
-	// state — only the content shown for it differs below.
-	const idleOrSleepActive = $derived(
-		tick < snoozedUntil
-			? false
-			: screensaver.forceSleep || (sv.enabled && (sleepActive || idleActive))
+	// TV: the QR + agenda idle screen — tied ONLY to the sleep window (or
+	// "Sleep now"), never idle-timeout. TV has no touch input at all, so
+	// idle-by-inactivity would go true a few minutes after boot and never
+	// clear again, which is why this used to show nearly around the clock
+	// instead of the calendar dashboard being the default daytime view.
+	// Also gated on nobody actively driving it from a phone, since the live
+	// dashboard following their navigation is what's useful to show then.
+	const tvIdleActive = $derived(
+		family.isTv &&
+			tick >= snoozedUntil &&
+			(screensaver.forceSleep || sleepActive) &&
+			!mirror.controllerConnected
 	);
-	// TV: the QR + clock idle screen (TvIdleScreen) — but only while nobody's
-	// actively driving it from a phone, since the live dashboard following
-	// their navigation is what's useful to show then instead.
-	const tvIdleActive = $derived(family.isTv && idleOrSleepActive && !mirror.controllerConnected);
-	// Touch: the original dismissible clock/photos screensaver, unchanged.
-	const touchScreensaverActive = $derived(!family.isTv && idleOrSleepActive);
+	// Touch: the original idle-timeout-or-sleep-window dismissible screensaver, unchanged.
+	const touchScreensaverActive = $derived(
+		!family.isTv &&
+			tick >= snoozedUntil &&
+			(screensaver.forceSleep || (sv.enabled && (sleepActive || idleActive)))
+	);
+
+	// --- Periodic Vestaboard flourish ---
+	// A brief ambient interruption (weather / upcoming events / kid streaks /
+	// jokes / headlines) regardless of what's currently showing — the
+	// daytime calendar dashboard just as much as the nighttime idle screen —
+	// so there's always something fresh to glance at without anyone having
+	// to go looking for it. Skipped while a phone is actively driving the
+	// display, since that's mid-interaction.
+	const FLOURISH_EVERY_MS = 5 * 60_000;
+	const FLOURISH_DURATION_MS = 10_000;
+	let showFlourish = $state(false);
+	$effect(() => {
+		const id = setInterval(() => (showFlourish = true), FLOURISH_EVERY_MS);
+		return () => clearInterval(id);
+	});
+	$effect(() => {
+		if (!showFlourish) return;
+		const id = setTimeout(() => (showFlourish = false), FLOURISH_DURATION_MS);
+		return () => clearTimeout(id);
+	});
+	const flourishActive = $derived(showFlourish && !mirror.controllerConnected);
 
 	// --- Auto light/dark theme (sunrise/sunset ±1h) ---
 	// Set on <html>, not the .app div — TvIdleScreen/Screensaver render as
@@ -147,16 +173,18 @@
 	</div>
 </div>
 
-<!-- Full QR on a TV (the only way in), a small icon on a touchscreen. -->
+<!-- Full QR on a TV (the only way in), a small icon on a touchscreen. Stays
+     mounted through the flourish too — Vestaboard's own z-index sits below
+     it deliberately, so the QR (or its badge) stays reachable throughout. -->
 {#if !tvIdleActive && !touchScreensaverActive}
 	<PhoneMirrorPanel />
 {/if}
 
-{#if tvIdleActive}
+{#if flourishActive}
+	<Vestaboard ondismiss={() => (showFlourish = false)} />
+{:else if tvIdleActive}
 	<TvIdleScreen />
-{/if}
-
-{#if touchScreensaverActive}
+{:else if touchScreensaverActive}
 	<Screensaver
 		mode={sv.mode}
 		ondismiss={() => {
