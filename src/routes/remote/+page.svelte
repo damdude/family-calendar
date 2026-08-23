@@ -926,12 +926,14 @@
 		name: string;
 		externalId: string;
 		profileId?: number;
+		isBirthdays: boolean;
 	}
 	let calendars = $state<CalendarLink[]>([]);
 	let calLoaded = $state(false);
 	let calUrl = $state('');
 	let calName = $state('');
 	let calProfileId = $state<number | ''>('');
+	let calIsBirthdays = $state(false);
 	let savingCal = $state(false);
 	let calError = $state('');
 	async function loadCalendars() {
@@ -955,13 +957,15 @@
 				body: JSON.stringify({
 					url,
 					name: calName.trim(),
-					profileId: calProfileId === '' ? undefined : Number(calProfileId)
+					profileId: calProfileId === '' ? undefined : Number(calProfileId),
+					isBirthdays: calIsBirthdays
 				})
 			});
 			if (r.ok) {
 				calUrl = '';
 				calName = '';
 				calProfileId = '';
+				calIsBirthdays = false;
 				await loadCalendars();
 			} else {
 				calError = (await r.json().catch(() => ({})))?.message ?? 'Could not add that calendar.';
@@ -969,6 +973,14 @@
 		} finally {
 			savingCal = false;
 		}
+	}
+	async function toggleCalBirthdays(c: CalendarLink) {
+		await fetch('/api/calendars/birthdays', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ id: c.id, isBirthdays: !c.isBirthdays })
+		});
+		await loadCalendars();
 	}
 
 	// --- Settings: software updates ---
@@ -2076,6 +2088,10 @@
 							</select>
 						</label>
 					{/if}
+				<label class="birthdaycheck type-caption">
+					<input type="checkbox" bind:checked={calIsBirthdays} />
+					🎂 This is a birthdays calendar
+				</label>
 				{#if calError}<p class="type-caption err">{calError}</p>{/if}
 				<button
 					type="button"
@@ -2090,6 +2106,15 @@
 						{#each calendars as c (c.id)}
 							<div class="itemrow">
 								<span class="itext type-body">{c.name}</span>
+								<button
+									type="button"
+									class="cake"
+									class:on={c.isBirthdays}
+									aria-label={c.isBirthdays
+										? 'Birthdays calendar (tap to unmark)'
+										: 'Mark as birthdays calendar'}
+									onclick={() => toggleCalBirthdays(c)}>🎂</button
+								>
 							</div>
 						{/each}
 					</div>
@@ -2587,6 +2612,26 @@
 	.itext {
 		flex: 1;
 		color: var(--color-text-primary);
+	}
+	.cake {
+		flex: none;
+		width: 30px;
+		height: 30px;
+		display: grid;
+		place-items: center;
+		border-radius: var(--radius-pill);
+		font-size: 1rem;
+		opacity: 0.35;
+	}
+	.cake.on {
+		opacity: 1;
+		background: color-mix(in srgb, var(--color-accent-warning) 20%, var(--color-surface));
+	}
+	.birthdaycheck {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		color: var(--color-text-secondary);
 	}
 	.itemrow.done .itext {
 		color: var(--color-text-tertiary);

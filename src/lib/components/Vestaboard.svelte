@@ -23,7 +23,8 @@
 	let feed = $state<{
 		headlines: { source: string; text: string }[];
 		joke: { q: string; a: string };
-	}>({ headlines: [], joke: { q: '', a: '' } });
+		birthdays: { title: string; startTs: number }[];
+	}>({ headlines: [], joke: { q: '', a: '' }, birthdays: [] });
 
 	async function loadFeed() {
 		try {
@@ -50,6 +51,17 @@
 		if (sameDay) return `TODAY ${t}`;
 		if (tomorrow) return `TOMORROW ${t}`;
 		return `${d.toLocaleDateString(undefined, { weekday: 'short' }).toUpperCase()} ${t}`;
+	}
+
+	// Date only, no time — birthdays sync as all-day events, so a clock time
+	// on the board wouldn't mean anything.
+	function dateLabel(d: Date): string {
+		const now = new Date();
+		if (d.toDateString() === now.toDateString()) return 'TODAY';
+		if (new Date(now.getTime() + 86_400_000).toDateString() === d.toDateString()) return 'TOMORROW';
+		return d
+			.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
+			.toUpperCase();
 	}
 
 	const boards = $derived.by<Board[]>(() => {
@@ -102,6 +114,17 @@
 		if (cfg.showNews) {
 			for (const h of feed.headlines) {
 				out.push({ lines: [h.source, h.text], color: 'red' });
+			}
+		}
+
+		// Upcoming birthdays — from whichever synced calendar was flagged as
+		// a birthdays feed (Settings → Calendars).
+		if (cfg.showBirthdays) {
+			for (const b of feed.birthdays.slice(0, 3)) {
+				out.push({
+					lines: ['BIRTHDAY', b.title, dateLabel(new Date(b.startTs * 1000))],
+					color: 'pink'
+				});
 			}
 		}
 
@@ -223,7 +246,8 @@
 		yellow: '#e8b93b',
 		green: '#3f9d5a',
 		blue: '#3a6ea5',
-		violet: '#7a5aa8'
+		violet: '#7a5aa8',
+		pink: '#d0568f'
 	};
 
 	// Live clock in the footer.

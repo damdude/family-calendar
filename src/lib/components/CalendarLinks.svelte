@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { family } from '$lib/stores/family.svelte';
 	import { profileColorVar } from '$lib/design/colors';
-	import { Link2, Plus, X, RefreshCw, CalendarPlus } from 'lucide-svelte';
+	import { Link2, Plus, X, RefreshCw, CalendarPlus, Cake } from 'lucide-svelte';
 
 	interface Cal {
 		id: number;
@@ -10,12 +10,14 @@
 		colorHex: string | null;
 		profileId: number | null;
 		lastSync: number | null;
+		isBirthdays: boolean;
 	}
 
 	let cals = $state<Cal[]>([]);
 	let url = $state('');
 	let name = $state('');
 	let profileId = $state<number | ''>('');
+	let newIsBirthdays = $state(false);
 	let busy = $state(false);
 	let msg = $state('');
 
@@ -38,7 +40,8 @@
 				body: JSON.stringify({
 					url: url.trim(),
 					name: name.trim(),
-					profileId: profileId === '' ? undefined : Number(profileId)
+					profileId: profileId === '' ? undefined : Number(profileId),
+					isBirthdays: newIsBirthdays
 				})
 			});
 			if (r.ok) {
@@ -48,6 +51,7 @@
 				url = '';
 				name = '';
 				profileId = '';
+				newIsBirthdays = false;
 			} else {
 				msg = (await r.json().catch(() => ({})))?.message ?? 'Could not add that link.';
 			}
@@ -61,6 +65,15 @@
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
 			body: JSON.stringify({ id })
+		});
+		if (r.ok) cals = (await r.json()).calendars;
+	}
+
+	async function toggleBirthdays(c: Cal) {
+		const r = await fetch('/api/calendars/birthdays', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ id: c.id, isBirthdays: !c.isBirthdays })
 		});
 		if (r.ok) cals = (await r.json()).calendars;
 	}
@@ -142,6 +155,16 @@
 			></span>
 			<span class="cname type-label">{c.name || host(c.externalId)}</span>
 			<span class="chost type-caption">{host(c.externalId)}</span>
+			<button
+				type="button"
+				class="cake"
+				class:on={c.isBirthdays}
+				aria-label={c.isBirthdays ? 'Birthdays calendar (tap to unmark)' : 'Mark as birthdays calendar'}
+				title={c.isBirthdays ? 'Birthdays calendar' : 'Mark as birthdays calendar'}
+				onclick={() => toggleBirthdays(c)}
+			>
+				<Cake size={15} />
+			</button>
 			<button type="button" class="del" aria-label="Remove" onclick={() => remove(c.id)}>
 				<X size={14} />
 			</button>
@@ -162,6 +185,10 @@
 				<Plus size={16} /> Add
 			</button>
 		</div>
+		<label class="birthdaycheck type-caption">
+			<input type="checkbox" bind:checked={newIsBirthdays} />
+			<Cake size={14} /> This is a birthdays calendar
+		</label>
 	</div>
 	{#if msg}<p class="type-caption msg">{msg}</p>{/if}
 
@@ -294,10 +321,29 @@
 	.del:hover {
 		color: var(--color-accent-warning);
 	}
+	.cake {
+		display: grid;
+		place-items: center;
+		width: 26px;
+		height: 26px;
+		border-radius: var(--radius-pill);
+		color: var(--color-text-tertiary);
+		flex: none;
+	}
+	.cake.on {
+		color: var(--color-accent-warning);
+		background: color-mix(in srgb, var(--color-accent-warning) 18%, var(--color-surface));
+	}
 	.addform {
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-2);
+	}
+	.birthdaycheck {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		color: var(--color-text-secondary);
 	}
 	.row2 {
 		display: flex;

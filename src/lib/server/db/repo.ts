@@ -69,18 +69,20 @@ export function upsertCalendar(c: {
 	name?: string;
 	colorHex?: string;
 	profileId?: number;
+	isBirthdays?: boolean;
 }): number {
 	const db = getDb();
 	db.prepare(
-		`INSERT INTO calendars (provider, external_id, name, color_hex, profile_id, enabled)
-		 VALUES (@provider, @externalId, @name, @colorHex, @profileId, 1)
+		`INSERT INTO calendars (provider, external_id, name, color_hex, profile_id, is_birthdays, enabled)
+		 VALUES (@provider, @externalId, @name, @colorHex, @profileId, @isBirthdays, 1)
 		 ON CONFLICT(provider, external_id) DO UPDATE SET name=@name, color_hex=@colorHex`
 	).run({
 		provider: c.provider,
 		externalId: c.externalId,
 		name: c.name ?? null,
 		colorHex: c.colorHex ?? null,
-		profileId: c.profileId ?? null
+		profileId: c.profileId ?? null,
+		isBirthdays: c.isBirthdays ? 1 : 0
 	});
 	return (
 		db
@@ -97,6 +99,7 @@ export interface CalendarRow {
 	colorHex: string | null;
 	profileId: number | null;
 	lastSync: number | null;
+	isBirthdays: boolean;
 }
 
 /** All calendars, optionally filtered by provider (e.g. 'ical'). */
@@ -114,6 +117,7 @@ export function getCalendars(provider?: string): CalendarRow[] {
 		color_hex: string | null;
 		profile_id: number | null;
 		last_sync: number | null;
+		is_birthdays: number;
 	}>;
 	return rows.map((r) => ({
 		id: r.id,
@@ -122,7 +126,8 @@ export function getCalendars(provider?: string): CalendarRow[] {
 		name: r.name,
 		colorHex: r.color_hex,
 		profileId: r.profile_id,
-		lastSync: r.last_sync
+		lastSync: r.last_sync,
+		isBirthdays: !!r.is_birthdays
 	}));
 }
 
@@ -130,6 +135,32 @@ export function setCalendarSynced(id: number): void {
 	getDb()
 		.prepare('UPDATE calendars SET last_sync = ? WHERE id = ?')
 		.run(Math.floor(Date.now() / 1000), id);
+}
+
+/** Mark (or unmark) a calendar as the birthdays feed — its events populate
+ *  the Vestaboard's upcoming-birthdays board instead of the generic one. */
+export function setCalendarBirthdays(id: number, flag: boolean): void {
+	getDb()
+		.prepare('UPDATE calendars SET is_birthdays = ? WHERE id = ?')
+		.run(flag ? 1 : 0, id);
+}
+
+/** Events from any calendar(s) flagged as a birthdays feed, within the next
+ *  `days` days (today included) — for the Vestaboard's upcoming-birthdays
+ *  board. Birthday calendars are typically yearly all-day events, already
+ *  recurrence-expanded by the normal ICS sync within its own window, so this
+ *  just filters what's already stored rather than fetching anything extra. */
+export function getUpcomingBirthdays(days: number): Array<{ title: string; startTs: number }> {
+	if (!dbExists()) return [];
+	const now = Math.floor(Date.now() / 1000);
+	const rows = getDb()
+		.prepare(
+			`SELECT e.title, e.start_ts FROM events e JOIN calendars c ON c.id = e.calendar_id
+			 WHERE c.is_birthdays = 1 AND c.enabled = 1 AND e.start_ts >= ? AND e.start_ts < ?
+			 ORDER BY e.start_ts`
+		)
+		.all(now - 86_400, now + days * 86_400) as Array<{ title: string | null; start_ts: number }>;
+	return rows.map((r) => ({ title: r.title ?? '(untitled)', startTs: r.start_ts }));
 }
 
 export function removeCalendar(id: number): void {

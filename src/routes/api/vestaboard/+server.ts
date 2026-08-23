@@ -7,6 +7,7 @@
 
 import { json } from '@sveltejs/kit';
 import { getSites } from '$lib/server/sites';
+import { getUpcomingBirthdays } from '$lib/server/db/repo';
 import type { RequestHandler } from './$types';
 
 // Wholesome, kid-safe one-liners. Picked by day so it's stable for ~24h.
@@ -50,5 +51,19 @@ export const GET: RequestHandler = async () => {
 	const dayIndex = Math.floor(Date.now() / 86_400_000) % JOKES.length;
 	const [jokeQ, jokeA] = JOKES[dayIndex];
 
-	return json({ headlines: headlines.slice(0, 12), joke: { q: jokeQ, a: jokeA } });
+	// Whatever's synced from a calendar the family flagged as a birthdays
+	// feed (Settings → Calendars) — next 60 days, already recurrence-
+	// expanded by the normal ICS sync, just filtered here.
+	let birthdays: { title: string; startTs: number }[] = [];
+	try {
+		birthdays = getUpcomingBirthdays(60);
+	} catch {
+		/* no DB yet — no calendars subscribed at all */
+	}
+
+	return json({
+		headlines: headlines.slice(0, 12),
+		joke: { q: jokeQ, a: jokeA },
+		birthdays
+	});
 };

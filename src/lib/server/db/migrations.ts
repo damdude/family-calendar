@@ -84,5 +84,16 @@ export const migrations: Migration[] = [
 			-- until explicitly cleared.
 			ALTER TABLE events ADD COLUMN profile_overridden INTEGER NOT NULL DEFAULT 0;
 		`
+	},
+	{
+		version: 4,
+		name: 'calendar_birthdays_flag',
+		sql: `
+			-- Marks a subscribed calendar as a birthdays feed (e.g. Google's
+			-- auto-generated "Birthdays" calendar, or any other ICS export of
+			-- yearly birthday events) — its events feed the Vestaboard's
+			-- upcoming-birthdays board instead of the generic events board.
+			ALTER TABLE calendars ADD COLUMN is_birthdays INTEGER NOT NULL DEFAULT 0;
+		`
 	}
 ];

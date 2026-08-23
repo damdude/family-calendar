@@ -103,6 +103,7 @@ const VestaboardSchema = z
 		showJokes: z.boolean().default(true),
 		showKids: z.boolean().default(true),
 		showNews: z.boolean().default(true),
+		showBirthdays: z.boolean().default(true),
 		/** Seconds each board is held before flipping to the next. */
 		holdSeconds: z.number().int().min(4).max(120).default(12)
 	})

@@ -15,7 +15,11 @@ const Body = z.object({
 	url: z.string().url(),
 	name: z.string().max(60).default(''),
 	colorHex: z.string().max(9).optional(),
-	profileId: z.number().int().optional()
+	profileId: z.number().int().optional(),
+	// A birthdays feed (e.g. Google's auto-generated "Birthdays" calendar)
+	// feeds the Vestaboard's upcoming-birthdays board instead of the
+	// generic events board.
+	isBirthdays: z.boolean().default(false)
 });
 
 /** Subscribe to a calendar by iCal/webcal link, then sync it. */
@@ -29,7 +33,8 @@ export const POST: RequestHandler = async ({ request }) => {
 		externalId: url,
 		name: parsed.data.name || new URL(url).hostname,
 		colorHex: parsed.data.colorHex,
-		profileId: parsed.data.profileId
+		profileId: parsed.data.profileId,
+		isBirthdays: parsed.data.isBirthdays
 	});
 
 	let count = 0;

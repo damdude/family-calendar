@@ -72,6 +72,7 @@ export interface VestaboardPrefs {
 	showJokes: boolean;
 	showKids: boolean;
 	showNews: boolean;
+	showBirthdays: boolean;
 	/** Seconds each board is held before flipping to the next. */
 	holdSeconds: number;
 }
@@ -193,6 +194,7 @@ export const defaultConfig: AppConfig = {
 			showJokes: true,
 			showKids: true,
 			showNews: true,
+			showBirthdays: true,
 			holdSeconds: 12
 		}
 	},

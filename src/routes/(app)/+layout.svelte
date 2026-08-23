@@ -122,11 +122,12 @@
 
 	// --- Periodic Vestaboard flourish ---
 	// A brief ambient interruption (weather / upcoming events / kid streaks /
-	// jokes / headlines) regardless of what's currently showing — the
-	// daytime calendar dashboard just as much as the nighttime idle screen —
-	// so there's always something fresh to glance at without anyone having
-	// to go looking for it. Skipped while a phone is actively driving the
-	// display, since that's mid-interaction.
+	// jokes / headlines / birthdays) on top of the daytime calendar
+	// dashboard — every 5 min, for 10 sec — so there's always something
+	// fresh to glance at without anyone having to go looking for it. Never
+	// while the screensaver/idle screen is already showing (that one stays
+	// put once it's on) or while a phone is actively driving the display.
+	// The timer still runs underneath either way; it just won't render.
 	const FLOURISH_EVERY_MS = 5 * 60_000;
 	const FLOURISH_DURATION_MS = 10_000;
 	let showFlourish = $state(false);
@@ -139,7 +140,9 @@
 		const id = setTimeout(() => (showFlourish = false), FLOURISH_DURATION_MS);
 		return () => clearTimeout(id);
 	});
-	const flourishActive = $derived(showFlourish && !mirror.controllerConnected);
+	const flourishActive = $derived(
+		showFlourish && !mirror.controllerConnected && !tvIdleActive && !touchScreensaverActive
+	);
 
 	// --- Auto light/dark theme (sunrise/sunset ±1h) ---
 	// Set on <html>, not the .app div — TvIdleScreen/Screensaver render as
