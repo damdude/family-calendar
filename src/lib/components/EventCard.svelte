@@ -52,7 +52,7 @@
 
 <div class="card {variant}" style:background>
 	<div class="body">
-		<p class="title type-label" class:clamp1={variant === 'grid'}>{event.title}</p>
+		<p class="title type-label">{event.title}</p>
 		{#if metaLine && showMeta}
 			<p class="meta type-caption">{metaLine}</p>
 		{/if}
@@ -86,26 +86,12 @@
 	.title {
 		color: var(--color-text-primary);
 		font-weight: var(--weight-semibold);
-		overflow: hidden;
-		display: -webkit-box;
-		-webkit-line-clamp: 2;
-		line-clamp: 2;
-		-webkit-box-orient: vertical;
-	}
-	/* Grid columns are narrow enough that a 2-line title regularly ate the
-	   whole card, leaving the meta line (time + location) nowhere to go
-	   regardless of how much time the event actually had. One line here
-	   guarantees the meta line always gets its row. */
-	.title.clamp1 {
-		-webkit-line-clamp: 1;
-		line-clamp: 1;
+		overflow-wrap: break-word;
 	}
 	.meta {
 		color: color-mix(in srgb, var(--color-text-primary) 62%, transparent);
 		margin-top: 2px;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		overflow-wrap: break-word;
 	}
 	.avatars {
 		position: absolute;

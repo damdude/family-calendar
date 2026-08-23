@@ -30,6 +30,7 @@
 		Star,
 		Wifi,
 		RefreshCw,
+		RotateCcw,
 		Link as LinkIcon
 	} from 'lucide-svelte';
 	import type { ProfileColor } from '$lib/types';
@@ -96,7 +97,13 @@
 	let savingEvent = $state(false);
 	let eventAdded = $state(false);
 	let eventError = $state('');
-	let editingEventId = $state<number | null>(null); // raw local id (no LOCAL_ID_BASE offset), null = adding new
+	// null = adding a new local event. Otherwise the raw id (no LOCAL_ID_BASE
+	// offset) plus which kind it is — local events are fully ours (title
+	// included); synced events can have time/location/who edited here (an
+	// override this app keeps showing instead of the source's own values —
+	// there's no write-back to an ICS subscription, see the synced-event
+	// endpoint), but not the title.
+	let editingEvent = $state<{ kind: 'local' | 'synced'; id: number } | null>(null);
 
 	function toggleProfile(id: number) {
 		profileIds = profileIds.includes(id) ? profileIds.filter((x) => x !== id) : [...profileIds, id];
@@ -114,36 +121,9 @@
 		};
 	}
 
-	// Synced events (from an external calendar) can't have their title/time
-	// edited here — the next sync would just overwrite that — but WHO it's
-	// for is a local call, so that's the one field reassignable on them.
-	let reassigningEvent = $state<{ id: number; title: string; profileId: number | null } | null>(
-		null
-	);
-	let savingReassign = $state(false);
-	function reassignEvent(profileId: number | null) {
-		if (!reassigningEvent) return;
-		savingReassign = true;
-		fetch('/api/mirror/event-profile', {
-			method: 'POST',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ token: data.token, id: reassigningEvent.id, profileId })
-		})
-			.then(async (r) => {
-				if (r.ok) {
-					reassigningEvent = null;
-					await invalidateAll();
-				}
-			})
-			.finally(() => (savingReassign = false));
-	}
-
 	function editEvent(e: PageData['events'][number]) {
-		if (e.id < LOCAL_ID_BASE) {
-			reassigningEvent = { id: e.id, title: e.title, profileId: e.profileIds[0] ?? null };
-			return;
-		}
-		editingEventId = e.id - LOCAL_ID_BASE;
+		editingEvent =
+			e.id < LOCAL_ID_BASE ? { kind: 'synced', id: e.id } : { kind: 'local', id: e.id - LOCAL_ID_BASE };
 		title = e.title;
 		allDay = e.allDay;
 		const s = fromTs(e.startTs);
@@ -156,7 +136,7 @@
 		eventError = '';
 	}
 	function cancelEventForm() {
-		editingEventId = null;
+		editingEvent = null;
 		title = '';
 		location = '';
 		profileIds = [];
@@ -168,7 +148,8 @@
 	}
 
 	async function addEvent() {
-		if (!title.trim()) {
+		const isSynced = editingEvent?.kind === 'synced';
+		if (!isSynced && !title.trim()) {
 			eventError = 'Add a title.';
 			return;
 		}
@@ -186,13 +167,13 @@
 			if (endTs <= startTs) endTs = startTs + 3600;
 		}
 		try {
-			const r = await fetch('/api/mirror/event', {
+			const r = await fetch(isSynced ? '/api/mirror/synced-event' : '/api/mirror/event', {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({
 					token: data.token,
-					id: editingEventId ?? undefined,
-					title: title.trim(),
+					id: isSynced ? editingEvent!.id : (editingEvent?.id ?? undefined),
+					...(isSynced ? {} : { title: title.trim() }),
 					startTs,
 					endTs,
 					allDay,
@@ -201,7 +182,7 @@
 				})
 			});
 			if (r.ok) {
-				const wasEdit = editingEventId !== null;
+				const wasEdit = editingEvent !== null;
 				eventAdded = true;
 				cancelEventForm();
 				await invalidateAll(); // pull the fresh event into "What's coming up"
@@ -215,15 +196,20 @@
 		}
 	}
 
+	/** Local events: delete outright. Synced events: drop the local override
+	 *  and revert to whatever the source calendar itself currently says. */
 	async function removeEvent() {
-		if (editingEventId === null) return;
+		if (!editingEvent) return;
 		savingEvent = true;
 		try {
-			await fetch('/api/mirror/event-remove', {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ token: data.token, id: editingEventId })
-			});
+			await fetch(
+				editingEvent.kind === 'synced' ? '/api/mirror/synced-event-reset' : '/api/mirror/event-remove',
+				{
+					method: 'POST',
+					headers: { 'content-type': 'application/json' },
+					body: JSON.stringify({ token: data.token, id: editingEvent.id })
+				}
+			);
 			cancelEventForm();
 			await invalidateAll();
 		} finally {
@@ -1149,23 +1135,34 @@
 		{#if tab === 'calendar'}
 			<section class="card">
 				<div class="sec-head">
-					<h3 class="type-label sec-h">{editingEventId !== null ? 'Edit event' : 'New event'}</h3>
-					{#if editingEventId !== null}
+					<h3 class="type-label sec-h">
+						{editingEvent === null ? 'New event' : 'Edit event'}
+					</h3>
+					{#if editingEvent !== null}
 						<button type="button" class="iconbtn" aria-label="Cancel" onclick={cancelEventForm}
 							><X size={16} /></button
 						>
 					{/if}
 				</div>
-				<label class="field">
-					<span class="type-label lbl">Title</span>
-					<input
-						class="in"
-						type="text"
-						placeholder="e.g. Dentist"
-						bind:value={title}
-						maxlength="120"
-					/>
-				</label>
+				{#if editingEvent?.kind === 'synced'}
+					<p class="type-body eventtitle-ro">{title}</p>
+					<p class="type-caption sub">
+						Synced from a calendar, so the name can't be changed here — but the time, location,
+						and who it's for can. This won't change the event in the original calendar, only how
+						it shows here.
+					</p>
+				{:else}
+					<label class="field">
+						<span class="type-label lbl">Title</span>
+						<input
+							class="in"
+							type="text"
+							placeholder="e.g. Dentist"
+							bind:value={title}
+							maxlength="120"
+						/>
+					</label>
+				{/if}
 
 				{#if data.profiles.length}
 					<div class="field">
@@ -1238,67 +1235,29 @@
 						disabled={savingEvent}
 						onclick={addEvent}
 					>
-						{#if eventAdded}<Check size={18} /> {editingEventId !== null
+						{#if eventAdded}<Check size={18} /> {editingEvent !== null
 								? 'Saved'
 								: 'Added'}{:else}<Plus size={18} />{savingEvent
 								? 'Saving…'
-								: editingEventId !== null
+								: editingEvent !== null
 									? 'Save changes'
 									: 'Add event'}{/if}
 					</button>
-					{#if editingEventId !== null}
+					{#if editingEvent !== null}
 						<button
 							type="button"
 							class="iconbtn danger"
-							aria-label="Delete event"
+							aria-label={editingEvent.kind === 'synced' ? 'Reset to calendar' : 'Delete event'}
+							title={editingEvent.kind === 'synced' ? 'Reset to calendar' : 'Delete event'}
 							disabled={savingEvent}
-							onclick={removeEvent}><Trash2 size={16} /></button
+							onclick={removeEvent}
+							>{#if editingEvent.kind === 'synced'}<RotateCcw
+									size={16}
+								/>{:else}<Trash2 size={16} />{/if}</button
 						>
 					{/if}
 				</div>
 			</section>
-
-			{#if reassigningEvent}
-				<section class="card">
-					<div class="sec-head">
-						<h3 class="type-label sec-h">Move "{reassigningEvent.title}" to…</h3>
-						<button
-							type="button"
-							class="iconbtn"
-							aria-label="Cancel"
-							onclick={() => (reassigningEvent = null)}><X size={16} /></button
-						>
-					</div>
-					<p class="type-caption sub">
-						This event is synced from a calendar, so its title and time can't be changed here —
-						but who it's for can.
-					</p>
-					<div class="chips">
-						<button
-							type="button"
-							class="chip"
-							class:on={reassigningEvent.profileId === null}
-							disabled={savingReassign}
-							onclick={() => reassignEvent(null)}>Unassigned</button
-						>
-						{#each data.profiles as p (p.id)}
-							<button
-								type="button"
-								class="chip"
-								class:on={reassigningEvent.profileId === p.id}
-								style:background={reassigningEvent.profileId === p.id
-									? profileTint(p.color, 45)
-									: ''}
-								style:box-shadow={reassigningEvent.profileId === p.id
-									? `inset 0 0 0 2px ${profileColorVar(p.color)}`
-									: ''}
-								disabled={savingReassign}
-								onclick={() => reassignEvent(p.id)}>{p.avatarEmoji} {p.name}</button
-							>
-						{/each}
-					</div>
-				</section>
-			{/if}
 
 			<h2 class="type-label section-h">What's coming up</h2>
 			{#if groups.length === 0}
@@ -2814,6 +2773,11 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
+	}
+	.eventtitle-ro {
+		font-weight: var(--weight-semibold);
+		color: var(--color-text-primary);
+		font-size: var(--text-lg);
 	}
 	.saved-msg {
 		display: flex;

@@ -309,7 +309,7 @@ class FamilyStore {
 	applySyncedEvents(
 		events: Array<{
 			id: number;
-			profileId?: number;
+			profileIds: number[];
 			startTs: number;
 			endTs: number;
 			allDay: boolean;
@@ -327,7 +327,7 @@ class FamilyStore {
 				end: new Date(e.endTs * 1000),
 				allDay: e.allDay,
 				location: e.location,
-				profileIds: e.profileId ? [e.profileId] : []
+				profileIds: e.profileIds
 			});
 		}
 	}

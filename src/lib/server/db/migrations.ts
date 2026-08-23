@@ -95,5 +95,35 @@ export const migrations: Migration[] = [
 			-- upcoming-birthdays board instead of the generic events board.
 			ALTER TABLE calendars ADD COLUMN is_birthdays INTEGER NOT NULL DEFAULT 0;
 		`
+	},
+	{
+		version: 5,
+		name: 'event_overrides',
+		sql: `
+			-- Local edits to a synced event (phone companion): who it's assigned
+			-- to, and now also its time/location — kept in their own table,
+			-- keyed by (calendar_id, external_id) rather than living on the
+			-- events row itself. events rows get fully deleted and re-inserted
+			-- on every ICS sync (clearCalendarEvents + upsertEvent), so an
+			-- override stored there could only be matched back up by title+time
+			-- (see the now-removed getOverriddenProfilesByDedupKey) — which
+			-- breaks the moment the override itself changes the start/end time,
+			-- since that's exactly what the next sync would use to look it up.
+			-- (calendar_id, external_id) is what actually stays stable for the
+			-- same real-world event across every re-sync, for both ICS (the
+			-- feed's own UID) and Google (the event id) — so a LEFT JOIN here at
+			-- read time survives edits to any of these fields, including time.
+			CREATE TABLE event_overrides (
+				calendar_id INTEGER NOT NULL REFERENCES calendars(id) ON DELETE CASCADE,
+				external_id TEXT NOT NULL,
+				start_ts INTEGER NOT NULL,
+				end_ts INTEGER NOT NULL,
+				all_day INTEGER NOT NULL,
+				location TEXT,
+				profile_ids_json TEXT NOT NULL DEFAULT '[]',
+				updated_at INTEGER NOT NULL,
+				PRIMARY KEY (calendar_id, external_id)
+			);
+		`
 	}
 ];

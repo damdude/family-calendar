@@ -12,7 +12,6 @@ import {
 	clearCalendarEvents,
 	getCalendars,
 	getOAuthToken,
-	getOverriddenProfilesByDedupKey,
 	saveOAuthToken,
 	setCalendarSynced,
 	upsertCalendar,
@@ -164,17 +163,14 @@ export async function syncIcal(): Promise<number> {
 		else groups.set(key, [f]);
 	}
 
-	// A manual phone reassignment (setEventProfileOverride) lives on a row
-	// that's about to be deleted and re-inserted below — id-based upsertEvent
-	// preservation (the profile_overridden CASE) can't help here since there's
-	// no existing row left to reference by the time it runs. Snapshot by
-	// dedup key first so it can be reapplied after the rebuild.
-	const overrides = getOverriddenProfilesByDedupKey(okCals.map((c) => c.id));
-
+	// A phone-side local override (time/location/who) now lives in its own
+	// table keyed by (calendar_id, external_id), not on the events row
+	// itself — so clearing and re-inserting every row below (a full ICS
+	// rebuild) doesn't touch it at all, nothing to snapshot/reapply here.
 	for (const cal of okCals) clearCalendarEvents(cal.id);
 
 	let count = 0;
-	for (const [key, group] of groups) {
+	for (const group of groups.values()) {
 		// Only collapse a "duplicate" when it actually spans more than one
 		// calendar — that's the invite-copy scenario. Two same-titled,
 		// same-timed entries within a single feed are left alone rather than
@@ -182,7 +178,6 @@ export async function syncIcal(): Promise<number> {
 		const spansCalendars = new Set(group.map((g) => g.cal.id)).size > 1;
 		const toStore = spansCalendars ? [group[0]] : group;
 		const autoProfileId = spansCalendars ? resolveProfileId(group, profiles) : undefined;
-		const override = overrides.get(key);
 
 		for (const { cal, e } of toStore) {
 			upsertEvent({
@@ -194,8 +189,7 @@ export async function syncIcal(): Promise<number> {
 				title: e.title,
 				description: e.description,
 				location: e.location,
-				profileId: override ?? autoProfileId ?? cal.profileId ?? undefined,
-				profileOverridden: override !== undefined
+				profileId: autoProfileId ?? cal.profileId ?? undefined
 			});
 			count += 1;
 		}

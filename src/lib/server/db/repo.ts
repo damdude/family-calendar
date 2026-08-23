@@ -183,30 +183,23 @@ export interface SyncedEvent {
 	title?: string;
 	description?: string;
 	location?: string;
-	/** Overrides the owning calendar's profile_id — set when this event was
-	 *  deduped from a copy synced onto more than one family member's
-	 *  calendar, tagging it with whichever one it's actually for. */
+	/** The sync step's own best guess at who this belongs to (dedup
+	 *  resolution, or the calendar's default) — a phone-side manual
+	 *  reassignment lives in event_overrides instead, unaffected by every
+	 *  raw events row being deleted and re-inserted on each ICS sync
+	 *  (clearCalendarEvents + this function). */
 	profileId?: number;
-	/** True when `profileId` came from a manual phone reassignment rather
-	 *  than the sync step's own dedup guess — see setEventProfileOverride. */
-	profileOverridden?: boolean;
 }
 
-/** True (default) leaves an existing manual override alone on conflict — set
- *  false only from the code path that's re-applying a snapshotted override
- *  across a full calendar rebuild (syncIcal), where there's no existing row
- *  to preserve. */
 export function upsertEvent(e: SyncedEvent): void {
 	getDb()
 		.prepare(
 			`INSERT INTO events
-				(calendar_id, external_id, start_ts, end_ts, all_day, title, description_encrypted, location, profile_id, profile_overridden, updated_at)
-			 VALUES (@calendarId, @externalId, @startTs, @endTs, @allDay, @title, @desc, @location, @profileId, @profileOverridden, @now)
+				(calendar_id, external_id, start_ts, end_ts, all_day, title, description_encrypted, location, profile_id, updated_at)
+			 VALUES (@calendarId, @externalId, @startTs, @endTs, @allDay, @title, @desc, @location, @profileId, @now)
 			 ON CONFLICT(calendar_id, external_id) DO UPDATE SET
 				start_ts=@startTs, end_ts=@endTs, all_day=@allDay, title=@title,
-				description_encrypted=@desc, location=@location, updated_at=@now,
-				profile_id = CASE WHEN events.profile_overridden = 1 THEN events.profile_id ELSE @profileId END,
-				profile_overridden = MAX(events.profile_overridden, @profileOverridden)`
+				description_encrypted=@desc, location=@location, profile_id=@profileId, updated_at=@now`
 		)
 		.run({
 			calendarId: e.calendarId,
@@ -218,90 +211,135 @@ export function upsertEvent(e: SyncedEvent): void {
 			desc: e.description ? encryptString(e.description) : null,
 			location: e.location ?? null,
 			profileId: e.profileId ?? null,
-			profileOverridden: e.profileOverridden ? 1 : 0,
 			now: Math.floor(Date.now() / 1000)
 		});
 }
 
-/** Manually override which profile a synced event belongs to (phone
- *  companion) — survives the next sync (see upsertEvent). `null` clears the
- *  override back to the sync step's own guess / the calendar's default.
- *  Returns false if no such event. */
-export function setEventProfileOverride(id: number, profileId: number | null): boolean {
-	const info = getDb()
-		.prepare('UPDATE events SET profile_id = ?, profile_overridden = ? WHERE id = ?')
-		.run(profileId, profileId === null ? 0 : 1, id);
-	return info.changes > 0;
+/** (calendar_id, external_id) for a synced event's current numeric row id —
+ *  event_overrides is keyed by the former (stable across syncs), but the
+ *  phone only ever has the latter (it's what's in the merged event list),
+ *  so every override write looks this up first. */
+export function getEventCalendarExternalId(
+	id: number
+): { calendarId: number; externalId: string } | null {
+	const row = getDb().prepare('SELECT calendar_id, external_id FROM events WHERE id = ?').get(id) as
+		| { calendar_id: number; external_id: string }
+		| undefined;
+	return row ? { calendarId: row.calendar_id, externalId: row.external_id } : null;
 }
 
-/** Snapshot of manually-overridden events among the given calendars, keyed by
- *  `title|startTs|endTs` (the same dedup key sync.ts groups fetched events
- *  by) so a full ICS-calendar rebuild (clear + re-insert) can reapply them —
- *  the row's own id doesn't survive that rebuild, but this key does as long
- *  as the title/time didn't change. */
-export function getOverriddenProfilesByDedupKey(calendarIds: number[]): Map<string, number> {
-	const out = new Map<string, number>();
-	if (calendarIds.length === 0) return out;
-	const placeholders = calendarIds.map(() => '?').join(',');
-	const rows = getDb()
+export interface EventOverrideInput {
+	startTs: number;
+	endTs: number;
+	allDay: boolean;
+	location?: string;
+	profileIds: number[];
+}
+
+/** Set (or replace) the local override for a synced event — time, location,
+ *  and who it's assigned to, all together, since the phone's edit form
+ *  submits the whole event at once. Survives every future sync (a separate
+ *  table, never touched by clearCalendarEvents). */
+export function setEventOverride(calendarId: number, externalId: string, e: EventOverrideInput): void {
+	getDb()
 		.prepare(
-			`SELECT title, start_ts, end_ts, profile_id FROM events
-			 WHERE calendar_id IN (${placeholders}) AND profile_overridden = 1 AND profile_id IS NOT NULL`
+			`INSERT INTO event_overrides (calendar_id, external_id, start_ts, end_ts, all_day, location, profile_ids_json, updated_at)
+			 VALUES (@calendarId, @externalId, @startTs, @endTs, @allDay, @location, @profileIdsJson, @now)
+			 ON CONFLICT(calendar_id, external_id) DO UPDATE SET
+				start_ts=@startTs, end_ts=@endTs, all_day=@allDay, location=@location,
+				profile_ids_json=@profileIdsJson, updated_at=@now`
 		)
-		.all(...calendarIds) as Array<{
-		title: string | null;
-		start_ts: number;
-		end_ts: number;
-		profile_id: number;
-	}>;
-	for (const r of rows) {
-		out.set(`${(r.title ?? '').trim().toLowerCase()}|${r.start_ts}|${r.end_ts}`, r.profile_id);
-	}
-	return out;
+		.run({
+			calendarId,
+			externalId,
+			startTs: e.startTs,
+			endTs: e.endTs,
+			allDay: e.allDay ? 1 : 0,
+			location: e.location ?? null,
+			profileIdsJson: JSON.stringify(e.profileIds),
+			now: Math.floor(Date.now() / 1000)
+		});
+}
+
+/** Drop a synced event's local override entirely — reverts to whatever the
+ *  source calendar itself says (time/location) and the sync step's own
+ *  profile guess. */
+export function clearEventOverride(calendarId: number, externalId: string): void {
+	getDb()
+		.prepare('DELETE FROM event_overrides WHERE calendar_id = ? AND external_id = ?')
+		.run(calendarId, externalId);
 }
 
 export interface EventRow {
 	id: number;
 	calendarId: number;
-	profileId?: number;
+	profileIds: number[];
 	startTs: number;
 	endTs: number;
 	allDay: boolean;
 	title: string;
 	location?: string;
 	description?: string;
+	/** True when a phone edit is currently pinning this event's time/
+	 *  location/assignment instead of the source calendar's own values. */
+	overridden: boolean;
 }
 
-/** Events overlapping [from, to] (unix seconds), with owning profile if any. */
+const EVENT_SELECT = `
+	e.id, e.calendar_id, e.title, e.description_encrypted,
+	COALESCE(o.start_ts, e.start_ts) AS start_ts,
+	COALESCE(o.end_ts, e.end_ts) AS end_ts,
+	COALESCE(o.all_day, e.all_day) AS all_day,
+	COALESCE(o.location, e.location) AS location,
+	COALESCE(o.profile_ids_json, '[]') AS override_profile_ids_json,
+	COALESCE(e.profile_id, c.profile_id) AS default_profile_id,
+	(o.calendar_id IS NOT NULL) AS overridden
+	FROM events e
+	JOIN calendars c ON c.id = e.calendar_id
+	LEFT JOIN event_overrides o ON o.calendar_id = e.calendar_id AND o.external_id = e.external_id
+`;
+
+function resolveProfileIds(overrideJson: string, defaultProfileId: number | null): number[] {
+	try {
+		const parsed = JSON.parse(overrideJson);
+		if (Array.isArray(parsed) && parsed.length) return parsed;
+	} catch {
+		/* malformed — fall through to the default */
+	}
+	return defaultProfileId !== null ? [defaultProfileId] : [];
+}
+
+/** Events overlapping [from, to] (unix seconds), with local overrides
+ *  (time/location/assignment) already applied. */
 export function getEventsInRange(from: number, to: number): EventRow[] {
 	const rows = getDb()
 		.prepare(
-			`SELECT e.*, COALESCE(e.profile_id, c.profile_id) AS profile_id
-			 FROM events e JOIN calendars c ON c.id = e.calendar_id
-			 WHERE c.enabled = 1 AND e.start_ts < ? AND e.end_ts > ?
-			 ORDER BY e.start_ts`
+			`SELECT ${EVENT_SELECT} WHERE c.enabled = 1 AND COALESCE(o.start_ts, e.start_ts) < ? AND COALESCE(o.end_ts, e.end_ts) > ? ORDER BY start_ts`
 		)
 		.all(to, from) as Array<{
 		id: number;
 		calendar_id: number;
-		profile_id: number | null;
 		start_ts: number;
 		end_ts: number;
 		all_day: number;
 		title: string | null;
 		location: string | null;
 		description_encrypted: Buffer | null;
+		override_profile_ids_json: string;
+		default_profile_id: number | null;
+		overridden: number;
 	}>;
 	return rows.map((r) => ({
 		id: r.id,
 		calendarId: r.calendar_id,
-		profileId: r.profile_id ?? undefined,
+		profileIds: resolveProfileIds(r.override_profile_ids_json, r.default_profile_id),
 		startTs: r.start_ts,
 		endTs: r.end_ts,
 		allDay: !!r.all_day,
 		title: r.title ?? '(untitled)',
 		location: r.location ?? undefined,
-		description: r.description_encrypted ? decryptString(r.description_encrypted) : undefined
+		description: r.description_encrypted ? decryptString(r.description_encrypted) : undefined,
+		overridden: !!r.overridden
 	}));
 }
 
@@ -312,38 +350,39 @@ export function getSyncedEventsLean(
 	to: number
 ): Array<{
 	id: number;
-	profileId?: number;
+	profileIds: number[];
 	startTs: number;
 	endTs: number;
 	allDay: boolean;
 	title: string;
 	location?: string;
+	overridden: boolean;
 }> {
 	if (!dbExists()) return [];
 	const rows = getDb()
 		.prepare(
-			`SELECT e.id, COALESCE(e.profile_id, c.profile_id) AS profile_id, e.start_ts, e.end_ts, e.all_day, e.title, e.location
-			 FROM events e JOIN calendars c ON c.id = e.calendar_id
-			 WHERE c.enabled = 1 AND e.start_ts < ? AND e.end_ts > ?
-			 ORDER BY e.start_ts`
+			`SELECT ${EVENT_SELECT} WHERE c.enabled = 1 AND COALESCE(o.start_ts, e.start_ts) < ? AND COALESCE(o.end_ts, e.end_ts) > ? ORDER BY start_ts`
 		)
 		.all(to, from) as Array<{
 		id: number;
-		profile_id: number | null;
 		start_ts: number;
 		end_ts: number;
 		all_day: number;
 		title: string | null;
 		location: string | null;
+		override_profile_ids_json: string;
+		default_profile_id: number | null;
+		overridden: number;
 	}>;
 	return rows.map((r) => ({
 		id: r.id,
-		profileId: r.profile_id ?? undefined,
+		profileIds: resolveProfileIds(r.override_profile_ids_json, r.default_profile_id),
 		startTs: r.start_ts,
 		endTs: r.end_ts,
 		allDay: !!r.all_day,
 		title: r.title ?? '(untitled)',
-		location: r.location ?? undefined
+		location: r.location ?? undefined,
+		overridden: !!r.overridden
 	}));
 }
 

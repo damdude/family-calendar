@@ -40,7 +40,8 @@ export const load: PageServerLoad = async ({ url }) => {
 		endTs: e.endTs,
 		allDay: e.allDay,
 		location: e.location,
-		profileIds: e.profileId ? [e.profileId] : []
+		profileIds: e.profileIds,
+		overridden: e.overridden
 	}));
 	const local = (familyData?.localEvents ?? [])
 		.filter((e) => e.endTs > from && e.startTs < to)
@@ -51,7 +52,8 @@ export const load: PageServerLoad = async ({ url }) => {
 			endTs: e.endTs,
 			allDay: e.allDay,
 			location: e.location,
-			profileIds: e.profileIds
+			profileIds: e.profileIds,
+			overridden: false
 		}));
 
 	const events = [...synced, ...local].sort((a, b) => a.startTs - b.startTs);
