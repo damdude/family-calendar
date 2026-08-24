@@ -150,6 +150,16 @@ export async function listFolder(
 	username?: string,
 	password?: string
 ): Promise<{ ok: boolean; entries: NasEntry[]; error?: string }> {
+	// `-c` commands are joined with `;` by smbclient's own parser and it
+	// additionally treats a leading `!` as "run this as a local shell command"
+	// — both are real command-injection primitives, not just cosmetic. Quoting
+	// `subpath` for `cd` only protects against spaces splitting into extra
+	// tokens, it does NOT stop `;`/`!` from being reinterpreted, so those (and
+	// backticks/`$`/control characters, in case a malicious NAS server names a
+	// folder with one) are rejected outright rather than merely stripped.
+	if (/[;!`$\r\n]/.test(subpath)) {
+		return { ok: false, entries: [], error: 'That folder name contains unsupported characters.' };
+	}
 	const auth = username ? ['-U', `${username}%${password ?? ''}`] : ['-N'];
 	// smbclient's own `cd` understands a full relative path in one go; quote it
 	// so spaces in folder names don't split into extra command tokens.

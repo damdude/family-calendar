@@ -9,6 +9,7 @@
 
 import { JSDOM } from 'jsdom';
 import { Readability } from '@mozilla/readability';
+import { safeFetch } from './urlSafety';
 
 const USER_AGENT =
 	process.env.SCRAPER_USER_AGENT ??
@@ -57,10 +58,9 @@ async function fetchWithTimeout(url: string): Promise<Response> {
 	const ctrl = new AbortController();
 	const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
 	try {
-		return await fetch(url, {
+		return await safeFetch(url, {
 			headers: { 'user-agent': USER_AGENT, accept: 'text/html' },
-			signal: ctrl.signal,
-			redirect: 'follow'
+			signal: ctrl.signal
 		});
 	} finally {
 		clearTimeout(t);

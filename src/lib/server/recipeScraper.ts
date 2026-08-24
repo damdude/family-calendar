@@ -8,6 +8,7 @@
 import { JSDOM } from 'jsdom';
 import { Readability } from '@mozilla/readability';
 import { isAllowed } from './scraper';
+import { safeFetch } from './urlSafety';
 
 // Recipe sites commonly 403 non-browser agents, so identify as a normal
 // browser (we still honour robots '*' disallow rules via isAllowed()).
@@ -29,10 +30,9 @@ async function fetchHtml(url: string): Promise<string | null> {
 	const ctrl = new AbortController();
 	const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
 	try {
-		const res = await fetch(url, {
+		const res = await safeFetch(url, {
 			headers: { 'user-agent': USER_AGENT, accept: 'text/html' },
-			signal: ctrl.signal,
-			redirect: 'follow'
+			signal: ctrl.signal
 		});
 		if (!res.ok) return null;
 		const buf = await res.arrayBuffer();
