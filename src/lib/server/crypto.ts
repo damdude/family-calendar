@@ -52,6 +52,19 @@ function key(): Buffer {
 	return keyCache;
 }
 
+// Same device-bound material as the at-rest key, but derived with a distinct
+// salt so a session-signing key is never the same bytes as the encryption
+// key even though they share a root secret — used to HMAC-sign the PIN
+// session cookie (see session.ts).
+let sessionKeyCache: Buffer | null = null;
+export function sessionSigningKey(): Buffer {
+	if (!sessionKeyCache) {
+		const material = Buffer.concat([deviceSecret(), Buffer.from(machineId(), 'utf8')]);
+		sessionKeyCache = crypto.scryptSync(material, 'family-calendar-session-v1', 32);
+	}
+	return sessionKeyCache;
+}
+
 /** AES-256-GCM. Output layout: [iv(12)][tag(16)][ciphertext]. */
 export function encrypt(plain: Buffer): Buffer {
 	const iv = crypto.randomBytes(12);
