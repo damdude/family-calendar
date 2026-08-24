@@ -2,7 +2,7 @@ import QRCode from 'qrcode';
 import { createPairing } from '$lib/server/pairing';
 import { localIPv4 } from '$lib/server/net';
 import { loadConfig } from '$lib/server/config';
-import { isOnline, SETUP_AP_SSID } from '$lib/server/network';
+import { isOnline, SETUP_AP_SSID, setupApPassphrase } from '$lib/server/network';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ url }) => {
@@ -28,8 +28,15 @@ export const load: PageServerLoad = async ({ url }) => {
 	});
 
 	// Phase-1 (offline): a QR that makes the phone JOIN the Pi's setup hotspot.
-	// The `WIFI:` scheme is understood by the iOS/Android camera. Open network.
-	const wifiJoin = `WIFI:S:${SETUP_AP_SSID};T:nopass;;`;
+	// The `WIFI:` scheme is understood by the iOS/Android camera. WPA2 when
+	// the AP has a passphrase (the normal case on the appliance — see
+	// scripts/wifi-setup.sh); falls back to an open network only when none is
+	// available (e.g. this page loading off-Pi in dev, before the AP script
+	// has ever generated one).
+	const psk = setupApPassphrase();
+	const wifiJoin = psk
+		? `WIFI:S:${SETUP_AP_SSID};T:WPA;P:${psk};;`
+		: `WIFI:S:${SETUP_AP_SSID};T:nopass;;`;
 	const wifiQrSvg = await QRCode.toString(wifiJoin, {
 		type: 'svg',
 		margin: 1,

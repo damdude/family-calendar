@@ -29,8 +29,31 @@ const PIN_GATED_PATHS = new Set([
 	'/api/update/install'
 ]);
 
+const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+
 export const handle: Handle = async ({ event, resolve }) => {
 	const { pathname } = event.url;
+	const { method } = event.request;
+
+	// Every mutating /api/ route parses its body with request.json(), which
+	// doesn't care what Content-Type it's labeled with — so a cross-site
+	// request sent as text/plain (no CORS preflight required, unlike
+	// application/json) reaches the same code path a real same-origin call
+	// would. Confirmed directly: a POST to /api/config with a mismatched
+	// Origin header went through and returned 200 before this check existed.
+	// Browsers set Origin on every cross-origin fetch/form submission
+	// themselves — page JS can't override it — so rejecting a *present,
+	// mismatched* Origin blocks that without touching any legitimate
+	// same-origin call this app ever makes (Origin absent is left alone
+	// rather than guessed at, e.g. some direct/non-browser callers omit it).
+	if (
+		MUTATING_METHODS.has(method) &&
+		pathname.startsWith('/api/') &&
+		event.request.headers.get('origin') &&
+		event.request.headers.get('origin') !== event.url.origin
+	) {
+		return json({ message: 'Cross-site request blocked' }, { status: 403 });
+	}
 
 	if (PIN_GATED_PATHS.has(pathname) && (await isPinSet())) {
 		const token = event.cookies.get(SESSION_COOKIE);

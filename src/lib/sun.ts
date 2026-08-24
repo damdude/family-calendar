@@ -14,8 +14,15 @@ const RAD = Math.PI / 180;
  * this only drives a ±1h theme switch, not anything safety-critical.
  */
 export function sunTimes(date: Date, latDeg: number, lonDeg: number): SunTimes {
-	const dayStart = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
-	const yearStart = Date.UTC(date.getUTCFullYear(), 0, 1);
+	// Which calendar day "today" is depends on local time, not UTC — using
+	// the UTC date directly means anywhere west of Greenwich, once UTC has
+	// already rolled past midnight (mid-evening onward for US longitudes),
+	// this would compute tomorrow's sunset instead of today's. Shift by the
+	// longitude's approximate solar offset first so the date boundary lines
+	// up with local time at this location rather than at Greenwich.
+	const local = new Date(date.getTime() + (lonDeg / 15) * 3_600_000);
+	const dayStart = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate());
+	const yearStart = Date.UTC(local.getUTCFullYear(), 0, 1);
 	const dayOfYear = Math.round((dayStart - yearStart) / 86_400_000) + 1;
 
 	// Solar declination (degrees) — how far the sun sits north/south of the

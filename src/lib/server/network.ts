@@ -10,9 +10,26 @@
  */
 
 import { spawn } from 'node:child_process';
+import fs from 'node:fs';
 
 /** SSID of the first-boot setup hotspot. Must match the wifi-connect service. */
 export const SETUP_AP_SSID = 'FamilyCalendar Setup';
+
+/** Same file scripts/wifi-setup.sh generates and passes to wifi-connect as
+ *  --portal-passphrase. Read here so the setup screen's QR can encode the
+ *  real, currently-broadcasting passphrase — the hotspot is WPA2-protected
+ *  now (it used to be open to anyone in Wi-Fi range), but since the setup
+ *  screen only ever asks a phone to scan a QR rather than type anything,
+ *  putting the password in the QR keeps that flow completely unchanged.
+ *  Null off-Pi (dev machine) or before the AP has ever started once. */
+export function setupApPassphrase(): string | null {
+	try {
+		const psk = fs.readFileSync('/etc/family-calendar/setup-ap-psk', 'utf8').trim();
+		return psk || null;
+	} catch {
+		return null;
+	}
+}
 
 function run(cmd: string, args: string[], timeoutMs = 5000): Promise<string | null> {
 	return new Promise((resolve) => {
@@ -186,6 +203,16 @@ export async function joinWifi(
 	ssid: string,
 	password: string
 ): Promise<{ ok: boolean; error?: string }> {
+	// The helper (scripts/wifi-join.sh) writes ssid/password straight into an
+	// INI-format .nmconnection file. A real SSID never contains a newline —
+	// but a nearby rogue AP can broadcast one that does (SSIDs are just up to
+	// 32 arbitrary bytes over the air), and an embedded CR/LF would start a
+	// new line in that file, letting a picked network inject its own
+	// directives (e.g. a rogue DNS server) into a root-owned config. Refuse
+	// before it ever reaches the helper.
+	if (/[\r\n]/.test(ssid) || /[\r\n]/.test(password)) {
+		return { ok: false, error: 'That network name is not supported.' };
+	}
 	return new Promise((resolve) => {
 		let child;
 		try {

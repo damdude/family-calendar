@@ -8,6 +8,22 @@ set -u
 AP_SSID="FamilyCalendar Setup"
 WC_BIN=/usr/local/sbin/wifi-connect
 WC_UI=/usr/local/share/wifi-connect/ui
+# The setup hotspot used to broadcast open — anyone within Wi-Fi range of the
+# house, not just the family, could join it and reach the setup portal (and,
+# while it's up, the app's own API on the Pi). The app's own setup screen
+# already shows nothing but a scan-to-join QR code for this network (see
+# src/routes/setup/+page.server.ts) rather than asking anyone to type
+# anything, so a password can protect the AP with zero change to what the
+# family sees or does — it just becomes part of the QR they were already
+# scanning. World-readable is fine: this only ever protects the temporary
+# onboarding hotspot, not any family data.
+PSK_FILE=/etc/family-calendar/setup-ap-psk
+if [ ! -s "$PSK_FILE" ]; then
+  mkdir -p /etc/family-calendar
+  tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 16 > "$PSK_FILE"
+  chmod 644 "$PSK_FILE"
+fi
+AP_PSK="$(cat "$PSK_FILE")"
 
 # dhcpcd fighting NetworkManager for wlan0 is a classic cause of "AP never
 # comes up" — belt-and-braces even though Bookworm defaults to NetworkManager.
@@ -118,4 +134,4 @@ if [ ! -x "$WC_BIN" ]; then
 fi
 
 echo "wifi-setup: offline — starting captive portal on SSID '$AP_SSID'"
-exec "$WC_BIN" --portal-ssid "$AP_SSID" --ui-directory "$WC_UI"
+exec "$WC_BIN" --portal-ssid "$AP_SSID" --portal-passphrase "$AP_PSK" --ui-directory "$WC_UI"

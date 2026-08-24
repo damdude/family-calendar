@@ -11,6 +11,16 @@ set -uo pipefail
 SSID="${1:?ssid required}"
 IFS= read -r PASSWORD || true
 
+# SSID/password are interpolated straight into the INI keyfile below with no
+# escaping. `read -r` already stops PASSWORD at its first newline, but SSID
+# arrives as a raw argv element and 802.11 SSIDs can carry any byte over the
+# air — an embedded CR/LF would start a new line in a root-owned config file.
+# The caller (src/lib/server/network.ts) already rejects this; refuse here
+# too in case this script is ever invoked another way.
+case "$SSID" in
+  *$'\n'*|*$'\r'*) echo "fc-wifi-join: unsupported SSID" >&2; exit 1 ;;
+esac
+
 CONN_ID="fc-wifi"
 KEYFILE="/etc/NetworkManager/system-connections/${CONN_ID}.nmconnection"
 
