@@ -25,8 +25,20 @@
 	// kiosk itself), corrected to the device's real capability once known.
 	let noTouch = $state(family.displayMode !== 'touch');
 	onMount(() => {
+		// Require both signals to agree, not just one. `maxTouchPoints` alone
+		// isn't reliable on every device — confirmed on-device: a TV kiosk
+		// with no physical touchscreen reported maxTouchPoints > 0 (some
+		// GPU/DRM stacks register a phantom touch input even with nothing
+		// attached), which flipped this to the collapsed tap-to-reveal
+		// button instead of the permanent QR a no-touch display is supposed
+		// to always show — exactly the case this component exists for.
+		// `(pointer: coarse)` reflects the primary pointing device's actual
+		// precision and is a real touchscreen's signal too, so genuine touch
+		// hardware still satisfies both; a single spurious touch-point report
+		// on its own no longer does.
 		noTouch = !(
-			(typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches) ||
+			typeof matchMedia === 'function' &&
+			matchMedia('(pointer: coarse)').matches &&
 			navigator.maxTouchPoints > 0
 		);
 	});
