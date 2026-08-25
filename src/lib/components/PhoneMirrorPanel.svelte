@@ -7,10 +7,15 @@
 	 * without someone first finding a button to reveal it. Every touch-capable
 	 * device collapses it to a small icon instead, tapped open when wanted.
 	 *
-	 * Deliberately keyed off *this device's* real touch support, not the
-	 * household's `displayMode` setting — that describes the one fixed kiosk,
-	 * but every family member's own phone loads the same app and has touch,
-	 * so it should never get the permanent, unclosable version either.
+	 * Keyed off the household's `displayMode` setting when it's been set —
+	 * that's a deliberate choice describing the one fixed kiosk, and it's
+	 * authoritative once configured. Live browser touch-detection is only a
+	 * fallback for the unconfigured case (mid first-run setup, or a family
+	 * member's own phone before any `displayMode` exists), because it's
+	 * proven unreliable in practice: confirmed on-device, a TV kiosk with no
+	 * physical touchscreen had its GPU/DRM stack register a phantom touch
+	 * input convincing enough to satisfy every signal checked, permanently
+	 * hiding the one QR this component exists to show.
 	 */
 	import { onMount } from 'svelte';
 	import { family } from '$lib/stores/family.svelte';
@@ -25,17 +30,13 @@
 	// kiosk itself), corrected to the device's real capability once known.
 	let noTouch = $state(family.displayMode !== 'touch');
 	onMount(() => {
-		// Require both signals to agree, not just one. `maxTouchPoints` alone
-		// isn't reliable on every device — confirmed on-device: a TV kiosk
-		// with no physical touchscreen reported maxTouchPoints > 0 (some
-		// GPU/DRM stacks register a phantom touch input even with nothing
-		// attached), which flipped this to the collapsed tap-to-reveal
-		// button instead of the permanent QR a no-touch display is supposed
-		// to always show — exactly the case this component exists for.
-		// `(pointer: coarse)` reflects the primary pointing device's actual
-		// precision and is a real touchscreen's signal too, so genuine touch
-		// hardware still satisfies both; a single spurious touch-point report
-		// on its own no longer does.
+		// An explicitly configured screen type wins outright — see the
+		// module comment above for why runtime detection isn't trusted once
+		// a real answer exists.
+		if (family.displayMode) {
+			noTouch = family.displayMode !== 'touch';
+			return;
+		}
 		noTouch = !(
 			typeof matchMedia === 'function' &&
 			matchMedia('(pointer: coarse)').matches &&

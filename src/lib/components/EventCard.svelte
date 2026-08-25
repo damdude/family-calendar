@@ -94,10 +94,16 @@
 		overflow-wrap: break-word;
 	}
 	.avatars {
-		position: absolute;
-		top: 6px;
-		right: 6px;
+		/* A real flow sibling, not floated over the title — it used to sit
+		   absolutely positioned in the top-right corner, which covered a
+		   wrapped multi-line title the moment one ran long enough to reach
+		   it. `margin-top: auto` pins it to the card's bottom-right instead,
+		   as a normal layout participant text can never render underneath. */
 		display: flex;
+		align-self: flex-end;
+		margin-top: auto;
+		flex: none;
+		padding-top: 4px;
 	}
 	.avatars :global(.avatar) {
 		box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85);

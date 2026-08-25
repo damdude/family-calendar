@@ -79,7 +79,20 @@ class MirrorControl {
 		if (this.qrSvg || this.qrLoading) return;
 		this.qrLoading = true;
 		try {
-			const r = await fetch('/api/mirror/start', { method: 'POST' });
+			// A request that hangs instead of failing outright (the TCP
+			// connection accepted but never answered — plausible mid-restart)
+			// would otherwise leave qrLoading stuck true forever: the retry
+			// below only runs once this fetch actually settles, so a fetch
+			// with no timeout can wedge the QR off for the rest of the
+			// browser session with no further attempts ever made.
+			const ctrl = new AbortController();
+			const t = setTimeout(() => ctrl.abort(), 10_000);
+			let r: Response;
+			try {
+				r = await fetch('/api/mirror/start', { method: 'POST', signal: ctrl.signal });
+			} finally {
+				clearTimeout(t);
+			}
 			if (!r.ok) throw new Error(`mirror/start ${r.status}`);
 			const d = await r.json();
 			this.qrSvg = d.qrSvg;
