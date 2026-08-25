@@ -46,13 +46,28 @@ export const handle: Handle = async ({ event, resolve }) => {
 	// mismatched* Origin blocks that without touching any legitimate
 	// same-origin call this app ever makes (Origin absent is left alone
 	// rather than guessed at, e.g. some direct/non-browser callers omit it).
-	if (
-		MUTATING_METHODS.has(method) &&
-		pathname.startsWith('/api/') &&
-		event.request.headers.get('origin') &&
-		event.request.headers.get('origin') !== event.url.origin
-	) {
-		return json({ message: 'Cross-site request blocked' }, { status: 403 });
+	//
+	// Compared against the request's own Host header, not event.url.origin —
+	// confirmed on-device that they're not interchangeable here: this app
+	// (adapter-node, HOST=0.0.0.0, no reverse proxy) never has an ORIGIN env
+	// var set, and without one adapter-node's event.url.origin comes out
+	// wrong, so it rejected *every* Origin a real browser could ever send,
+	// including ones that genuinely matched the page's own address — the
+	// phone-pairing QR silently never loaded because of it. The incoming
+	// Host header is always exactly what the client actually dialed,
+	// regardless of any of that.
+	const host = event.request.headers.get('host');
+	const origin = event.request.headers.get('origin');
+	if (MUTATING_METHODS.has(method) && pathname.startsWith('/api/') && origin && host) {
+		let originHost: string;
+		try {
+			originHost = new URL(origin).host;
+		} catch {
+			return json({ message: 'Cross-site request blocked' }, { status: 403 });
+		}
+		if (originHost !== host) {
+			return json({ message: 'Cross-site request blocked' }, { status: 403 });
+		}
 	}
 
 	if (PIN_GATED_PATHS.has(pathname) && (await isPinSet())) {
