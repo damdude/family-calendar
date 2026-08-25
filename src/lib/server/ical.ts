@@ -25,6 +25,9 @@ export interface IcsEvent {
 	title: string;
 	description?: string;
 	location?: string;
+	/** ATTENDEE addresses (lowercased), for tagging by who's actually
+	 *  invited rather than the organizer or a name match in the title. */
+	attendees: string[];
 }
 
 /** Normalize webcal:// to https:// (browsers/servers can't fetch webcal). */
@@ -81,7 +84,26 @@ type VEvent = {
 	rrule?: { between: (a: Date, b: Date, inc?: boolean) => Date[] };
 	recurrences?: Record<string, VEvent>;
 	exdate?: Record<string, Date>;
+	// Deliberately not typing/reading `organizer` here — who *sent* an invite
+	// says nothing about who it's *for* (a parent organizing a kid's event
+	// stays the organizer even when the event is entirely the kid's), so
+	// profile-matching only ever looks at attendees. Loosely typed: node-ical
+	// represents a single ATTENDEE as one object and multiple as an array,
+	// and either can lack `val` on a malformed line.
+	attendee?: { val?: string } | { val?: string }[];
 };
+
+/** Every ATTENDEE address on a VEVENT, lowercased, `mailto:`-stripped,
+ *  de-duplicated. Empty for a plain (non-invite) calendar entry. */
+function attendeeEmails(ev: VEvent): string[] {
+	const raw = ev.attendee;
+	if (!raw) return [];
+	const list = Array.isArray(raw) ? raw : [raw];
+	const emails = list
+		.map((a) => a.val?.replace(/^mailto:/i, '').trim().toLowerCase())
+		.filter((v): v is string => !!v);
+	return [...new Set(emails)];
+}
 
 /** Parse ICS text into concrete occurrences within [windowStart, windowEnd]. */
 export function parseIcs(text: string, windowStart: Date, windowEnd: Date): IcsEvent[] {
@@ -96,6 +118,7 @@ export function parseIcs(text: string, windowStart: Date, windowEnd: Date): IcsE
 		const duration = (ev.end?.getTime() ?? ev.start.getTime() + 3_600_000) - ev.start.getTime();
 		const uid = ev.uid ?? key;
 		const title = ev.summary ?? '(untitled)';
+		const attendees = attendeeEmails(ev);
 
 		if (ev.rrule) {
 			const occurrences = ev.rrule.between(windowStart, windowEnd, true);
@@ -112,7 +135,8 @@ export function parseIcs(text: string, windowStart: Date, windowEnd: Date): IcsE
 					allDay,
 					title: override?.summary ?? title,
 					description: override?.description ?? ev.description,
-					location: override?.location ?? ev.location
+					location: override?.location ?? ev.location,
+					attendees: override?.attendee ? attendeeEmails(override) : attendees
 				});
 			}
 		} else {
@@ -127,7 +151,8 @@ export function parseIcs(text: string, windowStart: Date, windowEnd: Date): IcsE
 					allDay,
 					title,
 					description: ev.description,
-					location: ev.location
+					location: ev.location,
+					attendees
 				});
 			}
 		}

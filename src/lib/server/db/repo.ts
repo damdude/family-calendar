@@ -183,23 +183,24 @@ export interface SyncedEvent {
 	title?: string;
 	description?: string;
 	location?: string;
-	/** The sync step's own best guess at who this belongs to (dedup
-	 *  resolution, or the calendar's default) — a phone-side manual
-	 *  reassignment lives in event_overrides instead, unaffected by every
-	 *  raw events row being deleted and re-inserted on each ICS sync
-	 *  (clearCalendarEvents + this function). */
-	profileId?: number;
+	/** The sync step's own best guess at who this belongs to (attendee-email
+	 *  match, dedup resolution, or the calendar's default — see sync.ts) —
+	 *  a phone-side manual reassignment lives in event_overrides instead,
+	 *  unaffected by every raw events row being deleted and re-inserted on
+	 *  each ICS sync (clearCalendarEvents + this function). Empty means
+	 *  "the whole family", the same convention used everywhere else. */
+	profileIds?: number[];
 }
 
 export function upsertEvent(e: SyncedEvent): void {
 	getDb()
 		.prepare(
 			`INSERT INTO events
-				(calendar_id, external_id, start_ts, end_ts, all_day, title, description_encrypted, location, profile_id, updated_at)
-			 VALUES (@calendarId, @externalId, @startTs, @endTs, @allDay, @title, @desc, @location, @profileId, @now)
+				(calendar_id, external_id, start_ts, end_ts, all_day, title, description_encrypted, location, profile_ids_json, updated_at)
+			 VALUES (@calendarId, @externalId, @startTs, @endTs, @allDay, @title, @desc, @location, @profileIdsJson, @now)
 			 ON CONFLICT(calendar_id, external_id) DO UPDATE SET
 				start_ts=@startTs, end_ts=@endTs, all_day=@allDay, title=@title,
-				description_encrypted=@desc, location=@location, profile_id=@profileId, updated_at=@now`
+				description_encrypted=@desc, location=@location, profile_ids_json=@profileIdsJson, updated_at=@now`
 		)
 		.run({
 			calendarId: e.calendarId,
@@ -210,7 +211,7 @@ export function upsertEvent(e: SyncedEvent): void {
 			title: e.title ?? null,
 			desc: e.description ? encryptString(e.description) : null,
 			location: e.location ?? null,
-			profileId: e.profileId ?? null,
+			profileIdsJson: JSON.stringify(e.profileIds ?? []),
 			now: Math.floor(Date.now() / 1000)
 		});
 }
@@ -292,21 +293,56 @@ const EVENT_SELECT = `
 	COALESCE(o.all_day, e.all_day) AS all_day,
 	COALESCE(o.location, e.location) AS location,
 	COALESCE(o.profile_ids_json, '[]') AS override_profile_ids_json,
-	COALESCE(e.profile_id, c.profile_id) AS default_profile_id,
+	e.profile_ids_json AS auto_profile_ids_json,
+	c.profile_id AS calendar_profile_id,
 	(o.calendar_id IS NOT NULL) AS overridden
 	FROM events e
 	JOIN calendars c ON c.id = e.calendar_id
 	LEFT JOIN event_overrides o ON o.calendar_id = e.calendar_id AND o.external_id = e.external_id
 `;
 
-function resolveProfileIds(overrideJson: string, defaultProfileId: number | null): number[] {
+/** Who an event is for, layering three sources — a phone-side manual
+ *  override, then the sync step's own attendee-matched guess, then
+ *  (pre-migration rows only) the calendar's single default profile.
+ *  An override or auto-guess of `[]` is only trusted as a deliberate
+ *  "the whole family" once it's actually present — parsed as a non-empty
+ *  *array literal in the JSON*, not merely an empty result — so a genuinely
+ *  absent override (the common case) correctly falls through to the next
+ *  source instead of being misread as "no one, on purpose". By the time any
+ *  of this is read, `auto_profile_ids_json` is always sync.ts's fully
+ *  resolved answer (it already folds the calendar default in), so that
+ *  final fallback only ever matters for a row untouched since before this
+ *  column existed. */
+function resolveProfileIds(
+	overrideJson: string,
+	autoJson: string,
+	calendarProfileId: number | null
+): number[] {
+	// A phone edit's own empty profileIds means "nothing pinned, defer" (see
+	// EventOverrideInput) — a real override always has at least one id, so
+	// only a *non-empty* parsed array counts as one actually being present.
+	const override = tryParseIdArray(overrideJson);
+	if (override && override.length) return override;
+	// The auto-guess is different: sync.ts writes [] on purpose for a
+	// shared/household address match, and that's a real answer, not an
+	// absence of one — every value tryParseIdArray hands back here (empty
+	// or not) is trusted as-is.
+	const auto = tryParseIdArray(autoJson);
+	if (auto) return auto;
+	return calendarProfileId !== null ? [calendarProfileId] : [];
+}
+
+/** Parses a JSON array-of-numbers column, returning null (not []) when the
+ *  column holds no real array at all — malformed, or the schema default
+ *  before any write has ever happened — so callers can tell "nothing here"
+ *  apart from a deliberately empty (household) assignment. */
+function tryParseIdArray(json: string): number[] | null {
 	try {
-		const parsed = JSON.parse(overrideJson);
-		if (Array.isArray(parsed) && parsed.length) return parsed;
+		const parsed = JSON.parse(json);
+		return Array.isArray(parsed) ? parsed : null;
 	} catch {
-		/* malformed — fall through to the default */
+		return null;
 	}
-	return defaultProfileId !== null ? [defaultProfileId] : [];
 }
 
 /** Events overlapping [from, to] (unix seconds), with local overrides
@@ -326,13 +362,18 @@ export function getEventsInRange(from: number, to: number): EventRow[] {
 		location: string | null;
 		description_encrypted: Buffer | null;
 		override_profile_ids_json: string;
-		default_profile_id: number | null;
+		auto_profile_ids_json: string;
+		calendar_profile_id: number | null;
 		overridden: number;
 	}>;
 	return rows.map((r) => ({
 		id: r.id,
 		calendarId: r.calendar_id,
-		profileIds: resolveProfileIds(r.override_profile_ids_json, r.default_profile_id),
+		profileIds: resolveProfileIds(
+			r.override_profile_ids_json,
+			r.auto_profile_ids_json,
+			r.calendar_profile_id
+		),
 		startTs: r.start_ts,
 		endTs: r.end_ts,
 		allDay: !!r.all_day,
@@ -371,12 +412,17 @@ export function getSyncedEventsLean(
 		title: string | null;
 		location: string | null;
 		override_profile_ids_json: string;
-		default_profile_id: number | null;
+		auto_profile_ids_json: string;
+		calendar_profile_id: number | null;
 		overridden: number;
 	}>;
 	return rows.map((r) => ({
 		id: r.id,
-		profileIds: resolveProfileIds(r.override_profile_ids_json, r.default_profile_id),
+		profileIds: resolveProfileIds(
+			r.override_profile_ids_json,
+			r.auto_profile_ids_json,
+			r.calendar_profile_id
+		),
 		startTs: r.start_ts,
 		endTs: r.end_ts,
 		allDay: !!r.all_day,

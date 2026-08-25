@@ -62,6 +62,10 @@ export async function syncGoogle(): Promise<number> {
 
 	const { min: timeMin, max: timeMax } = syncWindow();
 
+	const cfg = await loadConfig();
+	const profiles = cfg.profiles.map((p) => ({ id: p.id, emails: p.emails ?? [] }));
+	const sharedEmails = cfg.family.sharedEmails ?? [];
+
 	let count = 0;
 	const calendars = await listCalendars(accessToken);
 	for (const cal of calendars) {
@@ -71,8 +75,14 @@ export async function syncGoogle(): Promise<number> {
 			name: cal.summary,
 			colorHex: cal.backgroundColor
 		});
+		// upsertCalendar never overwrites a calendar's own profile_id (only a
+		// fresh insert sets it), so this reads back whatever "For" the family
+		// picked in Settings, if anything — the fallback below when an
+		// event's own attendees give no match.
+		const calendarProfileId = getCalendars(GOOGLE_PROVIDER).find((c) => c.id === calId)?.profileId;
 		const events = await listEvents(accessToken, cal.id, timeMin, timeMax);
 		for (const e of events) {
+			const byAttendee = matchAttendees(e.attendees, profiles, sharedEmails);
 			upsertEvent({
 				calendarId: calId,
 				externalId: e.externalId,
@@ -81,7 +91,8 @@ export async function syncGoogle(): Promise<number> {
 				allDay: e.allDay,
 				title: e.title,
 				description: e.description,
-				location: e.location
+				location: e.location,
+				profileIds: byAttendee ?? (calendarProfileId ? [calendarProfileId] : [])
 			});
 			count += 1;
 		}
@@ -108,27 +119,65 @@ function dedupKey(e: IcsEvent): string {
 	return `${e.title.trim().toLowerCase()}|${e.startTs}|${e.endTs}`;
 }
 
-/** Pick which family member a group of duplicate copies is actually for.
- *  The title is checked first ("look at subject to figure out which child
- *  this event is for") — a parent can easily have their kid's event on
- *  their own personal calendar too (invited as an attendee, not because the
- *  event is about them), which would otherwise make "landed on exactly one
- *  specific person's calendar" outrank an explicit name in the title.
- *  Confirmed on-device: a family Google Calendar's recurring practice also
- *  synced onto the inviting parent's own calendar came out tagged to the
- *  parent instead of the child actually named in the title. Only when the
- *  title names nobody does which calendar(s) it landed on decide it. */
-function resolveProfileId(
+/** Who a synced event is for, per an explicit request: match the invite's
+ *  actual attendee list against each profile's registered address(es), not
+ *  who organized it and not a name match in the title. An address shared
+ *  by the whole household means the event is for everyone. Returns null —
+ *  not [] — when there's nothing to go on (no ATTENDEE lines at all, or
+ *  none of them match anything configured), so the caller can fall back to
+ *  the older title/calendar heuristics below instead of misreading "no
+ *  match" as "explicitly no one". */
+function matchAttendees(
+	attendees: string[],
+	profiles: { id: number; emails: string[] }[],
+	sharedEmails: string[]
+): number[] | null {
+	if (attendees.length === 0) return null;
+	const invited = new Set(attendees);
+	if (sharedEmails.some((addr) => invited.has(addr))) return [];
+	const matched = profiles.filter((p) => p.emails.some((addr) => invited.has(addr))).map((p) => p.id);
+	return matched.length ? matched : null;
+}
+
+/** Falls back to the pre-attendee-matching heuristics for a group of
+ *  cross-calendar duplicate copies, when the invite itself gave no usable
+ *  signal (no attendees registered, or the family hasn't entered anyone's
+ *  email yet). The title is checked first ("look at subject to figure out
+ *  which child this event is for") — a parent can easily have their kid's
+ *  event on their own personal calendar too (invited as an attendee, not
+ *  because the event is about them), which would otherwise make "landed on
+ *  exactly one specific person's calendar" outrank an explicit name in the
+ *  title. Confirmed on-device: a family Google Calendar's recurring
+ *  practice also synced onto the inviting parent's own calendar came out
+ *  tagged to the parent instead of the child actually named in the title.
+ *  Only when the title names nobody does which calendar(s) it landed on
+ *  decide it. */
+function titleOrCalendarFallback(
 	group: FetchedEvent[],
 	profiles: { id: number; name: string }[]
-): number | undefined {
+): number[] | null {
 	const title = group[0].e.title.toLowerCase();
 	const named = profiles.find((p) => p.name && title.includes(p.name.toLowerCase()));
-	if (named) return named.id;
+	if (named) return [named.id];
 
 	const distinct = [...new Set(group.map((g) => g.cal.profileId).filter((id): id is number => !!id))];
-	if (distinct.length >= 1) return distinct[0];
-	return group[0].cal.profileId ?? undefined;
+	return distinct.length ? [distinct[0]] : null;
+}
+
+/** The sync step's full auto-tag guess for one group of same-event copies:
+ *  attendee match first, then (only for the cross-calendar invite-copy
+ *  case) the older title/calendar fallback. Null means neither had
+ *  anything to go on — the caller falls back further, to each individual
+ *  calendar's own configured "for" profile. */
+function resolveAutoProfileIds(
+	group: FetchedEvent[],
+	profiles: { id: number; name: string; emails: string[] }[],
+	sharedEmails: string[],
+	spansCalendars: boolean
+): number[] | null {
+	const byAttendee = matchAttendees(group[0].e.attendees, profiles, sharedEmails);
+	if (byAttendee !== null) return byAttendee;
+	return spansCalendars ? titleOrCalendarFallback(group, profiles) : null;
 }
 
 export async function syncIcal(): Promise<number> {
@@ -154,7 +203,9 @@ export async function syncIcal(): Promise<number> {
 	}
 	if (okCals.length === 0) return 0;
 
-	const profiles = (await loadConfig()).profiles.map((p) => ({ id: p.id, name: p.name }));
+	const cfg = await loadConfig();
+	const profiles = cfg.profiles.map((p) => ({ id: p.id, name: p.name, emails: p.emails ?? [] }));
+	const sharedEmails = cfg.family.sharedEmails ?? [];
 	const groups = new Map<string, FetchedEvent[]>();
 	for (const f of fetched) {
 		const key = dedupKey(f.e);
@@ -177,7 +228,7 @@ export async function syncIcal(): Promise<number> {
 		// risking silently dropping a genuinely separate event.
 		const spansCalendars = new Set(group.map((g) => g.cal.id)).size > 1;
 		const toStore = spansCalendars ? [group[0]] : group;
-		const autoProfileId = spansCalendars ? resolveProfileId(group, profiles) : undefined;
+		const autoProfileIds = resolveAutoProfileIds(group, profiles, sharedEmails, spansCalendars);
 
 		for (const { cal, e } of toStore) {
 			upsertEvent({
@@ -189,7 +240,7 @@ export async function syncIcal(): Promise<number> {
 				title: e.title,
 				description: e.description,
 				location: e.location,
-				profileId: autoProfileId ?? cal.profileId ?? undefined
+				profileIds: autoProfileIds ?? (cal.profileId ? [cal.profileId] : [])
 			});
 			count += 1;
 		}

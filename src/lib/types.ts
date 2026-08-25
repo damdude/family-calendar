@@ -25,6 +25,10 @@ export interface Profile {
 	color: ProfileColor;
 	/** Emoji stand-in used when no uploaded photo is present. */
 	avatarEmoji: string;
+	/** Addresses that identify this person on a synced calendar invite, used
+	 *  to auto-tag events by who's actually invited (not the organizer, not
+	 *  a name match in the title). */
+	emails?: string[];
 	/**
 	 * Set when the profile has an uploaded (encrypted) photo. Doubles as a
 	 * cache-buster for the /media/avatar/<id> URL. Absent → show the emoji.

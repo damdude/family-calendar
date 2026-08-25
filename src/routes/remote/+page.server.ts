@@ -77,6 +77,7 @@ export const load: PageServerLoad = async ({ url }) => {
 			role: p.role,
 			color: p.color,
 			avatarEmoji: p.avatarEmoji,
+			emails: p.emails,
 			photoUpdatedAt: p.photoUpdatedAt
 		})),
 		events,

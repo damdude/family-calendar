@@ -322,6 +322,26 @@
 					maxlength="60"
 				/>
 			</label>
+			<label class="field">
+				<span class="type-label lbl">Family email(s)</span>
+				<p class="type-caption sub">
+					A shared address (e.g. a household inbox) — a calendar invite sent
+					to one of these tags the whole family, not any one person.
+				</p>
+				<input
+					class="input"
+					type="text"
+					placeholder="Comma separated"
+					value={family.sharedEmails.join(', ')}
+					oninput={(e) => {
+						family.sharedEmails = (e.currentTarget as HTMLInputElement).value
+							.split(',')
+							.map((s) => s.trim().toLowerCase())
+							.filter(Boolean);
+						persist();
+					}}
+				/>
+			</label>
 			<div class="field">
 				<span class="type-label lbl">People</span>
 				<p class="type-caption sub">

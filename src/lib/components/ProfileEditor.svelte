@@ -41,6 +41,19 @@
 		onChange();
 	}
 
+	/** Comma-separated in the field, a plain string[] in the store — matched
+	 *  against synced events' invite lists to auto-tag who they're for. */
+	function parseEmails(v: string): string[] {
+		return v
+			.split(',')
+			.map((s) => s.trim().toLowerCase())
+			.filter(Boolean);
+	}
+	function setEmails(profile: Profile, v: string) {
+		profile.emails = parseEmails(v);
+		onChange();
+	}
+
 	function removeProfile(id: number) {
 		const i = family.data.profiles.findIndex((p) => p.id === id);
 		if (i >= 0) family.data.profiles.splice(i, 1);
@@ -86,6 +99,13 @@
 
 			<div class="fields">
 				<input class="name" type="text" bind:value={p.name} oninput={onChange} maxlength="40" />
+				<input
+					class="email"
+					type="text"
+					placeholder="Email(s) for tagging invites — comma separated"
+					value={(p.emails ?? []).join(', ')}
+					oninput={(e) => setEmails(p, (e.currentTarget as HTMLInputElement).value)}
+				/>
 				<div class="swatches">
 					{#each PROFILE_COLORS as c (c)}
 						<button
@@ -179,6 +199,14 @@
 		color: var(--color-text-primary);
 		font-size: var(--text-base);
 		font-weight: var(--weight-medium);
+	}
+	.email {
+		padding: 6px 12px;
+		border-radius: var(--radius-sm);
+		border: 1px solid var(--color-border-subtle);
+		background: var(--color-surface);
+		color: var(--color-text-secondary);
+		font-size: var(--text-sm);
 	}
 	.swatches {
 		display: flex;

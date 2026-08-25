@@ -125,5 +125,18 @@ export const migrations: Migration[] = [
 				PRIMARY KEY (calendar_id, external_id)
 			);
 		`
+	},
+	{
+		version: 6,
+		name: 'event_auto_profile_ids',
+		sql: `
+			-- The sync step's own guess at who a synced event is for, now
+			-- possibly more than one person (e.g. an invite sent to both kids'
+			-- addresses) — the old single profile_id column can't hold that.
+			-- profile_id (added in migration 2) is left in place unused rather
+			-- than dropped; every read now goes through this JSON column
+			-- instead, resolved the same way event_overrides already is.
+			ALTER TABLE events ADD COLUMN profile_ids_json TEXT NOT NULL DEFAULT '[]';
+		`
 	}
 ];

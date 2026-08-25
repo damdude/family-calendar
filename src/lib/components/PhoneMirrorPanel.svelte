@@ -26,23 +26,33 @@
 
 	// Only the display side shows a QR; a phone acting as controller must not.
 	const show = $derived(mirror.role !== 'controller');
-	// Best-guess default before mount (matches the common case: the fixed
-	// kiosk itself), corrected to the device's real capability once known.
-	let noTouch = $state(family.displayMode !== 'touch');
+	// Raw signal only — measured once on mount, never itself the answer.
+	// `family.displayMode` is populated by the layout's own effect, which (as
+	// a *child* of that layout) can run before or after this component's
+	// onMount depending on Svelte's scheduling — confirmed on-device as a
+	// real race: displayMode was still null at the exact moment this used to
+	// read it in onMount, silently falling through to the unreliable
+	// detection path every single time despite the value being correct
+	// moments later. Deriving noTouch below instead of freezing it in
+	// onMount means it re-evaluates automatically whenever displayMode
+	// actually arrives, whichever order things settle in.
+	let touchDetected = $state(false);
 	onMount(() => {
-		// An explicitly configured screen type wins outright — see the
-		// module comment above for why runtime detection isn't trusted once
-		// a real answer exists.
-		if (family.displayMode) {
-			noTouch = family.displayMode !== 'touch';
-			return;
-		}
-		noTouch = !(
+		touchDetected = !!(
 			typeof matchMedia === 'function' &&
 			matchMedia('(pointer: coarse)').matches &&
 			navigator.maxTouchPoints > 0
 		);
 	});
+	// An explicitly configured screen type wins outright — see the module
+	// comment above for why runtime detection isn't trusted once a real
+	// answer exists. Falls back to live detection only while displayMode is
+	// still unknown (mid first-run setup, or a phone visiting before any
+	// household config exists) — defaulting to "no touch" (the fixed-kiosk
+	// common case) until that detection actually runs.
+	const noTouch = $derived(
+		family.displayMode ? family.displayMode !== 'touch' : !touchDetected
+	);
 
 	$effect(() => {
 		if (show) mirror.ensureQr();

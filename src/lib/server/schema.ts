@@ -55,7 +55,14 @@ const PersistedFamilySchema = z.object({
 	// Human-readable "City, State" from the location picker's geocoding
 	// result — display only, never used for calculation (latitude/longitude
 	// are the source of truth for sunrise/sunset).
-	locationName: z.string().max(120).optional()
+	locationName: z.string().max(120).optional(),
+	/** Shared/household addresses (a family alias, a shared inbox, …) — an
+	 *  invite sent to one of these means the event is for everyone, not any
+	 *  one person. See Profile.emails for the per-person equivalent. */
+	sharedEmails: z
+		.array(z.string().trim().toLowerCase().max(254))
+		.max(10)
+		.default([])
 });
 
 // --- Persisted app config ---
@@ -154,6 +161,15 @@ export const PersistedProfileSchema = z.object({
 	role: z.enum(['parent', 'child']),
 	color: ProfileColorSchema,
 	avatarEmoji: z.string().min(1).max(8),
+	/** Addresses that identify this person on a synced calendar invite —
+	 *  matched against ATTENDEE lines to auto-tag events by who's actually
+	 *  invited, not who organized it or whose name happens to be in the
+	 *  title. See PersistedFamilySchema.sharedEmails for the whole-family
+	 *  equivalent. */
+	emails: z
+		.array(z.string().trim().toLowerCase().max(254))
+		.max(5)
+		.default([]),
 	/** Set when the profile has an uploaded (encrypted) photo; cache-buster. */
 	photoUpdatedAt: z.number().optional(),
 	/** Whether this profile follows morning/evening routines. Adults default
@@ -167,7 +183,12 @@ export const PersistedConfigSchema = z.object({
 	displayMode: z.enum(['tv', 'touch']).nullable().default(null),
 	/** The family chose "set up Wi-Fi later". */
 	wifiSkipped: z.boolean().default(false),
-	family: PersistedFamilySchema.default({ name: '', timezone: 'UTC', weekStartsOn: 1 }),
+	family: PersistedFamilySchema.default({
+		name: '',
+		timezone: 'UTC',
+		weekStartsOn: 1,
+		sharedEmails: []
+	}),
 	profiles: z.array(PersistedProfileSchema).default([]),
 	app: AppConfigSchema
 });

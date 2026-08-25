@@ -150,6 +150,9 @@ export interface GoogleEvent {
 	title: string;
 	description?: string;
 	location?: string;
+	/** ATTENDEE addresses (lowercased), for tagging by who's actually
+	 *  invited rather than the organizer or a name match in the title. */
+	attendees: string[];
 }
 
 /** Fetch events for a calendar within a time window (RFC3339). */
@@ -182,14 +185,29 @@ export async function listEvents(
 			const endStr =
 				(e.end as { date?: string; dateTime?: string }).date ??
 				(e.end as { dateTime?: string }).dateTime!;
+			// Google's all-day `end.date`, like ICS's DTEND, is exclusive (the
+			// day after the event's own last day) — subtract a second so it
+			// matches the inclusive convention everything downstream expects
+			// (see ical.ts's allDayInclusiveEnd for the full explanation).
+			const endTs = allDay
+				? Math.floor(new Date(endStr).getTime() / 1000) - 1
+				: Math.floor(new Date(endStr).getTime() / 1000);
+			const attendees = [
+				...new Set(
+					((e.attendees as { email?: string }[] | undefined) ?? [])
+						.map((a) => a.email?.trim().toLowerCase())
+						.filter((v): v is string => !!v)
+				)
+			];
 			return {
 				externalId: e.id as string,
 				startTs: Math.floor(new Date(startStr).getTime() / 1000),
-				endTs: Math.floor(new Date(endStr).getTime() / 1000),
+				endTs,
 				allDay,
 				title: (e.summary as string) ?? '(untitled)',
 				description: e.description as string | undefined,
-				location: e.location as string | undefined
+				location: e.location as string | undefined,
+				attendees
 			};
 		});
 }

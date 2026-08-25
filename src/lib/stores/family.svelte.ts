@@ -99,6 +99,9 @@ class FamilyStore {
 	 *  default location (src/lib/sun.ts). */
 	latitude = $state<number | undefined>(undefined);
 	longitude = $state<number | undefined>(undefined);
+	/** Shared/household addresses — an invite sent to one of these tags every
+	 *  profile, not any one person (see sync.ts's attendee matching). */
+	sharedEmails = $state<string[]>([]);
 
 	/** Touch devices get on-screen input; TV devices are driven from a phone. */
 	get isTouch(): boolean {
@@ -182,6 +185,7 @@ class FamilyStore {
 		this.wifiSkipped = !!cfg.wifiSkipped;
 		this.latitude = cfg.family.latitude;
 		this.longitude = cfg.family.longitude;
+		this.sharedEmails = cfg.family.sharedEmails ?? [];
 		if (!cfg.setupComplete) return;
 		if (cfg.family.name) this.data.familyName = cfg.family.name;
 		this.data.weekStartsOn = cfg.family.weekStartsOn;
@@ -198,6 +202,7 @@ class FamilyStore {
 				p.role = pc.role;
 				p.color = pc.color;
 				p.avatarEmoji = pc.avatarEmoji;
+				p.emails = pc.emails;
 				p.photoUpdatedAt = pc.photoUpdatedAt;
 				p.routinesEnabled = pc.routinesEnabled;
 			} else {
@@ -209,6 +214,7 @@ class FamilyStore {
 					role: pc.role,
 					color: pc.color,
 					avatarEmoji: pc.avatarEmoji,
+					emails: pc.emails,
 					photoUpdatedAt: pc.photoUpdatedAt,
 					routinesEnabled: pc.routinesEnabled,
 					tasks: { done: 0, total: 0 }
@@ -457,7 +463,8 @@ class FamilyStore {
 				timezone: this.data.timezone,
 				weekStartsOn: this.data.weekStartsOn,
 				latitude: this.latitude,
-				longitude: this.longitude
+				longitude: this.longitude,
+				sharedEmails: this.sharedEmails
 			},
 			profiles: this.data.profiles.map((p) => ({
 				id: p.id,
@@ -467,6 +474,7 @@ class FamilyStore {
 				role: p.role,
 				color: p.color,
 				avatarEmoji: p.avatarEmoji,
+				emails: p.emails,
 				photoUpdatedAt: p.photoUpdatedAt,
 				routinesEnabled: p.routinesEnabled
 			})),

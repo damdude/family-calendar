@@ -479,6 +479,7 @@
 	let profDob = $state('');
 	let profColor = $state<ProfileColor>('pink');
 	let profAvatar = $state<string>(AVATAR_CHOICES[0]);
+	let profEmails = $state('');
 	let savingProfile = $state(false);
 	let profileFormError = $state('');
 	const profAgePreview = $derived(profDob ? ageFromDOB(profDob) : null);
@@ -490,6 +491,7 @@
 		profDob = '';
 		profColor = 'pink';
 		profAvatar = AVATAR_CHOICES[0];
+		profEmails = '';
 		profileFormError = '';
 	}
 	function startEditProfile(p: PageData['profiles'][number]) {
@@ -502,6 +504,7 @@
 		profDob = `${new Date().getFullYear() - p.age}-01-01`;
 		profColor = p.color as ProfileColor;
 		profAvatar = p.avatarEmoji;
+		profEmails = (p.emails ?? []).join(', ');
 		profileFormError = '';
 	}
 	function cancelProfileForm() {
@@ -526,7 +529,11 @@
 					name,
 					age: ageFromDOB(profDob),
 					color: profColor,
-					avatarEmoji: profAvatar
+					avatarEmoji: profAvatar,
+					emails: profEmails
+						.split(',')
+						.map((s) => s.trim().toLowerCase())
+						.filter(Boolean)
 				})
 			});
 			if (r.ok) {
@@ -1800,6 +1807,27 @@
 			</section>
 
 			<section class="card">
+				<h2 class="type-label sec-h">Family email(s)</h2>
+				<p class="type-caption sub">
+					A shared address (e.g. a household inbox) — a calendar invite sent
+					to one of these tags the whole family, not any one person.
+				</p>
+				<input
+					class="in"
+					type="text"
+					placeholder="Comma separated"
+					value={cfg.family.sharedEmails?.join(', ') ?? ''}
+					oninput={(e) => {
+						cfg.family.sharedEmails = (e.currentTarget as HTMLInputElement).value
+							.split(',')
+							.map((s) => s.trim().toLowerCase())
+							.filter(Boolean);
+						persistCfg();
+					}}
+				/>
+			</section>
+
+			<section class="card">
 				<div class="sec-head">
 					<h2 class="type-label sec-h">Wi-Fi</h2>
 					<p class="type-caption sub">
@@ -2361,6 +2389,15 @@
 								{/if}
 							</label>
 						</div>
+						<label class="field">
+							<span class="type-label lbl">Email(s) for tagging invites</span>
+							<input
+								class="in"
+								type="text"
+								placeholder="Comma separated"
+								bind:value={profEmails}
+							/>
+						</label>
 						<div class="field">
 							<span class="type-label lbl">Color</span>
 							<div class="chips">

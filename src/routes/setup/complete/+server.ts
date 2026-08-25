@@ -28,13 +28,14 @@ export const POST: RequestHandler = async ({ request }) => {
 		age: p.age,
 		role: p.age >= 18 ? 'parent' : 'child',
 		color: p.color,
-		avatarEmoji: p.avatarEmoji
+		avatarEmoji: p.avatarEmoji,
+		emails: []
 	}));
 
 	await saveConfig({
 		...current,
 		setupComplete: true,
-		family: draft.family,
+		family: { ...draft.family, sharedEmails: [] },
 		profiles,
 		app: { ...current.app, view: { ...current.app.view, weekStartsOn: draft.family.weekStartsOn } }
 	});

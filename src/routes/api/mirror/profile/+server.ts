@@ -12,7 +12,10 @@ const Body = z.object({
 	name: z.string().trim().min(1).max(40),
 	age: z.number().int().min(0).max(120),
 	color: ProfileColorSchema,
-	avatarEmoji: z.string().min(1).max(8)
+	avatarEmoji: z.string().min(1).max(8),
+	// Calendar invite addresses for this person, used to auto-tag synced
+	// events by who's actually invited — see sync.ts's attendee matching.
+	emails: z.array(z.string().trim().toLowerCase().max(254)).max(5).optional()
 });
 
 /** Phone companion → server: add or edit a family member. */
@@ -21,7 +24,7 @@ export const POST: RequestHandler = async ({ request }) => {
 	if (!parsed.success) throw error(400, 'invalid profile');
 	if (!isMirrorToken(parsed.data.token)) throw error(410, 'session expired');
 
-	const { id, name, age, color, avatarEmoji } = parsed.data;
+	const { id, name, age, color, avatarEmoji, emails } = parsed.data;
 	const config = await loadConfig();
 
 	if (id !== undefined) {
@@ -32,6 +35,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		existing.color = color;
 		existing.avatarEmoji = avatarEmoji;
 		existing.role = age >= 18 ? 'parent' : 'child';
+		if (emails) existing.emails = emails;
 	} else {
 		const newId = config.profiles.reduce((m, p) => Math.max(m, p.id), 0) + 1;
 		config.profiles.push({
@@ -40,7 +44,8 @@ export const POST: RequestHandler = async ({ request }) => {
 			age,
 			role: age >= 18 ? 'parent' : 'child',
 			color,
-			avatarEmoji
+			avatarEmoji,
+			emails: emails ?? []
 		});
 	}
 

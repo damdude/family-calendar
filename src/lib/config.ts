@@ -123,6 +123,9 @@ export interface PersistedFamily {
 	/** Drives the sunrise/sunset auto theme (src/lib/sun.ts); optional. */
 	latitude?: number;
 	longitude?: number;
+	/** Shared/household addresses — an invite sent to one of these tags the
+	 *  whole family, not any one person. */
+	sharedEmails?: string[];
 }
 export interface PersistedProfileMeta {
 	id: number;
@@ -132,6 +135,9 @@ export interface PersistedProfileMeta {
 	role: ProfileRole;
 	color: ProfileColor;
 	avatarEmoji: string;
+	/** Addresses that identify this person on a synced calendar invite, for
+	 *  auto-tagging events by who's actually invited. */
+	emails?: string[];
 	photoUpdatedAt?: number;
 	/** Whether this profile follows morning/evening routines. Undefined defers
 	 *  to the role-based default (children on, adults off). */
