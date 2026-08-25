@@ -11,6 +11,19 @@
 
 	let weekOffset = $state(0);
 
+	// Which day it is, kept fresh — `weekStart` below decides Sunday's special
+	// range from this, and a plain `new Date()` read inside a $derived only
+	// evaluates once (nothing reactive changes when the clock ticks past
+	// midnight), so a display left open across a day boundary would freeze on
+	// whatever week layout was true when it last happened to recompute —
+	// e.g. staying on Sunday's Wed-Sun/Mon-Tue view straight through Tuesday.
+	// Once a minute is plenty since only the day matters here, not the time.
+	let now = $state(new Date());
+	$effect(() => {
+		const iv = setInterval(() => (now = new Date()), 60_000);
+		return () => clearInterval(iv);
+	});
+
 	// Local-event editor + QR quick-add.
 	let editorOpen = $state(false);
 	let editing = $state<LocalEvent | null>(null);
@@ -33,7 +46,7 @@
 	}
 
 	const weekStart = $derived.by(() => {
-		const today = new Date();
+		const today = now;
 		// Sunday, viewing the actual current week: a plain Mon-Sun grid would
 		// end on today, showing an entire week almost completely in the past.
 		// Shift the 7-day window forward instead — Wed of the week just

@@ -53,6 +53,21 @@ function toSec(d: Date): number {
 	return Math.floor(d.getTime() / 1000);
 }
 
+/**
+ * Per RFC 5545, DTEND on a DATE-valued (all-day) VEVENT is exclusive — a
+ * single-day event's DTEND is midnight the *next* day, not the event's own
+ * day. Locally-created all-day events store an inclusive end instead (23:59
+ * of the last actual day — see EventEditor.svelte), and every consumer of
+ * `endTs` (WeekGrid's day-span math, the agenda list, …) assumes that same
+ * inclusive convention. Left unconverted, a plain one-day synced event would
+ * report an end timestamp that's already the start of the following day,
+ * making it look like it spans that day too. Normalize at parse time so
+ * every allDay event — local or synced — means the same thing downstream.
+ */
+function allDayInclusiveEnd(end: Date): Date {
+	return new Date(end.getTime() - 1000);
+}
+
 // node-ical types are loose; treat parsed components structurally.
 type VEvent = {
 	type?: string;
@@ -93,7 +108,7 @@ export function parseIcs(text: string, windowStart: Date, windowEnd: Date): IcsE
 				out.push({
 					externalId: `${uid}-${toSec(start)}`,
 					startTs: toSec(start),
-					endTs: toSec(end),
+					endTs: toSec(allDay ? allDayInclusiveEnd(end) : end),
 					allDay,
 					title: override?.summary ?? title,
 					description: override?.description ?? ev.description,
@@ -103,15 +118,18 @@ export function parseIcs(text: string, windowStart: Date, windowEnd: Date): IcsE
 		} else {
 			if (ev.end && ev.end < windowStart) continue;
 			if (ev.start > windowEnd) continue;
-			out.push({
-				externalId: uid,
-				startTs: toSec(ev.start),
-				endTs: toSec(ev.end ?? new Date(ev.start.getTime() + duration)),
-				allDay,
-				title,
-				description: ev.description,
-				location: ev.location
-			});
+			{
+				const end = ev.end ?? new Date(ev.start.getTime() + duration);
+				out.push({
+					externalId: uid,
+					startTs: toSec(ev.start),
+					endTs: toSec(allDay ? allDayInclusiveEnd(end) : end),
+					allDay,
+					title,
+					description: ev.description,
+					location: ev.location
+				});
+			}
 		}
 	}
 	return out;

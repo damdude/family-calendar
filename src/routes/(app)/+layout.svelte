@@ -93,6 +93,23 @@
 	const idleActive = $derived(
 		sv.enabled && sv.idleMinutes > 0 && tick - lastActivity > sv.idleMinutes * 60_000
 	);
+
+	// Daily self-heal reload (TV kiosk only): a browser tab left open for
+	// days can accumulate stuck reactive state with no general remedy short
+	// of a fresh page load — confirmed as the cause of a bug where the
+	// week-view grid froze on a Sunday-only special case straight through
+	// the following Tuesday, because it read `new Date()` once inside a
+	// $derived that nothing ever re-triggered. Piggyback on the sleep
+	// window, since the screen's already dark then, so a reload is
+	// invisible; once per calendar day, tracked in localStorage so
+	// re-evaluating mid-window doesn't reload repeatedly.
+	$effect(() => {
+		if (!family.isTv || !sleepActive) return;
+		const today = new Date(tick).toDateString();
+		if (localStorage.getItem('fc.lastDailyReload') === today) return;
+		localStorage.setItem('fc.lastDailyReload', today);
+		location.reload();
+	});
 	// A dismiss always guarantees a real window of "definitely off" — a tap
 	// resetting `lastActivity` isn't enough on its own to prove the screen
 	// actually comes back, since `tick`/`lastActivity` can already be stale by
