@@ -11,7 +11,8 @@
 	import { dragScroll } from '$lib/actions/dragScroll';
 	import { isWithinWindow } from '$lib/time';
 	import { isDarkNow } from '$lib/sun';
-	import { invalidateAll } from '$app/navigation';
+	import { invalidateAll, goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import { untrack } from 'svelte';
 	import type { LayoutData } from './$types';
 
@@ -82,6 +83,24 @@
 			window.removeEventListener('keydown', act);
 		};
 	});
+	// --- Return to Calendar after being elsewhere, idle ---
+	// A phone driving the display remotely, or a direct tap on a touch
+	// kiosk, can leave this parked on some other tab (Lists, Settings, …).
+	// Calendar is the default view, so after 20 minutes with nothing
+	// happening — no touch/key activity locally, and no further navigation
+	// from anywhere, including a phone — it falls back on its own instead
+	// of staying wherever it was left indefinitely.
+	const AWAY_TIMEOUT_MS = 20 * 60_000;
+	$effect(() => {
+		page.url.pathname; // any navigation counts as activity, wherever it came from
+		untrack(() => (lastActivity = Date.now()));
+	});
+	$effect(() => {
+		if (page.url.pathname !== '/' && tick - lastActivity > AWAY_TIMEOUT_MS) {
+			goto('/');
+		}
+	});
+
 	const sv = $derived(family.config.screensaver);
 	// The sleep window forces the screensaver on outside of the snooze below —
 	// otherwise it'd flip back on every few seconds all night regardless of
