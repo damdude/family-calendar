@@ -12,7 +12,7 @@
 
 const DEVICE_CODE_URL = 'https://oauth2.googleapis.com/device/code';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
-const CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly';
+const CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar';
 const DEVICE_GRANT = 'urn:ietf:params:oauth:grant-type:device_code';
 
 export const GOOGLE_PROVIDER = 'google';
