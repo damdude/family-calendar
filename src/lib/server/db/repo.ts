@@ -7,6 +7,7 @@ import { encryptString, decryptString, encrypt, decrypt } from '../crypto';
 
 export interface StoredToken {
 	provider: string;
+	profileId?: number;              // null/undefined = shared/household account
 	accountEmail?: string;
 	refreshToken: string;
 	accessToken?: string;
@@ -19,13 +20,14 @@ export function saveOAuthToken(t: StoredToken): void {
 	const now = Math.floor(Date.now() / 1000);
 	db.prepare(
 		`INSERT INTO oauth_tokens
-			(provider, account_email, refresh_token_encrypted, access_token_encrypted, access_expires_at, scope, created_at, updated_at)
-		 VALUES (@provider, @email, @refresh, @access, @exp, @scope, @now, @now)
-		 ON CONFLICT(provider) DO UPDATE SET
+			(provider, profile_id, account_email, refresh_token_encrypted, access_token_encrypted, access_expires_at, scope, created_at, updated_at)
+		 VALUES (@provider, @profileId, @email, @refresh, @access, @exp, @scope, @now, @now)
+		 ON CONFLICT(provider, profile_id) DO UPDATE SET
 			account_email=@email, refresh_token_encrypted=@refresh,
 			access_token_encrypted=@access, access_expires_at=@exp, scope=@scope, updated_at=@now`
 	).run({
 		provider: t.provider,
+		profileId: t.profileId ?? null,
 		email: t.accountEmail ?? null,
 		refresh: encryptString(t.refreshToken),
 		access: t.accessToken ? encryptString(t.accessToken) : null,
@@ -35,10 +37,11 @@ export function saveOAuthToken(t: StoredToken): void {
 	});
 }
 
-export function getOAuthToken(provider: string): StoredToken | null {
-	const row = getDb().prepare('SELECT * FROM oauth_tokens WHERE provider = ?').get(provider) as
+export function getOAuthToken(provider: string, profileId?: number): StoredToken | null {
+	const row = getDb().prepare('SELECT * FROM oauth_tokens WHERE provider = ? AND profile_id IS ?').get(provider, profileId ?? null) as
 		| {
 				provider: string;
+				profile_id: number | null;
 				account_email: string | null;
 				refresh_token_encrypted: Buffer;
 				access_token_encrypted: Buffer | null;
@@ -49,6 +52,7 @@ export function getOAuthToken(provider: string): StoredToken | null {
 	if (!row) return null;
 	return {
 		provider: row.provider,
+		profileId: row.profile_id ?? undefined,
 		accountEmail: row.account_email ?? undefined,
 		refreshToken: decryptString(row.refresh_token_encrypted),
 		accessToken: row.access_token_encrypted ? decryptString(row.access_token_encrypted) : undefined,
@@ -57,8 +61,30 @@ export function getOAuthToken(provider: string): StoredToken | null {
 	};
 }
 
-export function deleteOAuthToken(provider: string): void {
-	getDb().prepare('DELETE FROM oauth_tokens WHERE provider = ?').run(provider);
+export function getAllGoogleTokens(): Array<StoredToken & { profileId?: number }> {
+	if (!dbExists()) return [];
+	const rows = getDb().prepare('SELECT * FROM oauth_tokens WHERE provider = ?').all('google') as Array<{
+		provider: string;
+		profile_id: number | null;
+		account_email: string | null;
+		refresh_token_encrypted: Buffer;
+		access_token_encrypted: Buffer | null;
+		access_expires_at: number | null;
+		scope: string | null;
+	}>;
+	return rows.map((r) => ({
+		provider: r.provider,
+		profileId: r.profile_id ?? undefined,
+		accountEmail: r.account_email ?? undefined,
+		refreshToken: decryptString(r.refresh_token_encrypted),
+		accessToken: r.access_token_encrypted ? decryptString(r.access_token_encrypted) : undefined,
+		accessExpiresAt: r.access_expires_at ?? undefined,
+		scope: r.scope ?? undefined
+	}));
+}
+
+export function deleteOAuthToken(provider: string, profileId?: number): void {
+	getDb().prepare('DELETE FROM oauth_tokens WHERE provider = ? AND profile_id IS ?').run(provider, profileId ?? null);
 }
 
 // --- Calendars + events ---

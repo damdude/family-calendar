@@ -16,7 +16,8 @@ import {
 	setCalendarSynced,
 	upsertCalendar,
 	upsertEvent,
-	type CalendarRow
+	type CalendarRow,
+	getAllGoogleTokens
 } from './db/repo';
 import { loadConfig } from './config';
 
@@ -31,8 +32,8 @@ function syncWindow(): { min: Date; max: Date } {
 }
 
 /** Return a valid Google access token, refreshing (and persisting) if needed. */
-async function validGoogleAccessToken(): Promise<string | null> {
-	const token = getOAuthToken(GOOGLE_PROVIDER);
+async function validGoogleAccessToken(profileId?: number): Promise<string | null> {
+	const token = getOAuthToken(GOOGLE_PROVIDER, profileId);
 	if (!token) return null;
 	const now = Math.floor(Date.now() / 1000);
 	if (token.accessToken && token.accessExpiresAt && token.accessExpiresAt - 60 > now) {
@@ -46,18 +47,25 @@ async function validGoogleAccessToken(): Promise<string | null> {
 	});
 	return refreshed.accessToken;
 }
+	const refreshed = await refreshAccessToken(token.refreshToken);
+	saveOAuthToken({
+		...token,
+		accessToken: refreshed.accessToken,
+		accessExpiresAt: now + refreshed.expiresIn
+	});
+	return refreshed.accessToken;
+}
 
 export function isGoogleConnected(): boolean {
-	return isGoogleConfigured() && !!getOAuthToken(GOOGLE_PROVIDER);
+	return isGoogleConfigured() && getAllGoogleTokens().length > 0;
 }
 
 /**
  * Pull Google calendars + events for a window around today into SQLite.
  * Returns the number of events synced. No-op (0) when not connected.
  */
-export async function syncGoogle(): Promise<number> {
-	if (!isGoogleConfigured()) return 0; // don't touch the DB until configured
-	const accessToken = await validGoogleAccessToken();
+async function syncGoogleForProfile(profileId?: number): Promise<number> {
+	const accessToken = await validGoogleAccessToken(profileId);
 	if (!accessToken) return 0;
 
 	const { min: timeMin, max: timeMax } = syncWindow();
@@ -73,13 +81,10 @@ export async function syncGoogle(): Promise<number> {
 			provider: GOOGLE_PROVIDER,
 			externalId: cal.id,
 			name: cal.summary,
-			colorHex: cal.backgroundColor
+			colorHex: cal.backgroundColor,
+			profileId
 		});
-		// upsertCalendar never overwrites a calendar's own profile_id (only a
-		// fresh insert sets it), so this reads back whatever "For" the family
-		// picked in Settings, if anything — the fallback below when an
-		// event's own attendees give no match.
-		const calendarProfileId = getCalendars(GOOGLE_PROVIDER).find((c) => c.id === calId)?.profileId;
+		const calendarProfileId = getCalendars(GOOGLE_PROVIDER).find((c) => c.id === calId)?.profileId ?? profileId;
 		const events = await listEvents(accessToken, cal.id, timeMin, timeMax);
 		for (const e of events) {
 			const byAttendee = matchAttendees(e.attendees, profiles, sharedEmails);
@@ -99,6 +104,21 @@ export async function syncGoogle(): Promise<number> {
 	}
 	return count;
 }
+
+export async function syncGoogle(): Promise<number> {
+	if (!isGoogleConfigured()) return 0;
+	
+	const tokens = getAllGoogleTokens();
+	let totalCount = 0;
+	
+	for (const token of tokens) {
+		const count = await syncGoogleForProfile(token.profileId);
+		totalCount += count;
+	}
+	
+	return totalCount;
+}
+
 
 /**
  * Sync all ICS/webcal subscriptions. Each feed is fully re-materialized within

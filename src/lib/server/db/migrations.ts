@@ -139,4 +139,33 @@ export const migrations: Migration[] = [
 			ALTER TABLE events ADD COLUMN profile_ids_json TEXT NOT NULL DEFAULT '[]';
 		`
 	}
+,
+	{
+		version: 7,
+		name: 'per_profile_oauth_tokens',
+		sql: `
+			-- Support multiple OAuth tokens, one per profile (each family member
+			-- can connect their own Google account). Recreate the table with
+			-- (provider, profile_id) as the primary key, allowing multiple
+			-- tokens per provider (one per profile).
+			CREATE TABLE oauth_tokens_new (
+				provider TEXT NOT NULL,
+				profile_id INTEGER,                 -- null = shared/household account
+				account_email TEXT,
+				refresh_token_encrypted BLOB NOT NULL,
+				access_token_encrypted BLOB,
+				access_expires_at INTEGER,         -- unix seconds
+				scope TEXT,
+				created_at INTEGER NOT NULL,
+				updated_at INTEGER NOT NULL,
+				PRIMARY KEY (provider, profile_id)
+			);
+			INSERT INTO oauth_tokens_new (provider, profile_id, account_email, refresh_token_encrypted, access_token_encrypted, access_expires_at, scope, created_at, updated_at)
+			SELECT provider, NULL, account_email, refresh_token_encrypted, access_token_encrypted, access_expires_at, scope, created_at, updated_at
+			FROM oauth_tokens;
+			DROP TABLE oauth_tokens;
+			ALTER TABLE oauth_tokens_new RENAME TO oauth_tokens;
+		`
+	}
+
 ];

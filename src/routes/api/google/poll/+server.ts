@@ -5,9 +5,12 @@ import { saveOAuthToken } from '$lib/server/db/repo';
 import { syncGoogle } from '$lib/server/sync';
 import type { RequestHandler } from './$types';
 
-const Body = z.object({ deviceCode: z.string().min(1) });
+const Body = z.object({
+	deviceCode: z.string().min(1),
+	profileId: z.number().int().optional() // null/undefined = shared account
+});
 
-/** Poll once for the token. On success, store it (encrypted) and sync. */
+/** Poll once for the token. On success, store it (encrypted) per-profile and sync. */
 export const POST: RequestHandler = async ({ request }) => {
 	const parsed = Body.safeParse(await request.json().catch(() => null));
 	if (!parsed.success) throw error(400, 'missing deviceCode');
@@ -16,6 +19,7 @@ export const POST: RequestHandler = async ({ request }) => {
 	if (result.status === 'granted') {
 		saveOAuthToken({
 			provider: GOOGLE_PROVIDER,
+			profileId: parsed.data.profileId,
 			refreshToken: result.refreshToken,
 			accessToken: result.accessToken,
 			accessExpiresAt: Math.floor(Date.now() / 1000) + result.expiresIn
