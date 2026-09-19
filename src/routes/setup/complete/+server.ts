@@ -42,5 +42,13 @@ export const POST: RequestHandler = async ({ request }) => {
 
 	markComplete(token);
 	publish(token, { type: 'complete' });
-	return json({ ok: true });
+
+	// Clear the setup token cookie since setup is done
+	return new Response(JSON.stringify({ ok: true }), {
+		status: 200,
+		headers: {
+			'content-type': 'application/json',
+			'set-cookie': '_setup_token=; Path=/setup; Max-Age=0'
+		}
+	});
 };

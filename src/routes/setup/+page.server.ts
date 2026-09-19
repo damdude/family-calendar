@@ -1,16 +1,37 @@
 import QRCode from 'qrcode';
-import { createPairing } from '$lib/server/pairing';
+import { createPairing, getSession } from '$lib/server/pairing';
 import { localIPv4 } from '$lib/server/net';
 import { loadConfig } from '$lib/server/config';
 import { isOnline, SETUP_AP_SSID, setupApPassphrase } from '$lib/server/network';
 import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ url }) => {
+export const load: PageServerLoad = async ({ url, cookies }) => {
 	const config = await loadConfig();
 	const online = await isOnline();
 
-	// Fresh token each time the kiosk opens setup (rotation).
-	const { token, expiresAt } = createPairing();
+	// Prevent token rotation during active phone setup: if a valid token
+	// exists in a cookie, reuse it. Only create fresh tokens on first load
+	// or when the prior session has expired (phone will naturally get 410).
+	// This keeps the phone's QR from becoming invalid if the TV setup page
+	// reloads or refreshes while they're filling out the form.
+	let token: string;
+	let expiresAt: number;
+
+	const existingToken = cookies.get('_setup_token');
+	const existingSession = existingToken ? getSession(existingToken) : null;
+
+	if (existingSession && !existingSession.completed) {
+		// Reuse the active token
+		token = existingToken!;
+		expiresAt = existingSession.createdAt + 30 * 60 * 1000;
+	} else {
+		// No active session; create a fresh one
+		const pair = createPairing();
+		token = pair.token;
+		expiresAt = pair.expiresAt;
+		// Store in a cookie so reloads reuse this token
+		cookies.set('_setup_token', token, { path: '/setup', maxAge: 30 * 60 });
+	}
 
 	const ip = localIPv4();
 	const port = url.port || '5173';

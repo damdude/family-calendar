@@ -17,7 +17,9 @@
 import crypto from 'node:crypto';
 import { emptyDraft, type SetupDraft } from '$lib/setup/types';
 
-const TTL_MS = 20 * 60 * 1000;
+// Inactivity timeout: 30 minutes. Long enough for multi-child setup,
+// short enough to clean up abandoned sessions.
+const TTL_MS = 30 * 60 * 1000;
 
 export interface PairingSession {
 	token: string;
@@ -26,6 +28,8 @@ export interface PairingSession {
 	claimedAt?: number;
 	draft: SetupDraft;
 	completed: boolean;
+	// Flag: this token's page has been served (don't rotate on re-render)
+	pageServed?: boolean;
 }
 
 const sessions = new Map<string, PairingSession>();

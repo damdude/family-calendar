@@ -107,6 +107,12 @@
 				</li>
 			{/each}
 		</ul>
+	{:else if joining}
+		<div class="joinstate">
+			<div class="spinner"></div>
+			<p class="type-heading">Connecting to {selected.ssid}</p>
+			<p class="type-body sub">Applying settings and connecting to your network…</p>
+		</div>
 	{:else}
 		<div class="head">
 			<button type="button" class="back" onclick={() => (selected = null)}>
@@ -125,8 +131,8 @@
 				aria-label="Password"
 				placeholder="Tap the keys below"
 			/>
-			<button type="button" class="joinbtn" disabled={joining || !password} onclick={join}>
-				{joining ? 'Joining…' : 'Join'}
+			<button type="button" class="joinbtn" disabled={!password} onclick={join}>
+				Join
 			</button>
 		</div>
 
@@ -240,5 +246,31 @@
 	}
 	.err {
 		color: var(--color-accent-warning);
+	}
+	.joinstate {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: var(--space-4);
+		padding: var(--space-4) var(--space-2);
+		text-align: center;
+	}
+	.spinner {
+		width: 40px;
+		height: 40px;
+		border: 3px solid var(--color-border-subtle);
+		border-top-color: var(--color-accent-primary);
+		border-radius: 50%;
+		animation: spin 1s linear infinite;
+	}
+	@keyframes spin {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.spinner {
+			animation: none;
+		}
 	}
 </style>
