@@ -205,6 +205,35 @@
 		family.config.features[k] = !family.config.features[k];
 		persist();
 	}
+
+	// Factory reset
+	let showResetConfirm = $state(false);
+	let resetting = $state(false);
+	let resetMsg = $state('');
+	let resetErr = $state('');
+
+	async function performFactoryReset() {
+		resetting = true;
+		resetMsg = '';
+		resetErr = '';
+		try {
+			const r = await fetch('/api/factory-reset', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ confirm: 'FACTORY_RESET_CONFIRM' })
+			});
+			if (r.ok) {
+				resetMsg = '✅ Factory reset complete. Reloading...';
+				setTimeout(() => location.reload(), 1500);
+			} else {
+				resetErr = `Failed: ${r.status}`;
+			}
+		} catch (err) {
+			resetErr = `Error: ${err instanceof Error ? err.message : 'Unknown error'}`;
+		} finally {
+			resetting = false;
+		}
+	}
 </script>
 
 <div class="settings">
@@ -669,6 +698,47 @@
 			<p class="type-body sub">Open the setup wizard to reconfigure from your phone.</p>
 			<a class="pairbtn pressable" href="/setup"><QrCode size={18} /> Show pairing code</a>
 		</section>
+
+		<!-- Factory Reset -->
+		<section class="card danger">
+			<div class="cardhead"><h2 class="type-heading">Factory Reset</h2></div>
+			<p class="type-body sub">Clear all configuration, family data, and credentials. The setup wizard will appear on the next reload. <strong>This cannot be undone.</strong></p>
+			{#if !showResetConfirm}
+				<button type="button" class="resetbtn" onclick={() => (showResetConfirm = true)}>
+					⚠️ Factory Reset
+				</button>
+			{:else}
+				<div class="resetconfirm">
+					<p class="type-body">Are you absolutely sure? This will:</p>
+					<ul class="type-body sub resetlist">
+						<li>❌ Delete all family profiles and settings</li>
+						<li>❌ Clear calendar events and meals</li>
+						<li>❌ Remove all photos</li>
+						<li>❌ Reset Google Calendar connections</li>
+						<li>❌ Clear all chores and rewards</li>
+					</ul>
+					<div class="resetbtns">
+						<button type="button" class="cancelbtn" onclick={() => (showResetConfirm = false)}>
+							Cancel
+						</button>
+						<button
+							type="button"
+							class="confirmbtn"
+							disabled={resetting}
+							onclick={performFactoryReset}
+						>
+							{#if resetting}
+								Resetting…
+							{:else}
+								Yes, Delete Everything
+							{/if}
+						</button>
+					</div>
+				</div>
+			{/if}
+			{#if resetMsg}<p class="type-caption hint success">{resetMsg}</p>{/if}
+			{#if resetErr}<p class="type-caption hint error">{resetErr}</p>{/if}
+		</section>
 	{/if}
 </div>
 
@@ -944,5 +1014,110 @@
 	}
 	.pairbtn:disabled {
 		opacity: 0.5;
+	}
+
+	/* Factory reset section */
+	.card.danger {
+		border-color: color-mix(in srgb, var(--color-accent-warning) 40%, var(--color-border-subtle));
+		background: color-mix(in srgb, var(--color-accent-warning) 8%, var(--color-surface));
+	}
+
+	.resetbtn {
+		display: inline-block;
+		padding: 10px 18px;
+		background: color-mix(in srgb, var(--color-accent-warning) 60%, var(--color-surface));
+		color: var(--color-text-primary);
+		border-radius: var(--radius-md);
+		font-weight: var(--weight-semibold);
+		border: 1px solid color-mix(in srgb, var(--color-accent-warning) 40%, var(--color-border-subtle));
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+
+	.resetbtn:hover {
+		background: color-mix(in srgb, var(--color-accent-warning) 70%, var(--color-surface));
+	}
+
+	.resetconfirm {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-3);
+		padding: var(--space-3);
+		background: var(--color-surface-elevated);
+		border-radius: var(--radius-md);
+		border: 1px solid color-mix(in srgb, var(--color-accent-warning) 30%, var(--color-border-subtle));
+	}
+
+	.resetlist {
+		list-style: none;
+		padding-left: var(--space-2);
+		gap: var(--space-2);
+		display: flex;
+		flex-direction: column;
+	}
+
+	.resetlist li {
+		margin: 0;
+		padding: 0;
+	}
+
+	.resetbtns {
+		display: flex;
+		gap: var(--space-2);
+		justify-content: flex-end;
+	}
+
+	.cancelbtn {
+		padding: 10px 18px;
+		background: var(--color-surface);
+		color: var(--color-text-primary);
+		border: 1px solid var(--color-border-subtle);
+		border-radius: var(--radius-md);
+		font-weight: var(--weight-medium);
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+
+	.cancelbtn:hover {
+		background: var(--color-surface-elevated);
+	}
+
+	.confirmbtn {
+		padding: 10px 18px;
+		background: color-mix(in srgb, var(--color-accent-warning) 80%, red);
+		color: white;
+		border: none;
+		border-radius: var(--radius-md);
+		font-weight: var(--weight-semibold);
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+
+	.confirmbtn:hover:not(:disabled) {
+		background: color-mix(in srgb, var(--color-accent-warning) 90%, red);
+	}
+
+	.confirmbtn:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
+	}
+
+	.hint {
+		padding: var(--space-2) var(--space-3);
+		border-radius: var(--radius-md);
+		display: inline-block;
+		margin-top: var(--space-2);
+	}
+
+	.hint.success {
+		background: color-mix(in srgb, var(--color-accent-success) 15%, var(--color-surface));
+		color: var(--color-accent-success);
+		border: 1px solid color-mix(in srgb, var(--color-accent-success) 30%, var(--color-border-subtle));
+	}
+
+	.hint.error {
+		background: color-mix(in srgb, var(--color-accent-warning) 15%, var(--color-surface));
+		color: var(--color-accent-warning);
+		border: 1px solid color-mix(in srgb, var(--color-accent-warning) 30%, var(--color-border-subtle));
 	}
 </style>
