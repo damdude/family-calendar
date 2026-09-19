@@ -458,3 +458,85 @@ export async function deleteChore(choreId: number): Promise<boolean> {
 	await saveFamilyData(data);
 	return true;
 }
+
+// --- Chore History/Completion Tracking ---
+
+export async function getChoreHistory(choreId: number, days: number = 30): Promise<ChoreInput[]> {
+	const data = (await loadFamilyData()) ?? emptyData();
+	const now = Math.floor(Date.now() / 1000);
+	const cutoff = now - (days * 86_400);
+	return data.chores.filter((c) => c.id === choreId && c.completedAt && c.completedAt >= cutoff);
+}
+
+export async function getProfileChoreStats(profileId: number): Promise<{
+	totalClaimed: number;
+	totalCompleted: number;
+	completionRate: number;
+	totalStarsEarned: number;
+}> {
+	const data = (await loadFamilyData()) ?? emptyData();
+	const claimedByProfile = data.chores.filter((c) => c.assignedTo === profileId);
+	const completedByProfile = claimedByProfile.filter((c) => c.completed);
+	const starsEarned = completedByProfile.reduce((sum, c) => sum + c.starReward, 0);
+	
+	return {
+		totalClaimed: claimedByProfile.length,
+		totalCompleted: completedByProfile.length,
+		completionRate: claimedByProfile.length > 0 ? (completedByProfile.length / claimedByProfile.length) * 100 : 0,
+		totalStarsEarned: starsEarned
+	};
+}
+
+export async function getAllChoreStats(): Promise<Record<number, {
+	totalClaimed: number;
+	totalCompleted: number;
+	completionRate: number;
+	totalStarsEarned: number;
+}>> {
+	const cfg = await loadConfig();
+	const stats: Record<number, any> = {};
+	
+	for (const profile of cfg.profiles) {
+		stats[profile.id] = await getProfileChoreStats(profile.id);
+	}
+	
+	return stats;
+}
+
+export async function resetCompletedChores(frequency: 'daily' | 'weekly'): Promise<void> {
+	const data = (await loadFamilyData()) ?? emptyData();
+	const now = new Date();
+	const today = now.toISOString().split('T')[0];
+	
+	for (const chore of data.chores) {
+		if (chore.frequency !== frequency) continue;
+		
+		// Reset if it matches the frequency (daily resets every day, weekly on Sunday)
+		let shouldReset = false;
+		if (frequency === 'daily') {
+			shouldReset = chore.completed && chore.dueDate && chore.dueDate !== today;
+		} else if (frequency === 'weekly' && now.getDay() === 0) {
+			// Sunday - reset weekly chores
+			shouldReset = chore.completed;
+		}
+		
+		if (shouldReset) {
+			chore.completed = false;
+			chore.completedAt = undefined;
+			chore.completedBy = undefined;
+			chore.assignedTo = undefined;
+			chore.claimedAt = undefined;
+		}
+		
+		// Update due dates for daily chores
+		if (chore.frequency === 'daily') {
+			chore.dueDate = today;
+		} else if (chore.frequency === 'weekly' && !chore.dueDate) {
+			const nextSunday = new Date(now);
+			nextSunday.setDate(now.getDate() + (7 - now.getDay()) % 7);
+			chore.dueDate = nextSunday.toISOString().split('T')[0];
+		}
+	}
+	
+	await saveFamilyData(data);
+}

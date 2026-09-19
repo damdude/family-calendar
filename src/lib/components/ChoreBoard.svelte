@@ -156,6 +156,19 @@
 		<p class="error">{error}</p>
 	{/if}
 
+	
+	{#if !showSettings}
+		<div class="stats-row">
+			{#each family.data.profiles as profile (profile.id)}
+				<div class="stat-card">
+					<div class="stat-label">{profile.name}</div>
+					<div class="stat-value">Coming Soon</div>
+					<div class="stat-desc">Completion stats</div>
+				</div>
+			{/each}
+		</div>
+	{/if}
+
 	<div class="chores-grid">
 		{#each chores as chore (chore.id)}
 			{@const isCompleted = chore.completed}
