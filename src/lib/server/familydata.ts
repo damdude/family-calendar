@@ -92,6 +92,21 @@ const RewardClaimSchema = z.object({
 	ts: z.number().int()
 });
 
+const ChoreSchema = z.object({
+	id: z.number().int(),
+	name: z.string().max(120),
+	icon: z.string().max(8).default('🎯'),
+	starReward: z.number().int().min(1).max(100),
+	frequency: z.enum(['once', 'daily', 'weekly']).default('daily'),
+	dueTime: z.string().optional(),     // HH:MM format (e.g. "7:00 PM")
+	dueDate: z.string().optional(),     // YYYY-MM-DD for weekly chores
+	assignedTo: z.number().int().optional(),  // Profile ID who claimed it
+	claimedAt: z.number().int().optional(),   // unix seconds
+	completed: z.boolean().default(false),
+	completedAt: z.number().int().optional(),
+	completedBy: z.number().int().optional()  // Profile ID who completed it
+});
+
 const RewardSchema = z.object({
 	id: z.number().int(),
 	name: z.string().max(120),
@@ -109,7 +124,8 @@ export const FamilyDataSchema = z.object({
 	recipes: z.array(RecipeSchema).max(200).default([]),
 	stars: z.array(StarBalanceSchema).max(50).default([]),
 	rewardClaims: z.array(RewardClaimSchema).max(1000).default([]),
-	rewards: z.array(RewardSchema).max(50).default([])
+	rewards: z.array(RewardSchema).max(50).default([]),
+	chores: z.array(ChoreSchema).max(100).default([])
 });
 
 export type FamilyDataPersist = z.infer<typeof FamilyDataSchema>;
@@ -136,6 +152,7 @@ export type MealInput = z.infer<typeof MealSchema>;
 export type RecipeInput = z.infer<typeof RecipeSchema>;
 export type ListInput = z.infer<typeof ListSchema>;
 export type RewardInput = z.infer<typeof RewardSchema>;
+export type ChoreInput = z.infer<typeof ChoreSchema>;
 
 function emptyData(): FamilyDataPersist {
 	return {
@@ -147,7 +164,8 @@ function emptyData(): FamilyDataPersist {
 		recipes: [],
 		stars: [],
 		rewardClaims: [],
-		rewards: []
+		rewards: [],
+		chores: []
 	};
 }
 
@@ -357,6 +375,86 @@ export async function removeRecipe(id: number): Promise<boolean> {
 	const i = data.recipes.findIndex((r) => r.id === id);
 	if (i < 0) return false;
 	data.recipes.splice(i, 1);
+	await saveFamilyData(data);
+	return true;
+}
+
+// --- Chores ---
+
+/** Create or update a chore. */
+export async function upsertChore(c: ChoreInput): Promise<ChoreInput> {
+	const data = (await loadFamilyData()) ?? emptyData();
+	if (c.id && c.id > 0) {
+		const i = data.chores.findIndex((x) => x.id === c.id);
+		if (i >= 0) {
+			data.chores[i] = ChoreSchema.parse({ ...c });
+			await saveFamilyData(data);
+			return data.chores[i];
+		}
+	}
+	const id = data.chores.reduce((m, x) => Math.max(m, x.id), 0) + 1;
+	const chore = ChoreSchema.parse({ ...c, id });
+	data.chores.push(chore);
+	await saveFamilyData(data);
+	return chore;
+}
+
+/** Get all chores. */
+export async function getAllChores(): Promise<ChoreInput[]> {
+	const data = (await loadFamilyData()) ?? emptyData();
+	return data.chores;
+}
+
+/** Get a chore by id. */
+export async function getChoreById(id: number): Promise<ChoreInput | null> {
+	const data = (await loadFamilyData()) ?? emptyData();
+	return data.chores.find((c) => c.id === id) ?? null;
+}
+
+/** Claim a chore for a profile. */
+export async function claimChore(choreId: number, profileId: number): Promise<ChoreInput | null> {
+	const data = (await loadFamilyData()) ?? emptyData();
+	const chore = data.chores.find((c) => c.id === choreId);
+	if (!chore) return null;
+	chore.assignedTo = profileId;
+	chore.claimedAt = Math.floor(Date.now() / 1000);
+	chore.completed = false;
+	await saveFamilyData(data);
+	return chore;
+}
+
+/** Unclaim a chore. */
+export async function unclaimChore(choreId: number): Promise<ChoreInput | null> {
+	const data = (await loadFamilyData()) ?? emptyData();
+	const chore = data.chores.find((c) => c.id === choreId);
+	if (!chore) return null;
+	chore.assignedTo = undefined;
+	chore.claimedAt = undefined;
+	chore.completed = false;
+	chore.completedAt = undefined;
+	chore.completedBy = undefined;
+	await saveFamilyData(data);
+	return chore;
+}
+
+/** Mark a chore as complete. */
+export async function completeChore(choreId: number, profileId: number): Promise<ChoreInput | null> {
+	const data = (await loadFamilyData()) ?? emptyData();
+	const chore = data.chores.find((c) => c.id === choreId);
+	if (!chore) return null;
+	chore.completed = true;
+	chore.completedAt = Math.floor(Date.now() / 1000);
+	chore.completedBy = profileId;
+	await saveFamilyData(data);
+	return chore;
+}
+
+/** Delete a chore. */
+export async function deleteChore(choreId: number): Promise<boolean> {
+	const data = (await loadFamilyData()) ?? emptyData();
+	const i = data.chores.findIndex((c) => c.id === choreId);
+	if (i < 0) return false;
+	data.chores.splice(i, 1);
 	await saveFamilyData(data);
 	return true;
 }
