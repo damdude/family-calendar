@@ -17,9 +17,10 @@ starting the next.
 | 9     | Screensaver (B                                                                         | 9       | Screensaver (B&W photo rotation + B&W clock) + sleep mode window | ⏳ Planned | W photo rotation + B | 9   | Screensaver (B&W photo rotation + B&W clock) + sleep mode window | ⏳ Planned | W clock) + sleep mode window | ✅ Done |
 | 10    | Polish, docs, one-liner install, CONTRIBUTING.md, kit packaging                        | ✅ Done |
 
-## Design references
+## Design principles
 
-- `docs/design/skylight-reference/` — drop Skylight product screenshots here to
-  calibrate the weekly view visual language.
-- `~/.claude/skills/apple-design/SKILL.md` — motion, gesture, material, and
-  typography source of truth for every UI decision.
+The UI prioritizes:
+- **Family-friendly** visual language with pastel colors and clear typography
+- **Age-adaptive** interfaces (pre-reader, school-age, teen, adult)
+- **Smooth interactions** with thoughtful motion and transitions
+- **Accessibility** with high contrast and readable fonts

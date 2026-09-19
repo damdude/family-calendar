@@ -9,8 +9,8 @@ development toward a 1.0 release.
 
 - SvelteKit 2 + Svelte 5 (runes) + TypeScript scaffold, Tailwind 4, ESLint,
   Prettier; MIT license; ADRs.
-- Design system: color tokens (calibrated to a Skylight reference), size-specific
-  typography, apple-design-derived motion tokens.
+- Design system: color tokens (pastel palette optimized for family use), size-specific
+  typography, and smooth motion and transition tokens.
 - Weekly schedule matching the reference (profile pills, all-day/multi-day bars,
   diagonal split cards, overlap lanes, responsive 9–5 grid).
 - Age-adaptive profile UIs (pre-reader / school-age / adult); kid routine

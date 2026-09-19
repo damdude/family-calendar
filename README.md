@@ -1,6 +1,6 @@
 # Family Calendar
 
-An open-source, self-hosted, no-subscription family calendar dashboard designed to run on a Raspberry Pi with any HDMI TV or touchscreen. Inspired by Skylight Calendar and Hearth Display — but you own the hardware, code, and data.
+An open-source, self-hosted, no-subscription family calendar dashboard designed to run on a Raspberry Pi with any HDMI TV or touchscreen. Built with family privacy and control in mind — you own the hardware, code, and data.
 
 ## Features
 

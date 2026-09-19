@@ -1,9 +1,9 @@
 /**
  * Demo data — the ONLY place a literal family may appear (ADR-002).
  *
- * Production rendering never imports from src/lib/fake. The structure mirrors
- * the demo family on the Skylight reference box (two parents + two kids, ages 7
- * and 3) so the mockups match a real reference, with a dense, realistic week.
+ * Production rendering never imports from src/lib/fake. The structure is a
+ * typical family setup (two parents + two kids, ages 7 and 3) to provide
+ * realistic mockups with a dense, representative week of activity.
  *
  * Dates are resolved relative to the current week so "Today" is always
  * meaningful in the grid.
