@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { Check, X, Plus, Settings } from 'lucide-svelte';
-	import { loadConfig } from '$lib/stores/config.svelte';
+	import { family } from '$lib/stores/family.svelte';
 
 	interface Chore {
 		id: number;
@@ -36,8 +36,8 @@
 	};
 
 	onMount(async () => {
-		const cfg = await loadConfig();
-		if (cfg.profiles.length > 0) currentProfileId = cfg.profiles[0].id;
+		const cfg = family.data;
+		if ((cfg?.profiles?.length ?? 0) > 0) currentProfileId = cfg.profiles[0].id;
 		await loadChores();
 	});
 

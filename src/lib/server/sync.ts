@@ -47,14 +47,7 @@ async function validGoogleAccessToken(profileId?: number): Promise<string | null
 	});
 	return refreshed.accessToken;
 }
-	const refreshed = await refreshAccessToken(token.refreshToken);
-	saveOAuthToken({
-		...token,
-		accessToken: refreshed.accessToken,
-		accessExpiresAt: now + refreshed.expiresIn
-	});
-	return refreshed.accessToken;
-}
+
 
 export function isGoogleConnected(): boolean {
 	return isGoogleConfigured() && getAllGoogleTokens().length > 0;
