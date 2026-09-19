@@ -35,6 +35,8 @@ export interface FeatureFlags {
 	feelings: boolean;
 	/** Per-profile URL feeds. */
 	sitesOfInterest: boolean;
+	/** Chores with star rewards. */
+	chores: boolean;
 }
 
 /** 'auto' detects the real screen orientation at runtime; the other two force it
@@ -175,7 +177,8 @@ export const defaultConfig: AppConfig = {
 		sleep: true,
 		routines: true,
 		feelings: true,
-		sitesOfInterest: true
+		sitesOfInterest: true,
+		chores: true
 	},
 	view: {
 		dayStartHour: 6,

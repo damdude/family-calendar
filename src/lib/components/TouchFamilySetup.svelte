@@ -101,10 +101,45 @@
 	const canFinish = $derived(canLeaveStep1 && draft.profiles.length > 0);
 
 	function next() {
-		if (step < 3) step += 1;
+		if (step < 4) step += 1;
 	}
 	function back() {
 		if (step > 1) step -= 1;
+	}
+
+	// Step 4: Password setup
+	let newPassword = $state('');
+	let confirmPassword = $state('');
+	let pwError = $state('');
+	let pwSuccess = $state(false);
+
+	async function saveSecuritySettings() {
+		pwError = '';
+		pwSuccess = false;
+		if (newPassword && newPassword !== confirmPassword) {
+			pwError = 'Passwords do not match';
+			return;
+		}
+		if (newPassword && newPassword.length < 6) {
+			pwError = 'Password must be at least 6 characters';
+			return;
+		}
+		if (!newPassword) {
+			// Password is optional - can skip
+			pwSuccess = true;
+			return;
+		}
+		try {
+			const r = await fetch('/api/pi-password', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ newPassword, confirmPassword })
+			});
+			if (!r.ok) throw new Error('Failed to set password');
+			pwSuccess = true;
+		} catch (e) {
+			pwError = e instanceof Error ? e.message : 'Failed to set password';
+		}
 	}
 
 	async function finish() {
@@ -131,7 +166,7 @@
 	<header class="whead">
 		<span class="brand type-label">Family Calendar setup</span>
 		<div class="steps" aria-hidden="true">
-			{#each [1, 2, 3] as s (s)}
+			{#each [1, 2, 3, 4] as s (s)}
 				<span class="pip" class:on={s <= step}></span>
 			{/each}
 		</div>
@@ -280,7 +315,7 @@
 				{/if}
 			</div>
 		</section>
-	{:else}
+	{:else if step === 3}
 		<section class="panel">
 			<h1 class="type-title">Review</h1>
 			<div class="review">
@@ -307,6 +342,46 @@
 			</div>
 			{#if errorMsg}<p class="err type-label">{errorMsg}</p>{/if}
 		</section>
+	{:else}
+		<section class="panel">
+			<h1 class="type-title">Security Setup</h1>
+			<p class="type-body sub">Set a new Pi password (optional). This becomes your SSH login password.</p>
+
+			<div class="secform">
+				<label class="field">
+					<span class="type-label">New Password (leave blank to keep default)</span>
+					<input
+						class="input"
+						type="password"
+						placeholder="Minimum 6 characters, or leave blank"
+						bind:value={newPassword}
+						maxlength="40"
+					/>
+				</label>
+				<label class="field">
+					<span class="type-label">Confirm Password</span>
+					<input
+						class="input"
+						type="password"
+						placeholder="Re-enter password"
+						bind:value={confirmPassword}
+						maxlength="40"
+					/>
+				</label>
+
+				<p class="type-caption hint" style="margin-top: 12px;">
+					💡 Google Calendar setup happens per-profile after you complete this wizard. Each family member can connect their own Google account in Settings.
+				</p>
+
+				<button type="button" class="savebtn" onclick={saveSecuritySettings}>
+					{pwSuccess ? '✅ Done' : 'Save & Continue'}
+				</button>
+
+				{#if pwError}
+					<p class="type-caption error">{pwError}</p>
+				{/if}
+			</div>
+		</section>
 	{/if}
 
 	<footer class="nav">
@@ -316,7 +391,7 @@
 			<span></span>
 		{/if}
 
-		{#if step < 3}
+		{#if step < 4}
 			<button
 				type="button"
 				class="btn primary"
@@ -587,5 +662,46 @@
 	}
 	.btn:disabled {
 		opacity: 0.45;
+	}
+
+	.secform {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-3);
+		margin-top: var(--space-3);
+	}
+
+	.savebtn {
+		margin-top: var(--space-2);
+		padding: 12px 18px;
+		background: var(--color-text-primary);
+		color: var(--color-surface);
+		border: none;
+		border-radius: var(--radius-md);
+		font-weight: var(--weight-semibold);
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+
+	.savebtn:hover {
+		opacity: 0.9;
+	}
+
+	.hint {
+		padding: var(--space-2) var(--space-3);
+		background: color-mix(in srgb, var(--color-accent-info, #3b82f6) 10%, var(--color-surface));
+		border-radius: var(--radius-md);
+		color: var(--color-text-secondary);
+	}
+
+	.error {
+		color: color-mix(in srgb, var(--color-accent-warning, #ff6b6b) 80%, red);
+		font-weight: var(--weight-medium);
+	}
+
+	.divider {
+		border: none;
+		border-top: 1px solid var(--color-border-subtle);
+		margin: var(--space-2) 0;
 	}
 </style>

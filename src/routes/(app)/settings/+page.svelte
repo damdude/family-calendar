@@ -122,11 +122,16 @@
 	async function checkUpdates() {
 		checking = true;
 		try {
-			await fetch('/api/update', { method: 'POST' });
+			const r = await fetch('/api/update', { method: 'POST' });
+			if (!r.ok) {
+				console.error('Update check failed:', r.status);
+			}
 			// The check itself finishes in well under a second (just a git
 			// fetch) — one short delay then a reload is simpler and just as
 			// accurate as trying to detect completion some other way.
 			setTimeout(loadVersion, 1500);
+		} catch (err) {
+			console.error('Update check error:', err);
 		} finally {
 			checking = false;
 		}
@@ -197,7 +202,8 @@
 		sleep: 'Sleep mode',
 		routines: 'Kid routines',
 		feelings: "Today's Feelings",
-		sitesOfInterest: 'Sites of Interest'
+		sitesOfInterest: 'Sites of Interest',
+		chores: 'Chores'
 	};
 	const featureKeys = Object.keys(featureLabels) as (keyof FeatureFlags)[];
 
@@ -555,9 +561,12 @@
 						></span
 					>
 					<button type="button" class="pairbtn small" disabled={checking} onclick={checkUpdates}>
-						<RefreshCw size={15} /> Check now
+						<RefreshCw size={15} class={checking ? 'spin' : ''} /> {checking ? 'Checking…' : 'Check now'}
 					</button>
 				</div>
+				{#if !checking && version && !version.update}
+					<p class="type-caption hint">You're on the latest version</p>
+				{/if}
 				<div class="row">
 					<span class="type-label">Last updated <span class="hint type-caption">{lastUpdatedLabel}</span
 						></span
@@ -1119,5 +1128,21 @@
 		background: color-mix(in srgb, var(--color-accent-warning) 15%, var(--color-surface));
 		color: var(--color-accent-warning);
 		border: 1px solid color-mix(in srgb, var(--color-accent-warning) 30%, var(--color-border-subtle));
+	}
+
+	@keyframes spin {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+
+	:global(.spin) {
+		animation: spin 1s linear infinite;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		:global(.spin) {
+			animation: none;
+		}
 	}
 </style>
