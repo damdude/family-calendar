@@ -320,7 +320,7 @@
 			</section>
 		{:else}
 			<section class="panel">
-				<SetupSecurityStep bind:this={secStep} />
+				<SetupSecurityStep token={data.token} bind:this={secStep} />
 			</section>
 		{/if}
 

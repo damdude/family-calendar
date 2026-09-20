@@ -1,4 +1,4 @@
-import { error, json } from '@sveltejs/kit';
+import { error } from '@sveltejs/kit';
 import { z } from 'zod';
 import { getSession, markComplete } from '$lib/server/pairing';
 import { SetupDraftSchema, type PersistedProfile } from '$lib/server/schema';

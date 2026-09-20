@@ -61,6 +61,10 @@ WorkingDirectory=${APP_DIR}
 Environment=NODE_ENV=production
 Environment=PORT=5173
 Environment=HOST=0.0.0.0
+# adapter-node defaults this to 512K, which silently 413s every real phone
+# photo long before the 10MB check in /api/photos can run. Sized to that
+# limit plus headroom; it also caps how much any single request can buffer.
+Environment=BODY_SIZE_LIMIT=12M
 EnvironmentFile=-${APP_DIR}/.env
 ExecStart=/usr/bin/node ${APP_DIR}/build
 Restart=on-failure
@@ -137,6 +141,10 @@ install -m 755 "${APP_DIR}/scripts/wifi-setup.sh" /usr/local/bin/fc-wifi-setup 2
 # Joins a network chosen on-screen in touch mode (password arrives on stdin).
 install -m 755 "${APP_DIR}/scripts/wifi-join.sh" /usr/local/bin/fc-wifi-join 2>/dev/null || true
 
+# Sets the appliance user's login/SSH password from the setup wizard. The
+# password arrives on stdin, never as an argument.
+install -m 755 "${APP_DIR}/scripts/set-password.sh" /usr/local/bin/fc-set-password 2>/dev/null || true
+
 cat > /etc/systemd/system/family-calendar-wifi.service <<UNIT
 [Unit]
 Description=Family Calendar first-boot Wi-Fi onboarding (captive portal)
@@ -165,6 +173,7 @@ ${DASH_USER} ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart family-calendar, \
   /usr/bin/systemctl start --no-block family-calendar-install.service, \
   /usr/local/bin/fc-nas-mount, \
   /usr/local/bin/fc-wifi-join, \
+  /usr/local/bin/fc-set-password, \
   /usr/bin/systemctl reboot, /sbin/reboot
 SUDO
 chmod 440 /etc/sudoers.d/family-calendar

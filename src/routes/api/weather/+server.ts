@@ -29,7 +29,9 @@ export const GET: RequestHandler = async ({ fetch }) => {
 
 	try {
 		const r = await fetch(
-			`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code&temperature_unit=fahrenheit`
+			`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code&temperature_unit=fahrenheit`,
+			// Open-Meteo hanging must not hang this request (and the UI) with it.
+			{ signal: AbortSignal.timeout(8000) }
 		);
 		if (!r.ok) throw error(502, 'weather fetch failed');
 		const data = (await r.json()) as {

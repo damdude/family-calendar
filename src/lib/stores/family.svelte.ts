@@ -520,7 +520,9 @@ class FamilyStore {
 		this.data.rewardClaims = data.rewardClaims ?? [];
 		this.data.rewards = data.rewards ?? [];
 		this.localEvents = data.localEvents ?? [];
-		this.localCalendars = data.localCalendars?.length ? data.localCalendars : DEFAULT_LOCAL_CALENDARS;
+		this.localCalendars = data.localCalendars?.length
+			? data.localCalendars
+			: DEFAULT_LOCAL_CALENDARS;
 		this.materializeLocalEvents();
 	}
 

@@ -48,7 +48,6 @@ async function validGoogleAccessToken(profileId?: number): Promise<string | null
 	return refreshed.accessToken;
 }
 
-
 export function isGoogleConnected(): boolean {
 	return isGoogleConfigured() && getAllGoogleTokens().length > 0;
 }
@@ -77,7 +76,8 @@ async function syncGoogleForProfile(profileId?: number): Promise<number> {
 			colorHex: cal.backgroundColor,
 			profileId
 		});
-		const calendarProfileId = getCalendars(GOOGLE_PROVIDER).find((c) => c.id === calId)?.profileId ?? profileId;
+		const calendarProfileId =
+			getCalendars(GOOGLE_PROVIDER).find((c) => c.id === calId)?.profileId ?? profileId;
 		const events = await listEvents(accessToken, cal.id, timeMin, timeMax);
 		for (const e of events) {
 			const byAttendee = matchAttendees(e.attendees, profiles, sharedEmails);
@@ -100,18 +100,17 @@ async function syncGoogleForProfile(profileId?: number): Promise<number> {
 
 export async function syncGoogle(): Promise<number> {
 	if (!isGoogleConfigured()) return 0;
-	
+
 	const tokens = getAllGoogleTokens();
 	let totalCount = 0;
-	
+
 	for (const token of tokens) {
 		const count = await syncGoogleForProfile(token.profileId);
 		totalCount += count;
 	}
-	
+
 	return totalCount;
 }
-
 
 /**
  * Sync all ICS/webcal subscriptions. Each feed is fully re-materialized within
@@ -148,7 +147,9 @@ function matchAttendees(
 	if (attendees.length === 0) return null;
 	const invited = new Set(attendees);
 	if (sharedEmails.some((addr) => invited.has(addr))) return [];
-	const matched = profiles.filter((p) => p.emails.some((addr) => invited.has(addr))).map((p) => p.id);
+	const matched = profiles
+		.filter((p) => p.emails.some((addr) => invited.has(addr)))
+		.map((p) => p.id);
 	return matched.length ? matched : null;
 }
 
@@ -173,7 +174,9 @@ function titleOrCalendarFallback(
 	const named = profiles.find((p) => p.name && title.includes(p.name.toLowerCase()));
 	if (named) return [named.id];
 
-	const distinct = [...new Set(group.map((g) => g.cal.profileId).filter((id): id is number => !!id))];
+	const distinct = [
+		...new Set(group.map((g) => g.cal.profileId).filter((id): id is number => !!id))
+	];
 	return distinct.length ? [distinct[0]] : null;
 }
 

@@ -152,10 +152,26 @@
 					{/each}
 				</div>
 				<div class="row">
-					<input class="minput name" type="text" placeholder="Reward name" bind:value={newName} maxlength="120" />
-					<input class="minput mcost" type="number" placeholder="⭐" min="1" max="1000" bind:value={newCost} />
-					<button type="button" class="addbtn" disabled={!newName.trim() || newCost === ''} onclick={addReward}
-						><Plus size={16} /> Add</button
+					<input
+						class="minput name"
+						type="text"
+						placeholder="Reward name"
+						bind:value={newName}
+						maxlength="120"
+					/>
+					<input
+						class="minput mcost"
+						type="number"
+						placeholder="⭐"
+						min="1"
+						max="1000"
+						bind:value={newCost}
+					/>
+					<button
+						type="button"
+						class="addbtn"
+						disabled={!newName.trim() || newCost === ''}
+						onclick={addReward}><Plus size={16} /> Add</button
 					>
 				</div>
 			</div>

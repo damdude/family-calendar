@@ -26,7 +26,12 @@ const PIN_GATED_PATHS = new Set([
 	'/api/storage/nas/browse',
 	'/api/storage/nas/mount',
 	'/api/storage/nas/shares',
-	'/api/update/install'
+	'/api/update/install',
+	// Erases every profile, calendar, chore, photo and credential on the
+	// device. The endpoint's `confirm` string is in client JS, so it proves
+	// intent, not authority — without this a single unauthenticated POST
+	// from anything on the LAN could wipe the appliance.
+	'/api/factory-reset'
 ]);
 
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);

@@ -5,7 +5,11 @@ import { claimReward } from '$lib/server/familydata';
 import { publishLive } from '$lib/server/live';
 import type { RequestHandler } from './$types';
 
-const Body = z.object({ token: z.string(), rewardId: z.number().int(), profileId: z.number().int() });
+const Body = z.object({
+	token: z.string(),
+	rewardId: z.number().int(),
+	profileId: z.number().int()
+});
 
 /** Phone companion → server: redeem a reward for a kid (deducts stars). */
 export const POST: RequestHandler = async ({ request }) => {

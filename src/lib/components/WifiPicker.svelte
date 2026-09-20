@@ -131,9 +131,7 @@
 				aria-label="Password"
 				placeholder="Tap the keys below"
 			/>
-			<button type="button" class="joinbtn" disabled={!password} onclick={join}>
-				Join
-			</button>
+			<button type="button" class="joinbtn" disabled={!password} onclick={join}> Join </button>
 		</div>
 
 		<OnScreenKeyboard bind:value={password} onenter={join} />

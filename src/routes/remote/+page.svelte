@@ -2,15 +2,10 @@
 	import { onMount } from 'svelte';
 	import { invalidateAll } from '$app/navigation';
 	import { mirror } from '$lib/stores/mirror.svelte';
-	import { profileColorVar, profileTint, PROFILE_COLORS } from '$lib/design/colors';
-	import { AVATAR_CHOICES } from '$lib/setup/types';
+	import { profileColorVar, profileTint } from '$lib/design/colors';
 	import { autoEmojiFor } from '$lib/meals';
-	import { formatRange, ageFromDOB } from '$lib/time';
+	import { formatRange } from '$lib/time';
 	import Avatar from '$lib/components/Avatar.svelte';
-	import GoogleConnect from '$lib/components/GoogleConnect.svelte';
-	import StoragePanel from '$lib/components/StoragePanel.svelte';
-	import { routinesOn } from '$lib/types';
-	import type { FeatureFlags } from '$lib/config';
 	import {
 		Check,
 		Plus,
@@ -20,7 +15,6 @@
 		SquareCheck,
 		Settings,
 		Trash2,
-		Search,
 		Pencil,
 		X,
 		UtensilsCrossed,
@@ -28,12 +22,8 @@
 		Sparkles,
 		Gift,
 		Star,
-		Wifi,
-		RefreshCw,
-		RotateCcw,
-		Link as LinkIcon
+		RotateCcw
 	} from 'lucide-svelte';
-	import type { ProfileColor } from '$lib/types';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -45,14 +35,7 @@
 	});
 
 	let stopped = $state(false);
-	type Tab =
-		| 'calendar'
-		| 'lists'
-		| 'tasks'
-		| 'meals'
-		| 'recipes'
-		| 'routines'
-		| 'rewards';
+	type Tab = 'calendar' | 'lists' | 'tasks' | 'meals' | 'recipes' | 'routines' | 'rewards';
 	let tab = $state<Tab>('calendar');
 
 	// The display follows whichever tab is active here (not a full mirror —
@@ -121,7 +104,9 @@
 
 	function editEvent(e: PageData['events'][number]) {
 		editingEvent =
-			e.id < LOCAL_ID_BASE ? { kind: 'synced', id: e.id } : { kind: 'local', id: e.id - LOCAL_ID_BASE };
+			e.id < LOCAL_ID_BASE
+				? { kind: 'synced', id: e.id }
+				: { kind: 'local', id: e.id - LOCAL_ID_BASE };
 		title = e.title;
 		allDay = e.allDay;
 		const s = fromTs(e.startTs);
@@ -201,7 +186,9 @@
 		savingEvent = true;
 		try {
 			await fetch(
-				editingEvent.kind === 'synced' ? '/api/mirror/synced-event-reset' : '/api/mirror/event-remove',
+				editingEvent.kind === 'synced'
+					? '/api/mirror/synced-event-reset'
+					: '/api/mirror/event-remove',
 				{
 					method: 'POST',
 					headers: { 'content-type': 'application/json' },
@@ -293,7 +280,12 @@
 			await fetch('/api/mirror/list', {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ token: data.token, name, kind: newListKind, icon: LIST_KIND_ICON[newListKind] })
+				body: JSON.stringify({
+					token: data.token,
+					name,
+					kind: newListKind,
+					icon: LIST_KIND_ICON[newListKind]
+				})
 			});
 			newListName = '';
 			newListKind = 'todo';
@@ -358,207 +350,14 @@
 		return id ? (data.profiles.find((p) => p.id === id)?.name ?? '') : '';
 	}
 
-	// --- Settings: family name ---
-	let familyNameInput = $state(data.familyName ?? '');
-	let savingName = $state(false);
-	async function saveFamilyName() {
-		const name = familyNameInput.trim();
-		if (!name || name === data.familyName) return;
-		savingName = true;
-		try {
-			await fetch('/api/mirror/settings', {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ token: data.token, familyName: name })
-			});
-			await invalidateAll();
-		} finally {
-			savingName = false;
-		}
-	}
-
-	// --- Settings: display (sleep window, idle screensaver, clock format) ---
-	let sleepStartInput = $state(data.sleepStart ?? '21:00');
-	let sleepEndInput = $state(data.sleepEnd ?? '06:30');
-	let sleepEnabledInput = $state(data.sleepEnabled ?? true);
-	let idleMinutesInput = $state(data.idleMinutes ?? 10);
-	let clock24hInput = $state(data.clock24h ?? false);
-	let savingDisplay = $state(false);
-	let displaySaved = $state(false);
-	async function saveDisplaySettings() {
-		savingDisplay = true;
-		try {
-			await fetch('/api/mirror/app-settings', {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({
-					token: data.token,
-					sleepStart: sleepStartInput,
-					sleepEnd: sleepEndInput,
-					sleepEnabled: sleepEnabledInput,
-					idleMinutes: Number(idleMinutesInput),
-					clock24h: clock24hInput
-				})
-			});
-			displaySaved = true;
-			await invalidateAll();
-			setTimeout(() => (displaySaved = false), 2500);
-		} finally {
-			savingDisplay = false;
-		}
-	}
-
-	// --- Settings: location (also sets timezone from the same pick) ---
-	interface LocResult {
-		name: string;
-		admin1?: string;
-		country?: string;
-		latitude: number;
-		longitude: number;
-		timezone: string;
-	}
-	let locQuery = $state('');
-	let locResults = $state<LocResult[]>([]);
-	let locSearching = $state(false);
-	let locError = $state('');
-	let locSaved = $state(false);
-	let locSearchToken = 0;
-
-	async function searchLocation() {
-		const q = locQuery.trim();
-		if (q.length < 2) {
-			locResults = [];
-			return;
-		}
-		const myToken = ++locSearchToken;
-		locSearching = true;
-		locError = '';
-		try {
-			const r = await fetch(`/api/location-search?q=${encodeURIComponent(q)}`);
-			if (myToken !== locSearchToken) return; // a newer search superseded this one
-			if (r.ok) locResults = (await r.json()).results;
-			else locError = 'Search failed.';
-		} catch {
-			if (myToken === locSearchToken) locError = 'Search failed — check the device is online.';
-		} finally {
-			if (myToken === locSearchToken) locSearching = false;
-		}
-	}
-	let locSearchDebounce: ReturnType<typeof setTimeout>;
-	function onLocInput() {
-		clearTimeout(locSearchDebounce);
-		locSearchDebounce = setTimeout(searchLocation, 400);
-	}
-
-	async function pickLocation(r: LocResult) {
-		locResults = [];
-		const name = `${r.name}${r.admin1 ? ', ' + r.admin1 : ''}`;
-		locQuery = name;
-		await fetch('/api/mirror/settings', {
-			method: 'POST',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({
-				token: data.token,
-				latitude: r.latitude,
-				longitude: r.longitude,
-				timezone: r.timezone,
-				locationName: name
-			})
-		});
-		locSaved = true;
-		await invalidateAll();
-		setTimeout(() => (locSaved = false), 2500);
-	}
-
-	// --- Settings: people ---
-	let editingProfileId = $state<number | null>(null);
-	let addingProfile = $state(false);
-	let profName = $state('');
-	let profDob = $state('');
-	let profColor = $state<ProfileColor>('pink');
-	let profAvatar = $state<string>(AVATAR_CHOICES[0]);
-	let profEmails = $state('');
-	let savingProfile = $state(false);
-	let profileFormError = $state('');
-	const profAgePreview = $derived(profDob ? ageFromDOB(profDob) : null);
-
-	function startNewProfile() {
-		editingProfileId = null;
-		addingProfile = true;
-		profName = '';
-		profDob = '';
-		profColor = 'pink';
-		profAvatar = AVATAR_CHOICES[0];
-		profEmails = '';
-		profileFormError = '';
-	}
-	function startEditProfile(p: PageData['profiles'][number]) {
-		editingProfileId = p.id;
-		addingProfile = true;
-		profName = p.name;
-		// Only age is persisted, not a real birth date — approximate one (Jan 1
-		// of the birth year) so the picker has a sane starting point; editing
-		// this recalculates age same as a fresh add.
-		profDob = `${new Date().getFullYear() - p.age}-01-01`;
-		profColor = p.color as ProfileColor;
-		profAvatar = p.avatarEmoji;
-		profEmails = (p.emails ?? []).join(', ');
-		profileFormError = '';
-	}
-	function cancelProfileForm() {
-		addingProfile = false;
-		editingProfileId = null;
-	}
-	async function saveProfile() {
-		const name = profName.trim();
-		if (!name || !profDob) {
-			profileFormError = 'Add a name and date of birth.';
-			return;
-		}
-		savingProfile = true;
-		profileFormError = '';
-		try {
-			const r = await fetch('/api/mirror/profile', {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({
-					token: data.token,
-					id: editingProfileId ?? undefined,
-					name,
-					age: ageFromDOB(profDob),
-					color: profColor,
-					avatarEmoji: profAvatar,
-					emails: profEmails
-						.split(',')
-						.map((s) => s.trim().toLowerCase())
-						.filter(Boolean)
-				})
-			});
-			if (r.ok) {
-				addingProfile = false;
-				editingProfileId = null;
-				await invalidateAll();
-			} else {
-				profileFormError = 'Could not save.';
-			}
-		} finally {
-			savingProfile = false;
-		}
-	}
-	async function removeProfile(id: number) {
-		await fetch('/api/mirror/profile-remove', {
-			method: 'POST',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ token: data.token, id })
-		});
-		if (editingProfileId === id) cancelProfileForm();
-		await invalidateAll();
-	}
-
 	// --- Meals ---
 	type MealType = 'breakfast' | 'lunch' | 'dinner';
 	const MEAL_TYPES: MealType[] = ['breakfast', 'lunch', 'dinner'];
-	const MEAL_LABEL: Record<MealType, string> = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner' };
+	const MEAL_LABEL: Record<MealType, string> = {
+		breakfast: 'Breakfast',
+		lunch: 'Lunch',
+		dinner: 'Dinner'
+	};
 
 	function ymd(d: Date): string {
 		return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -637,8 +436,14 @@
 	}
 	async function saveRecipe() {
 		const name = recipeName.trim();
-		const ingredients = recipeIngredients.split('\n').map((s) => s.trim()).filter(Boolean);
-		const steps = recipeSteps.split('\n').map((s) => s.trim()).filter(Boolean);
+		const ingredients = recipeIngredients
+			.split('\n')
+			.map((s) => s.trim())
+			.filter(Boolean);
+		const steps = recipeSteps
+			.split('\n')
+			.map((s) => s.trim())
+			.filter(Boolean);
 		if (!name || ingredients.length === 0 || steps.length === 0) {
 			recipeFormError = 'Add a name, at least one ingredient, and at least one step.';
 			return;
@@ -788,7 +593,12 @@
 		});
 		await invalidateAll();
 	}
-	async function claimReward(rewardId: number, profileId: number, kidName: string, rewardName: string) {
+	async function claimReward(
+		rewardId: number,
+		profileId: number,
+		kidName: string,
+		rewardName: string
+	) {
 		const r = await fetch('/api/mirror/reward-claim', {
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
@@ -799,314 +609,6 @@
 			setTimeout(() => (claimedToast = ''), 2600);
 			await invalidateAll();
 		}
-	}
-
-	// --- Settings: advanced (full config, posted wholesale — same as desktop) ---
-	let cfg = $state(structuredClone(data.config));
-	let cfgSaveTimer: ReturnType<typeof setTimeout>;
-	let cfgSaved = $state(false);
-	function persistCfg() {
-		clearTimeout(cfgSaveTimer);
-		cfgSaveTimer = setTimeout(async () => {
-			try {
-				await fetch('/api/config', {
-					method: 'POST',
-					headers: { 'content-type': 'application/json' },
-					body: JSON.stringify(cfg)
-				});
-				cfgSaved = true;
-				setTimeout(() => (cfgSaved = false), 1400);
-			} catch {
-				/* offline; will re-save on next change */
-			}
-		}, 400);
-	}
-
-	const featureLabels: Record<keyof FeatureFlags, string> = {
-		calendar: 'Calendar',
-		lists: 'Lists',
-		tasks: 'Tasks',
-		rewards: 'Rewards',
-		meals: 'Meal planning',
-		recipes: 'Recipes',
-		photos: 'Photos',
-		sleep: 'Sleep mode',
-		routines: 'Kid routines',
-		feelings: "Today's Feelings",
-		sitesOfInterest: 'Sites of Interest',
-		chores: 'Chores'
-	};
-	const featureKeys = Object.keys(featureLabels) as (keyof FeatureFlags)[];
-	function toggleFeature(k: keyof FeatureFlags) {
-		cfg.app.features[k] = !cfg.app.features[k];
-		persistCfg();
-	}
-
-	// Factory reset (mirrors the one in the on-device Settings page).
-	let showResetConfirm = $state(false);
-	let resetting = $state(false);
-	let resetErr = $state('');
-	async function performFactoryReset() {
-		resetting = true;
-		resetErr = '';
-		try {
-			const r = await fetch('/api/factory-reset', {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ confirm: 'FACTORY_RESET_CONFIRM' })
-			});
-			if (!r.ok) throw new Error(`HTTP ${r.status}`);
-			window.location.href = '/setup';
-		} catch (e) {
-			resetErr = e instanceof Error ? e.message : 'Factory reset failed';
-			resetting = false;
-		}
-	}
-
-	async function setDisplayMode(mode: 'tv' | 'touch') {
-		cfg.displayMode = mode;
-		await fetch('/api/display-mode', {
-			method: 'POST',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ displayMode: mode })
-		}).catch(() => {});
-	}
-
-	// --- Settings: Wi-Fi (native inputs — no on-screen keyboard needed on a phone) ---
-	interface WifiNetwork {
-		ssid: string;
-		signal: number;
-		secured: boolean;
-		active: boolean;
-	}
-	let wifiStatus = $state<{ online: boolean; ssid: string | null } | null>(null);
-	let wifiOpen = $state(false);
-	let wifiNetworks = $state<WifiNetwork[]>([]);
-	let wifiScanning = $state(false);
-	let wifiSelected = $state<WifiNetwork | null>(null);
-	let wifiPassword = $state('');
-	let wifiJoining = $state(false);
-	let wifiError = $state('');
-	async function loadWifiStatus() {
-		try {
-			const r = await fetch('/api/net/status');
-			if (r.ok) wifiStatus = await r.json();
-		} catch {
-			/* keep last known state */
-		}
-	}
-	async function scanWifi() {
-		wifiScanning = true;
-		wifiError = '';
-		try {
-			const r = await fetch('/api/net/wifi/scan');
-			if (r.ok) wifiNetworks = (await r.json()).networks ?? [];
-		} catch {
-			wifiError = "Couldn't scan for networks.";
-		} finally {
-			wifiScanning = false;
-		}
-	}
-	async function joinWifi() {
-		if (!wifiSelected) return;
-		wifiJoining = true;
-		wifiError = '';
-		try {
-			const r = await fetch('/api/net/wifi/join', {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ ssid: wifiSelected.ssid, password: wifiPassword })
-			});
-			const res = await r.json();
-			if (res.ok) {
-				wifiOpen = false;
-				wifiSelected = null;
-				wifiPassword = '';
-				await loadWifiStatus();
-			} else {
-				wifiError = res.message ?? 'Could not join that network.';
-			}
-		} catch {
-			wifiError = 'Could not join that network.';
-		} finally {
-			wifiJoining = false;
-		}
-	}
-
-	// --- Settings: calendars (subscribe by iCal/webcal link) ---
-	interface CalendarLink {
-		id: number;
-		name: string;
-		externalId: string;
-		profileId?: number;
-		isBirthdays: boolean;
-	}
-	let calendars = $state<CalendarLink[]>([]);
-	let calLoaded = $state(false);
-	let calUrl = $state('');
-	let calName = $state('');
-	let calProfileId = $state<number | ''>('');
-	let calIsBirthdays = $state(false);
-	let savingCal = $state(false);
-	let calError = $state('');
-	async function loadCalendars() {
-		try {
-			const r = await fetch('/api/calendars');
-			if (r.ok) calendars = await r.json();
-			calLoaded = true;
-		} catch {
-			/* keep last known list */
-		}
-	}
-	async function addCalendar() {
-		const url = calUrl.trim();
-		if (!url) return;
-		savingCal = true;
-		calError = '';
-		try {
-			const r = await fetch('/api/calendars', {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({
-					url,
-					name: calName.trim(),
-					profileId: calProfileId === '' ? undefined : Number(calProfileId),
-					isBirthdays: calIsBirthdays
-				})
-			});
-			if (r.ok) {
-				calUrl = '';
-				calName = '';
-				calProfileId = '';
-				calIsBirthdays = false;
-				await loadCalendars();
-			} else {
-				calError = (await r.json().catch(() => ({})))?.message ?? 'Could not add that calendar.';
-			}
-		} finally {
-			savingCal = false;
-		}
-	}
-	async function toggleCalBirthdays(c: CalendarLink) {
-		await fetch('/api/calendars/birthdays', {
-			method: 'POST',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ id: c.id, isBirthdays: !c.isBirthdays })
-		});
-		await loadCalendars();
-	}
-
-	// --- Settings: software updates (two-step: check, then an explicit install) ---
-	interface UpdateState {
-		status: 'idle' | 'available' | 'installing' | 'failed';
-		currentCommit?: string;
-		targetCommit?: string;
-		notes?: string[];
-		error?: string;
-		progress?: number;
-		installedAt?: number;
-	}
-	let updateVersion = $state<{ commit: string; dirty: boolean; update: UpdateState | null } | null>(
-		null
-	);
-	let checkingUpdate = $state(false);
-	let installingUpdate = $state(false);
-	let updatePollTimer: ReturnType<typeof setInterval>;
-	async function loadUpdateVersion() {
-		try {
-			const r = await fetch('/api/update');
-			if (r.ok) updateVersion = await r.json();
-		} catch {
-			/* keep last known */
-		}
-	}
-	async function checkUpdates() {
-		checkingUpdate = true;
-		try {
-			await fetch('/api/update', { method: 'POST' });
-			setTimeout(loadUpdateVersion, 1500);
-		} finally {
-			checkingUpdate = false;
-		}
-	}
-	async function installUpdateNow() {
-		installingUpdate = true;
-		try {
-			await fetch('/api/update/install', { method: 'POST' });
-			await loadUpdateVersion();
-		} finally {
-			installingUpdate = false;
-		}
-	}
-	let dismissedUpdateTarget = $state<string | null>(null);
-	function dismissUpdateNow() {
-		dismissedUpdateTarget = updateVersion?.update?.targetCommit ?? null;
-	}
-	const showUpdateAvailable = $derived(
-		updateVersion?.update?.status === 'available' &&
-			updateVersion.update.targetCommit !== dismissedUpdateTarget
-	);
-	const lastUpdatedLabel = $derived.by(() => {
-		const t = updateVersion?.update?.installedAt;
-		if (!t) return 'never (still on the version this device was built with)';
-		return new Date(t).toLocaleString(undefined, {
-			month: 'short',
-			day: 'numeric',
-			year: 'numeric',
-			hour: 'numeric',
-			minute: '2-digit'
-		});
-	});
-
-	// --- Settings: parental lock ---
-	let pinSet = $state(false);
-	let showPinForm = $state(false);
-	let newPin = $state('');
-	let currentPin = $state('');
-	let pinMsg = $state('');
-	async function loadPinStatus() {
-		try {
-			const r = await fetch('/api/pin');
-			if (r.ok) pinSet = (await r.json())?.pinSet ?? false;
-		} catch {
-			/* keep last known */
-		}
-	}
-	async function savePin() {
-		pinMsg = '';
-		const r = await fetch('/api/pin', {
-			method: 'POST',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ pin: newPin, current: currentPin || undefined })
-		});
-		if (r.ok) {
-			pinSet = true;
-			showPinForm = false;
-			newPin = '';
-			currentPin = '';
-			pinMsg = 'PIN saved.';
-		} else {
-			pinMsg = (await r.json().catch(() => ({})))?.message ?? 'Could not save PIN.';
-		}
-	}
-	function toggleParentalLock() {
-		if (!cfg.app.kiosk.parentalLock && !pinSet) {
-			showPinForm = true;
-			pinMsg = 'Set a PIN first to enable the lock.';
-			return;
-		}
-		cfg.app.kiosk.parentalLock = !cfg.app.kiosk.parentalLock;
-		persistCfg();
-	}
-
-	let settingsExtrasLoaded = $state(false);
-	function loadSettingsExtras() {
-		if (settingsExtrasLoaded) return;
-		settingsExtrasLoaded = true;
-		loadWifiStatus();
-		loadCalendars();
-		loadUpdateVersion();
-		loadPinStatus();
 	}
 </script>
 
@@ -1129,10 +631,17 @@
 			</div>
 			<button type="button" class="done" onclick={done}>Done</button>
 		</header>
-		<p class="live type-caption"><Smartphone size={13} /> Live — shows up on the display right away</p>
+		<p class="live type-caption">
+			<Smartphone size={13} /> Live — shows up on the display right away
+		</p>
 
 		<nav class="tabs">
-			<button type="button" class="tab" class:on={tab === 'calendar'} onclick={() => (tab = 'calendar')}>
+			<button
+				type="button"
+				class="tab"
+				class:on={tab === 'calendar'}
+				onclick={() => (tab = 'calendar')}
+			>
 				<CalendarDays size={16} /> Calendar
 			</button>
 			<button type="button" class="tab" class:on={tab === 'lists'} onclick={() => (tab = 'lists')}>
@@ -1144,15 +653,30 @@
 			<button type="button" class="tab" class:on={tab === 'meals'} onclick={() => (tab = 'meals')}>
 				<UtensilsCrossed size={16} /> Meals
 			</button>
-			<button type="button" class="tab" class:on={tab === 'recipes'} onclick={() => (tab = 'recipes')}>
+			<button
+				type="button"
+				class="tab"
+				class:on={tab === 'recipes'}
+				onclick={() => (tab = 'recipes')}
+			>
 				<BookOpen size={16} /> Recipes
 			</button>
 			{#if data.routines.length}
-				<button type="button" class="tab" class:on={tab === 'routines'} onclick={() => (tab = 'routines')}>
+				<button
+					type="button"
+					class="tab"
+					class:on={tab === 'routines'}
+					onclick={() => (tab = 'routines')}
+				>
 					<Sparkles size={16} /> Routines
 				</button>
 			{/if}
-			<button type="button" class="tab" class:on={tab === 'rewards'} onclick={() => (tab = 'rewards')}>
+			<button
+				type="button"
+				class="tab"
+				class:on={tab === 'rewards'}
+				onclick={() => (tab = 'rewards')}
+			>
 				<Gift size={16} /> Rewards
 			</button>
 			<a class="tab" href="/settings">
@@ -1175,9 +699,9 @@
 				{#if editingEvent?.kind === 'synced'}
 					<p class="type-body eventtitle-ro">{title}</p>
 					<p class="type-caption sub">
-						Synced from a calendar, so the name can't be changed here — but the time, location,
-						and who it's for can. This won't change the event in the original calendar, only how
-						it shows here.
+						Synced from a calendar, so the name can't be changed here — but the time, location, and
+						who it's for can. This won't change the event in the original calendar, only how it
+						shows here.
 					</p>
 				{:else}
 					<label class="field">
@@ -1257,15 +781,9 @@
 
 				{#if eventError}<p class="type-caption err">{eventError}</p>{/if}
 				<div class="row">
-					<button
-						type="button"
-						class="btn primary grow"
-						disabled={savingEvent}
-						onclick={addEvent}
-					>
-						{#if eventAdded}<Check size={18} /> {editingEvent !== null
-								? 'Saved'
-								: 'Added'}{:else}<Plus size={18} />{savingEvent
+					<button type="button" class="btn primary grow" disabled={savingEvent} onclick={addEvent}>
+						{#if eventAdded}<Check size={18} />
+							{editingEvent !== null ? 'Saved' : 'Added'}{:else}<Plus size={18} />{savingEvent
 								? 'Saving…'
 								: editingEvent !== null
 									? 'Save changes'
@@ -1279,9 +797,9 @@
 							title={editingEvent.kind === 'synced' ? 'Reset to calendar' : 'Delete event'}
 							disabled={savingEvent}
 							onclick={removeEvent}
-							>{#if editingEvent.kind === 'synced'}<RotateCcw
+							>{#if editingEvent.kind === 'synced'}<RotateCcw size={16} />{:else}<Trash2
 									size={16}
-								/>{:else}<Trash2 size={16} />{/if}</button
+								/>{/if}</button
 						>
 					{/if}
 				</div>
@@ -1359,8 +877,7 @@
 									type="button"
 									class="chip"
 									class:on={newListKind === kind}
-									onclick={() => (newListKind = kind as typeof newListKind)}
-									>{icon} {kind}</button
+									onclick={() => (newListKind = kind as typeof newListKind)}>{icon} {kind}</button
 								>
 							{/each}
 						</div>
@@ -1543,12 +1060,20 @@
 								onkeydown={(e) => e.key === 'Enter' && saveMeal()}
 							/>
 							<div class="row">
-								<button type="button" class="btn primary grow" disabled={savingMeal} onclick={saveMeal}>
+								<button
+									type="button"
+									class="btn primary grow"
+									disabled={savingMeal}
+									onclick={saveMeal}
+								>
 									{savingMeal ? 'Saving…' : 'Save'}
 								</button>
 								{#if mealAt(editingMeal.date, editingMeal.type)}
-									<button type="button" class="iconbtn danger" aria-label="Clear meal" onclick={clearMeal}
-										><Trash2 size={16} /></button
+									<button
+										type="button"
+										class="iconbtn danger"
+										aria-label="Clear meal"
+										onclick={clearMeal}><Trash2 size={16} /></button
 									>
 								{/if}
 							</div>
@@ -1694,7 +1219,11 @@
 			<section class="card">
 				<div class="sec-head">
 					<h2 class="type-label sec-h">Reward Ladder</h2>
-					<button type="button" class="iconbtn" aria-label="Manage rewards" onclick={() => (rewardsManaging = !rewardsManaging)}
+					<button
+						type="button"
+						class="iconbtn"
+						aria-label="Manage rewards"
+						onclick={() => (rewardsManaging = !rewardsManaging)}
 						>{#if rewardsManaging}<X size={16} />{:else}<Pencil size={15} />{/if}</button
 					>
 				</div>
@@ -1798,7 +1327,6 @@
 				<p class="type-caption saved-msg"><Star size={14} strokeWidth={3} /> {claimedToast}</p>
 			{/if}
 		{/if}
-
 	</div>
 {/if}
 
@@ -2070,26 +1598,6 @@
 		flex: 1;
 		color: var(--color-text-primary);
 	}
-	.cake {
-		flex: none;
-		width: 30px;
-		height: 30px;
-		display: grid;
-		place-items: center;
-		border-radius: var(--radius-pill);
-		font-size: 1rem;
-		opacity: 0.35;
-	}
-	.cake.on {
-		opacity: 1;
-		background: color-mix(in srgb, var(--color-accent-warning) 20%, var(--color-surface));
-	}
-	.birthdaycheck {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		color: var(--color-text-secondary);
-	}
 	.itemrow.done .itext {
 		color: var(--color-text-tertiary);
 		text-decoration: line-through;
@@ -2204,25 +1712,6 @@
 		gap: 4px;
 		color: var(--color-accent-success);
 	}
-	.divider {
-		height: 1px;
-		background: var(--color-border-subtle);
-		margin: var(--space-1) 0;
-	}
-	.cancel-text {
-		width: auto;
-		height: auto;
-		border-radius: 0;
-		background: none;
-		align-self: center;
-		color: var(--color-text-tertiary);
-		font-weight: var(--weight-medium);
-		font-size: var(--text-sm);
-	}
-	.btn.small {
-		padding: 11px 16px;
-		font-size: var(--text-base);
-	}
 	.btn.primary:disabled {
 		opacity: 0.5;
 	}
@@ -2230,9 +1719,6 @@
 		width: 40px;
 		height: 40px;
 		border-radius: var(--radius-pill);
-	}
-	.proflink {
-		gap: var(--space-3);
 	}
 	.iconbtn {
 		display: grid;
@@ -2253,21 +1739,6 @@
 		gap: var(--space-3);
 		padding-top: var(--space-3);
 		border-top: 1px solid var(--color-border-subtle);
-	}
-	.agein {
-		width: 148px;
-	}
-	.agepreview {
-		color: var(--color-text-tertiary);
-	}
-	.colordot {
-		width: 34px;
-		height: 34px;
-		border-radius: var(--radius-pill);
-		flex: none;
-	}
-	.colordot.on {
-		box-shadow: 0 0 0 3px var(--color-surface), 0 0 0 5px var(--color-text-primary);
 	}
 	.emojidot {
 		width: 40px;
@@ -2336,54 +1807,5 @@
 		gap: var(--space-3);
 		padding-top: var(--space-3);
 		border-top: 1px solid var(--color-border-hairline);
-	}
-	.updateblock {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-2);
-		padding: var(--space-3);
-		border-radius: var(--radius-md);
-		background: var(--color-surface-elevated);
-	}
-	.updateblock.warn {
-		background: color-mix(in srgb, var(--color-accent-warning) 12%, var(--color-surface));
-	}
-	.progressbar {
-		height: 8px;
-		border-radius: var(--radius-pill);
-		background: var(--color-border-subtle);
-		overflow: hidden;
-	}
-	.progressfill {
-		height: 100%;
-		border-radius: var(--radius-pill);
-		background: var(--color-accent-success);
-		transition: width 0.6s ease;
-	}
-	.releasenotes {
-		list-style: none;
-		margin: 0;
-		padding: 0;
-		display: flex;
-		flex-direction: column;
-		gap: 4px;
-	}
-	.releasenotes li {
-		padding-left: 14px;
-		position: relative;
-		color: var(--color-text-secondary);
-	}
-	.releasenotes li::before {
-		content: '›';
-		position: absolute;
-		left: 0;
-		color: var(--color-text-tertiary);
-	}
-	.laterbtn {
-		padding: 8px 14px;
-		border-radius: var(--radius-pill);
-		color: var(--color-text-tertiary);
-		font-weight: var(--weight-medium);
-		font-size: var(--text-sm);
 	}
 </style>

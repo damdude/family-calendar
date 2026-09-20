@@ -18,7 +18,9 @@
 		try {
 			const res = await fetch(`/api/google/status?profileId=${profileId}`);
 			const data = await res.json();
-			const conn = data.allConnections?.find((c: { profileId: number | null }) => c.profileId === profileId);
+			const conn = data.allConnections?.find(
+				(c: { profileId: number | null }) => c.profileId === profileId
+			);
 			if (conn?.accountEmail) {
 				connected = true;
 				accountEmail = conn.accountEmail;
@@ -33,7 +35,7 @@
 		try {
 			const res = await fetch(`/api/google/connect?profileId=${profileId}`, { method: 'POST' });
 			if (!res.ok) throw new Error(await res.text());
-			const { userCode: uc, verificationUrl: vu, deviceCode: dc, expiresIn } = await res.json();
+			const { userCode: uc, verificationUrl: vu, deviceCode: dc } = await res.json();
 			userCode = uc;
 			verificationUrl = vu;
 			deviceCode = dc;
@@ -106,7 +108,12 @@
 				<Check size={16} />
 				<span>Connected: {accountEmail}</span>
 			</div>
-			<button type="button" class="disconnect" onclick={disconnect} title="Disconnect Google Calendar">
+			<button
+				type="button"
+				class="disconnect"
+				onclick={disconnect}
+				title="Disconnect Google Calendar"
+			>
 				<X size={14} />
 			</button>
 		</div>
@@ -115,7 +122,9 @@
 			<div class="instructions">
 				<p>Sign in with your Google account:</p>
 				<ol>
-					<li>Visit: <a href={verificationUrl} target="_blank" rel="noopener">{verificationUrl}</a></li>
+					<li>
+						Visit: <a href={verificationUrl} target="_blank" rel="noopener">{verificationUrl}</a>
+					</li>
 					<li>Enter code: <strong>{userCode}</strong></li>
 					<li>Waiting for authorization...</li>
 				</ol>

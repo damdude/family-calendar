@@ -148,7 +148,6 @@
 			<h1 class="type-title">Your family</h1>
 			<label class="field">
 				<span class="type-label">Family name</span>
-				<!-- svelte-ignore a11y_autofocus -->
 				<input
 					class="input"
 					type="text"
@@ -315,7 +314,7 @@
 		</section>
 	{:else}
 		<section class="panel">
-			<SetupSecurityStep bind:this={secStep} />
+			<SetupSecurityStep {token} bind:this={secStep} />
 		</section>
 	{/if}
 
@@ -597,46 +596,5 @@
 	}
 	.btn:disabled {
 		opacity: 0.45;
-	}
-
-	.secform {
-		display: flex;
-		flex-direction: column;
-		gap: var(--space-3);
-		margin-top: var(--space-3);
-	}
-
-	.savebtn {
-		margin-top: var(--space-2);
-		padding: 12px 18px;
-		background: var(--color-text-primary);
-		color: var(--color-surface);
-		border: none;
-		border-radius: var(--radius-md);
-		font-weight: var(--weight-semibold);
-		cursor: pointer;
-		transition: all 0.2s;
-	}
-
-	.savebtn:hover {
-		opacity: 0.9;
-	}
-
-	.hint {
-		padding: var(--space-2) var(--space-3);
-		background: color-mix(in srgb, var(--color-accent-info, #3b82f6) 10%, var(--color-surface));
-		border-radius: var(--radius-md);
-		color: var(--color-text-secondary);
-	}
-
-	.error {
-		color: color-mix(in srgb, var(--color-accent-warning, #ff6b6b) 80%, red);
-		font-weight: var(--weight-medium);
-	}
-
-	.divider {
-		border: none;
-		border-top: 1px solid var(--color-border-subtle);
-		margin: var(--space-2) 0;
 	}
 </style>

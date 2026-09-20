@@ -138,8 +138,7 @@ export const migrations: Migration[] = [
 			-- instead, resolved the same way event_overrides already is.
 			ALTER TABLE events ADD COLUMN profile_ids_json TEXT NOT NULL DEFAULT '[]';
 		`
-	}
-,
+	},
 	{
 		version: 7,
 		name: 'per_profile_oauth_tokens',
@@ -167,5 +166,4 @@ export const migrations: Migration[] = [
 			ALTER TABLE oauth_tokens_new RENAME TO oauth_tokens;
 		`
 	}
-
 ];

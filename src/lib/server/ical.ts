@@ -10,6 +10,7 @@
  */
 
 import ical from 'node-ical';
+import { safeFetch } from './urlSafety';
 
 const USER_AGENT =
 	process.env.SCRAPER_USER_AGENT ??
@@ -35,18 +36,42 @@ export function normalizeIcsUrl(url: string): string {
 	return url.replace(/^webcal:\/\//i, 'https://').trim();
 }
 
+/**
+ * Calendar URLs come from whoever is using the app, so this goes through the
+ * same SSRF guard as the recipe/site scrapers — a raw fetch here would let a
+ * subscribe link point at the LAN (a router admin page, another device) and
+ * surface the response as calendar events. `safeFetch` re-checks every
+ * redirect hop, which `redirect: 'follow'` cannot do.
+ *
+ * The body is read in chunks against a hard cap rather than buffered whole:
+ * `arrayBuffer()` would pull an arbitrarily large feed into memory before the
+ * truncation could apply, which on a 2GB Pi is a denial-of-service in itself.
+ */
 async function fetchText(url: string): Promise<string> {
 	const ctrl = new AbortController();
 	const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
 	try {
-		const res = await fetch(url, {
+		const res = await safeFetch(url, {
 			headers: { 'user-agent': USER_AGENT, accept: 'text/calendar,text/plain,*/*' },
-			signal: ctrl.signal,
-			redirect: 'follow'
+			signal: ctrl.signal
 		});
 		if (!res.ok) throw new Error(`ICS fetch failed: ${res.status}`);
-		const buf = Buffer.from(await res.arrayBuffer());
-		return buf.subarray(0, MAX_BYTES).toString('utf8');
+
+		const reader = res.body?.getReader();
+		if (!reader) return '';
+		const chunks: Buffer[] = [];
+		let received = 0;
+		for (;;) {
+			const { done, value } = await reader.read();
+			if (done) break;
+			chunks.push(Buffer.from(value));
+			received += value.length;
+			if (received >= MAX_BYTES) {
+				await reader.cancel();
+				break;
+			}
+		}
+		return Buffer.concat(chunks).subarray(0, MAX_BYTES).toString('utf8');
 	} finally {
 		clearTimeout(t);
 	}
@@ -100,7 +125,12 @@ function attendeeEmails(ev: VEvent): string[] {
 	if (!raw) return [];
 	const list = Array.isArray(raw) ? raw : [raw];
 	const emails = list
-		.map((a) => a.val?.replace(/^mailto:/i, '').trim().toLowerCase())
+		.map((a) =>
+			a.val
+				?.replace(/^mailto:/i, '')
+				.trim()
+				.toLowerCase()
+		)
 		.filter((v): v is string => !!v);
 	return [...new Set(emails)];
 }

@@ -59,10 +59,7 @@ const PersistedFamilySchema = z.object({
 	/** Shared/household addresses (a family alias, a shared inbox, …) — an
 	 *  invite sent to one of these means the event is for everyone, not any
 	 *  one person. See Profile.emails for the per-person equivalent. */
-	sharedEmails: z
-		.array(z.string().trim().toLowerCase().max(254))
-		.max(10)
-		.default([])
+	sharedEmails: z.array(z.string().trim().toLowerCase().max(254)).max(10).default([])
 });
 
 // --- Persisted app config ---
@@ -167,10 +164,7 @@ export const PersistedProfileSchema = z.object({
 	 *  invited, not who organized it or whose name happens to be in the
 	 *  title. See PersistedFamilySchema.sharedEmails for the whole-family
 	 *  equivalent. */
-	emails: z
-		.array(z.string().trim().toLowerCase().max(254))
-		.max(5)
-		.default([]),
+	emails: z.array(z.string().trim().toLowerCase().max(254)).max(5).default([]),
 	/** Set when the profile has an uploaded (encrypted) photo; cache-buster. */
 	photoUpdatedAt: z.number().optional(),
 	/** Whether this profile follows morning/evening routines. Adults default

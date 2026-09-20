@@ -1,44 +1,79 @@
 import { error, json } from '@sveltejs/kit';
 import { z } from 'zod';
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import { spawn } from 'node:child_process';
+import { getSession } from '$lib/server/pairing';
 import type { RequestHandler } from './$types';
 
-const execAsync = promisify(exec);
+/** Control characters would corrupt the single `user:password` line the helper
+ *  feeds to chpasswd, so they are refused outright rather than escaped. */
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARS = /[\x00-\x1f\x7f]/;
 
 const BodySchema = z.object({
-	newPassword: z.string().min(6, 'Password must be at least 6 characters'),
+	token: z.string(),
+	newPassword: z
+		.string()
+		.min(6, 'Use at least 6 characters.')
+		.max(128)
+		.refine((v) => !CONTROL_CHARS.test(v), 'That password contains unsupported characters.'),
 	confirmPassword: z.string()
 });
 
 /**
- * Change the Pi's default 'pi' user password. Only callable during initial setup.
- * The new password is used for both system login and SSH access.
+ * Set the appliance user's login/SSH password during setup.
+ *
+ * Gated on a live setup pairing token: only someone who scanned the QR on the
+ * display can reach it, and it stops working once setup is finished. Without
+ * that, anything on the LAN could change the device password unprompted.
+ *
+ * The password goes to the privileged helper over stdin — never interpolated
+ * into a shell string, and never an argv element where `ps` could read it.
  */
 export const POST: RequestHandler = async ({ request }) => {
 	const parsed = BodySchema.safeParse(await request.json().catch(() => null));
-	if (!parsed.success) throw error(400, parsed.error.message);
+	if (!parsed.success) throw error(400, parsed.error.issues[0]?.message ?? 'invalid request');
 
-	const { newPassword, confirmPassword } = parsed.data;
-	if (newPassword !== confirmPassword) {
-		throw error(400, 'Passwords do not match');
-	}
+	const { token, newPassword, confirmPassword } = parsed.data;
+	if (!getSession(token)) throw error(403, 'This setup session has expired.');
+	if (newPassword !== confirmPassword) throw error(400, 'The passwords do not match.');
 
-	try {
-		// Use `echo` + `chpasswd` to change password non-interactively
-		// Format: username:newpassword
-		const { stdout, stderr } = await execAsync(
-			`echo "pi:${newPassword}" | sudo chpasswd`,
-			{ timeout: 5000 }
-		);
-
-		if (stderr && !stderr.includes('chpasswd')) {
-			console.error('Password change stderr:', stderr);
+	const result = await new Promise<{ ok: boolean; message?: string }>((resolve) => {
+		let child;
+		try {
+			child = spawn('sudo', ['/usr/local/bin/fc-set-password'], {
+				stdio: ['pipe', 'ignore', 'pipe']
+			});
+		} catch {
+			return resolve({ ok: false, message: 'helper unavailable' });
 		}
+		let done = false;
+		const finish = (v: { ok: boolean; message?: string }) => {
+			if (!done) {
+				done = true;
+				resolve(v);
+			}
+		};
+		const timer = setTimeout(() => {
+			child.kill('SIGKILL');
+			finish({ ok: false, message: 'timed out' });
+		}, 15_000);
+		let errOut = '';
+		child.stderr.on('data', (d) => (errOut += d.toString()));
+		child.on('error', () => {
+			clearTimeout(timer);
+			finish({ ok: false, message: 'helper unavailable' });
+		});
+		child.on('close', (code) => {
+			clearTimeout(timer);
+			finish(code === 0 ? { ok: true } : { ok: false, message: errOut.trim() || 'failed' });
+		});
+		child.stdin.write(newPassword + '\n');
+		child.stdin.end();
+	});
 
-		return json({ ok: true, message: 'Password updated successfully' });
-	} catch (err) {
-		console.error('Failed to change password:', err);
-		throw error(500, 'Failed to update password');
+	if (!result.ok) {
+		console.error('Password change failed:', result.message);
+		throw error(500, 'Could not change the device password.');
 	}
+	return json({ ok: true });
 };

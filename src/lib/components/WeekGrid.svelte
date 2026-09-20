@@ -86,7 +86,8 @@
 	function barBackground(e: FamilyEvent): string {
 		const ppl = e.profileIds.map((id) => family.profile(id)).filter((p) => p !== undefined);
 		if (ppl.length === 0) return 'var(--color-accent-allday)';
-		if (ppl.length >= 2) return 'color-mix(in srgb, var(--color-profile-blue) 74%, var(--color-surface))';
+		if (ppl.length >= 2)
+			return 'color-mix(in srgb, var(--color-profile-blue) 74%, var(--color-surface))';
 		return tint(ppl[0].color);
 	}
 

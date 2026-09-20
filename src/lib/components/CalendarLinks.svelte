@@ -159,7 +159,9 @@
 				type="button"
 				class="cake"
 				class:on={c.isBirthdays}
-				aria-label={c.isBirthdays ? 'Birthdays calendar (tap to unmark)' : 'Mark as birthdays calendar'}
+				aria-label={c.isBirthdays
+					? 'Birthdays calendar (tap to unmark)'
+					: 'Mark as birthdays calendar'}
 				title={c.isBirthdays ? 'Birthdays calendar' : 'Mark as birthdays calendar'}
 				onclick={() => toggleBirthdays(c)}
 			>
@@ -216,8 +218,8 @@
 		<p class="type-label"><CalendarPlus size={16} /> Local calendars</p>
 	</div>
 	<p class="type-caption sub">
-		No external source needed — events created here on the display (or via the phone quick-add)
-		are filed under one of these. Used automatically when a profile has no synced calendar.
+		No external source needed — events created here on the display (or via the phone quick-add) are
+		filed under one of these. Used automatically when a profile has no synced calendar.
 	</p>
 
 	{#each family.localCalendars as c (c.id)}

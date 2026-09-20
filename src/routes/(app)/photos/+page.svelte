@@ -83,8 +83,8 @@
 				<div class="icon"><Image size={34} /></div>
 				<p class="type-heading">No photos yet</p>
 				<p class="type-body sub">
-					Upload family photos to browse here, and show as a screensaver. Drag and drop, or use
-					the Upload button above.
+					Upload family photos to browse here, and show as a screensaver. Drag and drop, or use the
+					Upload button above.
 				</p>
 				<a class="link type-label" href="/sleep">Screensaver settings →</a>
 			</div>

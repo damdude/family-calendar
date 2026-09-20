@@ -2,9 +2,11 @@ import { error, json } from '@sveltejs/kit';
 import { z } from 'zod';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
+import { getSession } from '$lib/server/pairing';
 import type { RequestHandler } from './$types';
 
 const BodySchema = z.object({
+	token: z.string(),
 	googleClientId: z.string().trim().default(''),
 	googleClientSecret: z.string().trim().default('')
 });
@@ -33,7 +35,10 @@ export const POST: RequestHandler = async ({ request }) => {
 	const parsed = BodySchema.safeParse(await request.json().catch(() => null));
 	if (!parsed.success) throw error(400, 'invalid credentials payload');
 
-	const { googleClientId, googleClientSecret } = parsed.data;
+	const { token, googleClientId, googleClientSecret } = parsed.data;
+	// Same gate as the password step: only a live setup session may write
+	// credentials to .env, so nothing else on the LAN can overwrite them.
+	if (!getSession(token)) throw error(403, 'This setup session has expired.');
 	if (!googleClientId && !googleClientSecret) return json({ ok: true, saved: false });
 	if (!googleClientId || !googleClientSecret) {
 		throw error(400, 'Both the client ID and the client secret are required.');

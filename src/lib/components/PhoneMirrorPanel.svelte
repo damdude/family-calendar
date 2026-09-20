@@ -50,9 +50,7 @@
 	// still unknown (mid first-run setup, or a phone visiting before any
 	// household config exists) — defaulting to "no touch" (the fixed-kiosk
 	// common case) until that detection actually runs.
-	const noTouch = $derived(
-		family.displayMode ? family.displayMode !== 'touch' : !touchDetected
-	);
+	const noTouch = $derived(family.displayMode ? family.displayMode !== 'touch' : !touchDetected);
 
 	$effect(() => {
 		if (show) mirror.ensureQr();

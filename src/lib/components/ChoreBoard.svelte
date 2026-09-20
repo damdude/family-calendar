@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { Check, X, Plus, Settings } from 'lucide-svelte';
+	import { X, Settings } from 'lucide-svelte';
 	import { family } from '$lib/stores/family.svelte';
 
 	interface Chore {
@@ -156,7 +156,6 @@
 		<p class="error">{error}</p>
 	{/if}
 
-	
 	{#if !showSettings}
 		<div class="stats-row">
 			{#each family.data.profiles as profile (profile.id)}

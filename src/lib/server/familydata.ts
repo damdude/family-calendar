@@ -99,13 +99,13 @@ const ChoreSchema = z.object({
 	icon: z.string().max(8).default('🎯'),
 	starReward: z.number().int().min(1).max(100),
 	frequency: z.enum(['once', 'daily', 'weekly']).default('daily'),
-	dueTime: z.string().optional(),     // HH:MM format (e.g. "7:00 PM")
-	dueDate: z.string().optional(),     // YYYY-MM-DD for weekly chores
-	assignedTo: z.number().int().optional(),  // Profile ID who claimed it
-	claimedAt: z.number().int().optional(),   // unix seconds
+	dueTime: z.string().optional(), // HH:MM format (e.g. "7:00 PM")
+	dueDate: z.string().optional(), // YYYY-MM-DD for weekly chores
+	assignedTo: z.number().int().optional(), // Profile ID who claimed it
+	claimedAt: z.number().int().optional(), // unix seconds
 	completed: z.boolean().default(false),
 	completedAt: z.number().int().optional(),
-	completedBy: z.number().int().optional()  // Profile ID who completed it
+	completedBy: z.number().int().optional() // Profile ID who completed it
 });
 
 const RewardSchema = z.object({
@@ -439,7 +439,10 @@ export async function unclaimChore(choreId: number): Promise<ChoreInput | null> 
 }
 
 /** Mark a chore as complete. */
-export async function completeChore(choreId: number, profileId: number): Promise<ChoreInput | null> {
+export async function completeChore(
+	choreId: number,
+	profileId: number
+): Promise<ChoreInput | null> {
 	const data = (await loadFamilyData()) ?? emptyData();
 	const chore = data.chores.find((c) => c.id === choreId);
 	if (!chore) return null;
@@ -465,42 +468,56 @@ export async function deleteChore(choreId: number): Promise<boolean> {
 export async function getChoreHistory(choreId: number, days: number = 30): Promise<ChoreInput[]> {
 	const data = (await loadFamilyData()) ?? emptyData();
 	const now = Math.floor(Date.now() / 1000);
-	const cutoff = now - (days * 86_400);
+	const cutoff = now - days * 86_400;
 	return data.chores.filter((c) => c.id === choreId && c.completedAt && c.completedAt >= cutoff);
 }
 
-export async function getProfileChoreStats(profileId: number): Promise<{
+export interface ChoreStats {
 	totalClaimed: number;
 	totalCompleted: number;
 	completionRate: number;
 	totalStarsEarned: number;
-}> {
-	const data = (await loadFamilyData()) ?? emptyData();
-	const claimedByProfile = data.chores.filter((c) => c.assignedTo === profileId);
-	const completedByProfile = claimedByProfile.filter((c) => c.completed);
-	const starsEarned = completedByProfile.reduce((sum, c) => sum + c.starReward, 0);
-	
+}
+
+/** Pure: stats for one profile from an already-loaded data set. */
+function choreStatsFor(chores: ChoreInput[], profileId: number): ChoreStats {
+	let totalClaimed = 0;
+	let totalCompleted = 0;
+	let totalStarsEarned = 0;
+	for (const c of chores) {
+		if (c.assignedTo !== profileId) continue;
+		totalClaimed++;
+		if (c.completed) {
+			totalCompleted++;
+			totalStarsEarned += c.starReward;
+		}
+	}
 	return {
-		totalClaimed: claimedByProfile.length,
-		totalCompleted: completedByProfile.length,
-		completionRate: claimedByProfile.length > 0 ? (completedByProfile.length / claimedByProfile.length) * 100 : 0,
-		totalStarsEarned: starsEarned
+		totalClaimed,
+		totalCompleted,
+		completionRate: totalClaimed > 0 ? (totalCompleted / totalClaimed) * 100 : 0,
+		totalStarsEarned
 	};
 }
 
-export async function getAllChoreStats(): Promise<Record<number, {
-	totalClaimed: number;
-	totalCompleted: number;
-	completionRate: number;
-	totalStarsEarned: number;
-}>> {
-	const cfg = await loadConfig();
-	const stats: Record<number, any> = {};
-	
+export async function getProfileChoreStats(profileId: number): Promise<ChoreStats> {
+	const data = (await loadFamilyData()) ?? emptyData();
+	return choreStatsFor(data.chores, profileId);
+}
+
+/**
+ * Stats for every profile. Reads the data file ONCE — the previous version
+ * awaited getProfileChoreStats() per profile, so a four-person family meant
+ * four full reads and four JSON.parse passes over the same file for a single
+ * request.
+ */
+export async function getAllChoreStats(): Promise<Record<number, ChoreStats>> {
+	const [cfg, data] = await Promise.all([loadConfig(), loadFamilyData()]);
+	const chores = (data ?? emptyData()).chores;
+	const stats: Record<number, ChoreStats> = {};
 	for (const profile of cfg.profiles) {
-		stats[profile.id] = await getProfileChoreStats(profile.id);
+		stats[profile.id] = choreStatsFor(chores, profile.id);
 	}
-	
 	return stats;
 }
 
@@ -508,10 +525,10 @@ export async function resetCompletedChores(frequency: 'daily' | 'weekly'): Promi
 	const data = (await loadFamilyData()) ?? emptyData();
 	const now = new Date();
 	const today = now.toISOString().split('T')[0];
-	
+
 	for (const chore of data.chores) {
 		if (chore.frequency !== frequency) continue;
-		
+
 		// Reset if it matches the frequency (daily resets every day, weekly on Sunday)
 		let shouldReset = false;
 		if (frequency === 'daily') {
@@ -520,7 +537,7 @@ export async function resetCompletedChores(frequency: 'daily' | 'weekly'): Promi
 			// Sunday - reset weekly chores
 			shouldReset = chore.completed;
 		}
-		
+
 		if (shouldReset) {
 			chore.completed = false;
 			chore.completedAt = undefined;
@@ -528,16 +545,16 @@ export async function resetCompletedChores(frequency: 'daily' | 'weekly'): Promi
 			chore.assignedTo = undefined;
 			chore.claimedAt = undefined;
 		}
-		
+
 		// Update due dates for daily chores
 		if (chore.frequency === 'daily') {
 			chore.dueDate = today;
 		} else if (chore.frequency === 'weekly' && !chore.dueDate) {
 			const nextSunday = new Date(now);
-			nextSunday.setDate(now.getDate() + (7 - now.getDay()) % 7);
+			nextSunday.setDate(now.getDate() + ((7 - now.getDay()) % 7));
 			chore.dueDate = nextSunday.toISOString().split('T')[0];
 		}
 	}
-	
+
 	await saveFamilyData(data);
 }

@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
-import { execFileSync, spawn } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
+import { promisify } from 'node:util';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { DATA_DIR } from '$lib/server/paths';
@@ -30,19 +31,43 @@ async function readUpdateState(): Promise<UpdateState | null> {
  *  behind (see scripts/update.sh) — the phone/desktop Settings page polls
  *  this to show "update available" with release notes, an install in
  *  progress, or a failure. */
-export const GET: RequestHandler = async () => {
+const execFileAsync = promisify(execFile);
+
+/**
+ * Version info is cached briefly because the Settings page polls this every
+ * five seconds while it's open. The previous implementation shelled out to
+ * git TWICE per request with execFileSync, which blocks the event loop — on a
+ * Pi that meant the whole server stalling on a subprocess on a 5s cycle, and
+ * `git status --porcelain` is not cheap on a working tree this size. The
+ * commit only changes when an update installs, which restarts the service
+ * anyway, so a short TTL costs nothing in accuracy.
+ */
+const VERSION_TTL_MS = 30_000;
+let versionCache: { at: number; commit: string; dirty: boolean } | null = null;
+
+async function gitVersion(): Promise<{ commit: string; dirty: boolean }> {
+	const now = Date.now();
+	if (versionCache && now - versionCache.at < VERSION_TTL_MS) {
+		return { commit: versionCache.commit, dirty: versionCache.dirty };
+	}
 	let commit = 'unknown';
 	let dirty = false;
 	try {
-		commit = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: process.cwd() })
-			.toString()
-			.trim();
-		dirty =
-			execFileSync('git', ['status', '--porcelain'], { cwd: process.cwd() }).toString().trim()
-				.length > 0;
+		const [rev, status] = await Promise.all([
+			execFileAsync('git', ['rev-parse', '--short', 'HEAD'], { cwd: process.cwd() }),
+			execFileAsync('git', ['status', '--porcelain'], { cwd: process.cwd() })
+		]);
+		commit = rev.stdout.trim();
+		dirty = status.stdout.trim().length > 0;
 	} catch {
 		/* not a git checkout */
 	}
+	versionCache = { at: now, commit, dirty };
+	return { commit, dirty };
+}
+
+export const GET: RequestHandler = async () => {
+	const { commit, dirty } = await gitVersion();
 	return json({ commit, dirty, update: await readUpdateState() });
 };
 

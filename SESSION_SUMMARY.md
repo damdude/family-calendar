@@ -3,12 +3,13 @@
 ## Major Features Completed This Session
 
 ### 1. Fixed QR Code Visibility Bug (Critical)
+
 **Status:** ✅ Deployed to Pi  
 **Commits:** `541526e`
 
 **Problem:** Phone-pairing QR code silently never appeared on TV kiosk. The POST `/api/mirror/start` was being rejected with 403 Forbidden.
 
-**Root cause:** Same-origin CSRF check in `src/hooks.server.ts` compared the request's `Origin` header against `event.url.origin`. However, the app runs on adapter-node bound to `HOST=0.0.0.0` with no reverse proxy and no `ORIGIN` env var, so `event.url.origin` was wrong—it was rejecting *every* real browser request (which always sends Origin), even ones whose Origin perfectly matched the page's real address.
+**Root cause:** Same-origin CSRF check in `src/hooks.server.ts` compared the request's `Origin` header against `event.url.origin`. However, the app runs on adapter-node bound to `HOST=0.0.0.0` with no reverse proxy and no `ORIGIN` env var, so `event.url.origin` was wrong—it was rejecting _every_ real browser request (which always sends Origin), even ones whose Origin perfectly matched the page's real address.
 
 **Fix:** Changed the check to compare `Origin` header's hostname against the request's `Host` header instead. `Host` is always what the client actually dialed, regardless of adapter-level origin resolution.
 
@@ -17,6 +18,7 @@
 ---
 
 ### 2. Event Tagging by Attendee Email (Feature)
+
 **Status:** ✅ Deployed to Pi  
 **Commits:** `6715bb4`
 
@@ -61,6 +63,7 @@
   - Re-sync triggered; next sync will use these addresses
 
 **Testing:** Verified end-to-end with synthetic ICS event:
+
 - Event invited to Revansh's address → tagged to Revansh only ✓
 - Event invited to shared address → tagged to whole family ✓
 - Organizer field ignored (not used for matching) ✓
@@ -68,18 +71,21 @@
 ---
 
 ### 3. Auto-Return to Calendar After 20 Minutes Idle
+
 **Status:** ✅ Deployed to Pi  
 **Commits:** `beb1679`
 
 **Problem:** Display can get parked on Lists, Settings, or another tab (from phone remote control or direct touch), with nothing bringing it back to the default Calendar view.
 
 **Solution:** `src/routes/(app)/+layout.svelte` now:
+
 - Tracks `lastActivity` (updated on pointerdown/keydown or any navigation)
 - Every 5-second tick, checks if on non-Calendar tab AND `tick - lastActivity > 20 minutes`
 - Auto-navigates to `/` (Calendar) when idle past threshold
 - Re-navigates on any activity (both physical interaction and navigation from phone count)
 
-**Verified:** 
+**Verified:**
+
 - Tested with 20-second timeout on dev server
 - Confirmed it stays on Lists while under timeout, returns once it expires
 - Activity resets the clock
@@ -92,27 +98,27 @@
 
 **Key features worth stealing:**
 
-| Feature | Why valuable | Current status |
-|---------|------------|---|
-| **Fridge inventory via camera** | Photo-based AI item detection + expiration tracking. Reviewers: ~80% accuracy. Huge UX win. | Not built; would need camera hardware + ML model |
-| **AI meal planning from fridge** | Recipe suggestions based on *actual* inventory, not generic DB. | Recipes tab exists; could add inventory sync |
-| **Email-to-calendar** | Forward confirmation emails → auto-event. Reviewers: Everblog's unreliable. Could do better. | Not built; medium effort |
-| **Auto-wake on approach** | Wake display when fridge opens or on tap. | Not applicable to wall-mounted Pi |
-| **Auto-rotate landscape/portrait** | Detect mount orientation, rotate UI. | Not applicable to fixed-mount Pi + TV |
-| **Temp/humidity + light sensors** | HomeCal has these for context. | Cheap add-on (I²C sensors ~$5–10) |
+| Feature                            | Why valuable                                                                                 | Current status                                   |
+| ---------------------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| **Fridge inventory via camera**    | Photo-based AI item detection + expiration tracking. Reviewers: ~80% accuracy. Huge UX win.  | Not built; would need camera hardware + ML model |
+| **AI meal planning from fridge**   | Recipe suggestions based on _actual_ inventory, not generic DB.                              | Recipes tab exists; could add inventory sync     |
+| **Email-to-calendar**              | Forward confirmation emails → auto-event. Reviewers: Everblog's unreliable. Could do better. | Not built; medium effort                         |
+| **Auto-wake on approach**          | Wake display when fridge opens or on tap.                                                    | Not applicable to wall-mounted Pi                |
+| **Auto-rotate landscape/portrait** | Detect mount orientation, rotate UI.                                                         | Not applicable to fixed-mount Pi + TV            |
+| **Temp/humidity + light sensors**  | HomeCal has these for context.                                                               | Cheap add-on (I²C sensors ~$5–10)                |
 
 **Hardware findings:**
 
 Everblog uses **white-label Android 14 tablets** from Chinese ODMs, not custom SBCs. The Notebookcheck reviewer found a "backdoor" to full Android: navigate through YouTube link → Chrome → Play Store → custom launcher → full Android tablet.
 
-| | FridgeCal (13.4") | HomeCal (21.5") |
-|---|---|---|
-| **Display** | 1920×1200 FHD, 16:10 | 1920×1080 FHD, 16:9 |
-| **Storage** | 32–64 GB | 64 GB |
-| **Power** | 8400 mAh battery, USB-C, 3–5 days | AC-only (plugged in) |
-| **Audio** | Not specified | 20W quad speakers |
-| **Mount** | Magnetic (33–40 lbs grip) | Wall strap / VESA / stand / wood frame |
-| **OS** | Android 14 (custom launcher) | Android 14 (custom launcher) |
+|             | FridgeCal (13.4")                 | HomeCal (21.5")                        |
+| ----------- | --------------------------------- | -------------------------------------- |
+| **Display** | 1920×1200 FHD, 16:10              | 1920×1080 FHD, 16:9                    |
+| **Storage** | 32–64 GB                          | 64 GB                                  |
+| **Power**   | 8400 mAh battery, USB-C, 3–5 days | AC-only (plugged in)                   |
+| **Audio**   | Not specified                     | 20W quad speakers                      |
+| **Mount**   | Magnetic (33–40 lbs grip)         | Wall strap / VESA / stand / wood frame |
+| **OS**      | Android 14 (custom launcher)      | Android 14 (custom launcher)           |
 
 **Chipset not published.** Budget tablets today ship with Rockchip (RK3566/3568) or Allwinner (A523/A733) — either would handle a kiosk-mode Chromium pointed at your SvelteKit app.
 
@@ -123,11 +129,13 @@ Everblog uses **white-label Android 14 tablets** from Chinese ODMs, not custom S
 **Git:** `beb1679` (all three commits deployed)
 
 **Calendar:**
+
 - Attendee-based tagging active
 - Revansh & Enaya emails configured
 - 119 events re-synced with new logic
 
 **Display:**
+
 - QR panel shows permanently (phone companion setup works)
 - Auto-returns to Calendar after 20 min idle on any other tab
 - Week view, all-day events, avatar positioning all fixed (from prior session)
@@ -176,16 +184,19 @@ Everblog uses **white-label Android 14 tablets** from Chinese ODMs, not custom S
 ## For Next Session
 
 **If building per-profile Google OAuth:**
+
 - Schema: Add `googleConnections: Array<{ profileId, accessToken, refreshToken, ...}>` to store
 - Sync: Loop over each connected account instead of one
 - UI: Settings → each profile gets "Connect Google" button (device-flow QR code)
 - Auto-tag: Match synced event's source profile to its owner
 
 **If not building OAuth yet:**
+
 - Just follow setup steps above with a single shared family account
 - Attendee-based tagging still works automatically once emails are configured
 
 **Other features to consider (from Everblog research):**
+
 - Fridge/pantry inventory camera + AI recognition
 - Auto-rotate on mount orientation detection
 - Temp/humidity sensor readouts
@@ -194,9 +205,8 @@ Everblog uses **white-label Android 14 tablets** from Chinese ODMs, not custom S
 
 ## Commits This Session
 
-| Commit | Message |
-|--------|---------|
-| `beb1679` | feat(display): return to Calendar after 20 idle minutes on another tab |
-| `541526e` | fix(security): fix same-origin check that was blocking every real browser POST |
+| Commit    | Message                                                                                                        |
+| --------- | -------------------------------------------------------------------------------------------------------------- |
+| `beb1679` | feat(display): return to Calendar after 20 idle minutes on another tab                                         |
+| `541526e` | fix(security): fix same-origin check that was blocking every real browser POST                                 |
 | `6715bb4` | fix(pairing): fix QR load-order race; feat(calendar): tag synced events by invite list, not organizer or title |
-

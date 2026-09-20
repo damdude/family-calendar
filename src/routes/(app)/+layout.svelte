@@ -92,7 +92,7 @@
 	// of staying wherever it was left indefinitely.
 	const AWAY_TIMEOUT_MS = 20 * 60_000;
 	$effect(() => {
-		page.url.pathname; // any navigation counts as activity, wherever it came from
+		const _path = page.url.pathname; // any navigation counts as activity, wherever it came from
 		untrack(() => (lastActivity = Date.now()));
 	});
 	$effect(() => {
@@ -184,7 +184,9 @@
 	// Set on <html>, not the .app div — TvIdleScreen/Screensaver render as
 	// siblings of .app, not children, so a document-level attribute is the
 	// only way every overlay picks up the same theme tokens.
-	const theme = $derived(isDarkNow(new Date(tick), family.latitude, family.longitude) ? 'dark' : 'light');
+	const theme = $derived(
+		isDarkNow(new Date(tick), family.latitude, family.longitude) ? 'dark' : 'light'
+	);
 	$effect(() => {
 		document.documentElement.dataset.theme = theme;
 	});

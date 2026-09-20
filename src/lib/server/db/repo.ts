@@ -7,7 +7,7 @@ import { encryptString, decryptString, encrypt, decrypt } from '../crypto';
 
 export interface StoredToken {
 	provider: string;
-	profileId?: number;              // null/undefined = shared/household account
+	profileId?: number; // null/undefined = shared/household account
 	accountEmail?: string;
 	refreshToken: string;
 	accessToken?: string;
@@ -38,7 +38,9 @@ export function saveOAuthToken(t: StoredToken): void {
 }
 
 export function getOAuthToken(provider: string, profileId?: number): StoredToken | null {
-	const row = getDb().prepare('SELECT * FROM oauth_tokens WHERE provider = ? AND profile_id IS ?').get(provider, profileId ?? null) as
+	const row = getDb()
+		.prepare('SELECT * FROM oauth_tokens WHERE provider = ? AND profile_id IS ?')
+		.get(provider, profileId ?? null) as
 		| {
 				provider: string;
 				profile_id: number | null;
@@ -63,7 +65,9 @@ export function getOAuthToken(provider: string, profileId?: number): StoredToken
 
 export function getAllGoogleTokens(): Array<StoredToken & { profileId?: number }> {
 	if (!dbExists()) return [];
-	const rows = getDb().prepare('SELECT * FROM oauth_tokens WHERE provider = ?').all('google') as Array<{
+	const rows = getDb()
+		.prepare('SELECT * FROM oauth_tokens WHERE provider = ?')
+		.all('google') as Array<{
 		provider: string;
 		profile_id: number | null;
 		account_email: string | null;
@@ -84,7 +88,9 @@ export function getAllGoogleTokens(): Array<StoredToken & { profileId?: number }
 }
 
 export function deleteOAuthToken(provider: string, profileId?: number): void {
-	getDb().prepare('DELETE FROM oauth_tokens WHERE provider = ? AND profile_id IS ?').run(provider, profileId ?? null);
+	getDb()
+		.prepare('DELETE FROM oauth_tokens WHERE provider = ? AND profile_id IS ?')
+		.run(provider, profileId ?? null);
 }
 
 // --- Calendars + events ---
@@ -249,9 +255,9 @@ export function upsertEvent(e: SyncedEvent): void {
 export function getEventCalendarExternalId(
 	id: number
 ): { calendarId: number; externalId: string } | null {
-	const row = getDb().prepare('SELECT calendar_id, external_id FROM events WHERE id = ?').get(id) as
-		| { calendar_id: number; external_id: string }
-		| undefined;
+	const row = getDb()
+		.prepare('SELECT calendar_id, external_id FROM events WHERE id = ?')
+		.get(id) as { calendar_id: number; external_id: string } | undefined;
 	return row ? { calendarId: row.calendar_id, externalId: row.external_id } : null;
 }
 
@@ -267,7 +273,11 @@ export interface EventOverrideInput {
  *  and who it's assigned to, all together, since the phone's edit form
  *  submits the whole event at once. Survives every future sync (a separate
  *  table, never touched by clearCalendarEvents). */
-export function setEventOverride(calendarId: number, externalId: string, e: EventOverrideInput): void {
+export function setEventOverride(
+	calendarId: number,
+	externalId: string,
+	e: EventOverrideInput
+): void {
 	getDb()
 		.prepare(
 			`INSERT INTO event_overrides (calendar_id, external_id, start_ts, end_ts, all_day, location, profile_ids_json, updated_at)

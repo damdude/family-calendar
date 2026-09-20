@@ -8,6 +8,8 @@
 	 * Both fields are optional — a family with no Google account, or one happy
 	 * with the default password, can walk straight past this.
 	 */
+	let { token }: { token: string } = $props();
+
 	let pw = $state('');
 	let pw2 = $state('');
 	let clientId = $state('');
@@ -28,7 +30,7 @@
 				const r = await fetch('/api/pi-password', {
 					method: 'POST',
 					headers: { 'content-type': 'application/json' },
-					body: JSON.stringify({ newPassword: pw, confirmPassword: pw2 })
+					body: JSON.stringify({ token, newPassword: pw, confirmPassword: pw2 })
 				});
 				if (!r.ok) throw new Error('Could not change the device password.');
 				savedPw = true;
@@ -37,7 +39,11 @@
 				const r = await fetch('/api/setup-env', {
 					method: 'POST',
 					headers: { 'content-type': 'application/json' },
-					body: JSON.stringify({ googleClientId: clientId, googleClientSecret: clientSecret })
+					body: JSON.stringify({
+						token,
+						googleClientId: clientId,
+						googleClientSecret: clientSecret
+					})
 				});
 				if (!r.ok) {
 					const msg = await r.text().catch(() => '');
@@ -63,7 +69,13 @@
 	<p class="type-caption sub">Replaces the default password used to sign in to this device.</p>
 	<label class="field">
 		<span class="type-label">New password</span>
-		<input class="input" type="password" bind:value={pw} maxlength="64" placeholder="Leave blank to keep the current one" />
+		<input
+			class="input"
+			type="password"
+			bind:value={pw}
+			maxlength="64"
+			placeholder="Leave blank to keep the current one"
+		/>
 	</label>
 	<label class="field">
 		<span class="type-label">Confirm password</span>
@@ -80,11 +92,21 @@
 	</p>
 	<label class="field">
 		<span class="type-label">Client ID</span>
-		<input class="input" type="text" bind:value={clientId} placeholder="…apps.googleusercontent.com" />
+		<input
+			class="input"
+			type="text"
+			bind:value={clientId}
+			placeholder="…apps.googleusercontent.com"
+		/>
 	</label>
 	<label class="field">
 		<span class="type-label">Client secret</span>
-		<input class="input" type="password" bind:value={clientSecret} placeholder="Leave blank to set this up later" />
+		<input
+			class="input"
+			type="password"
+			bind:value={clientSecret}
+			placeholder="Leave blank to set this up later"
+		/>
 	</label>
 	{#if savedGoogle}<p class="type-caption ok">Google credentials saved.</p>{/if}
 	<p class="type-caption sub">Stored only on this device, never in the project's source.</p>

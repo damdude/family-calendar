@@ -41,7 +41,7 @@
 		},
 		{ label: 'Lists', href: '/lists', icon: ClipboardList, feature: 'lists' },
 		{ label: 'Tasks', href: '/tasks', icon: SquareCheckBig, feature: 'tasks' },
-	{ label: 'Chores', href: '/chores', icon: Star, feature: 'chores' },
+		{ label: 'Chores', href: '/chores', icon: Star, feature: 'chores' },
 		{
 			label: 'Routines',
 			href: '/routines',

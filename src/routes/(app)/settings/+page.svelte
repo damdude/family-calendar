@@ -96,9 +96,7 @@
 		progress?: number;
 		installedAt?: number;
 	}
-	let version = $state<{ commit: string; dirty: boolean; update: UpdateState | null } | null>(
-		null
-	);
+	let version = $state<{ commit: string; dirty: boolean; update: UpdateState | null } | null>(null);
 	let checking = $state(false);
 	let checkMsg = $state('');
 	let installing = $state(false);
@@ -353,8 +351,8 @@
 			<label class="field">
 				<span class="type-label lbl">Family email(s)</span>
 				<p class="type-caption sub">
-					A shared address (e.g. a household inbox) — a calendar invite sent
-					to one of these tags the whole family, not any one person.
+					A shared address (e.g. a household inbox) — a calendar invite sent to one of these tags
+					the whole family, not any one person.
 				</p>
 				<input
 					class="input"
@@ -554,15 +552,16 @@
 						></span
 					>
 					<button type="button" class="pairbtn small" disabled={checking} onclick={checkUpdates}>
-						<RefreshCw size={15} class={checking ? 'spin' : ''} /> {checking ? 'Checking…' : 'Check now'}
+						<RefreshCw size={15} class={checking ? 'spin' : ''} />
+						{checking ? 'Checking…' : 'Check now'}
 					</button>
 				</div>
 				{#if checkMsg}
 					<p class="type-caption hint">{checkMsg}</p>
 				{/if}
 				<div class="row">
-					<span class="type-label">Last updated <span class="hint type-caption">{lastUpdatedLabel}</span
-						></span
+					<span class="type-label"
+						>Last updated <span class="hint type-caption">{lastUpdatedLabel}</span></span
 					>
 				</div>
 				<div class="row">
@@ -704,7 +703,10 @@
 		<!-- Factory Reset -->
 		<section class="card danger">
 			<div class="cardhead"><h2 class="type-heading">Factory Reset</h2></div>
-			<p class="type-body sub">Clear all configuration, family data, and credentials. The setup wizard will appear on the next reload. <strong>This cannot be undone.</strong></p>
+			<p class="type-body sub">
+				Clear all configuration, family data, and credentials. The setup wizard will appear on the
+				next reload. <strong>This cannot be undone.</strong>
+			</p>
 			{#if !showResetConfirm}
 				<button type="button" class="resetbtn" onclick={() => (showResetConfirm = true)}>
 					⚠️ Factory Reset
@@ -1031,7 +1033,8 @@
 		color: var(--color-text-primary);
 		border-radius: var(--radius-md);
 		font-weight: var(--weight-semibold);
-		border: 1px solid color-mix(in srgb, var(--color-accent-warning) 40%, var(--color-border-subtle));
+		border: 1px solid
+			color-mix(in srgb, var(--color-accent-warning) 40%, var(--color-border-subtle));
 		cursor: pointer;
 		transition: all 0.2s;
 	}
@@ -1047,7 +1050,8 @@
 		padding: var(--space-3);
 		background: var(--color-surface-elevated);
 		border-radius: var(--radius-md);
-		border: 1px solid color-mix(in srgb, var(--color-accent-warning) 30%, var(--color-border-subtle));
+		border: 1px solid
+			color-mix(in srgb, var(--color-accent-warning) 30%, var(--color-border-subtle));
 	}
 
 	.resetlist {
@@ -1114,13 +1118,15 @@
 	.hint.success {
 		background: color-mix(in srgb, var(--color-accent-success) 15%, var(--color-surface));
 		color: var(--color-accent-success);
-		border: 1px solid color-mix(in srgb, var(--color-accent-success) 30%, var(--color-border-subtle));
+		border: 1px solid
+			color-mix(in srgb, var(--color-accent-success) 30%, var(--color-border-subtle));
 	}
 
 	.hint.error {
 		background: color-mix(in srgb, var(--color-accent-warning) 15%, var(--color-surface));
 		color: var(--color-accent-warning);
-		border: 1px solid color-mix(in srgb, var(--color-accent-warning) 30%, var(--color-border-subtle));
+		border: 1px solid
+			color-mix(in srgb, var(--color-accent-warning) 30%, var(--color-border-subtle));
 	}
 
 	@keyframes spin {

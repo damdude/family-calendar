@@ -19,7 +19,9 @@ export const GET: RequestHandler = async ({ url, fetch }) => {
 
 	try {
 		const r = await fetch(
-			`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=8&language=en&format=json`
+			`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=8&language=en&format=json`,
+			// Open-Meteo hanging must not hang this request (and the UI) with it.
+			{ signal: AbortSignal.timeout(8000) }
 		);
 		if (!r.ok) throw error(502, 'location search failed');
 		const data = (await r.json()) as { results?: GeocodingResult[] };
