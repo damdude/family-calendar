@@ -21,6 +21,7 @@
 	import type { ProfileColor } from '$lib/types';
 	import { PROFILE_COLORS, profileColorVar, profileTint } from '$lib/design/colors';
 	import OnScreenKeyboard from './OnScreenKeyboard.svelte';
+	import SetupSecurityStep from './SetupSecurityStep.svelte';
 	import { Plus, X, Check, ChevronRight, ChevronLeft } from 'lucide-svelte';
 
 	let { token, oncomplete }: { token: string; oncomplete: (familyName: string) => void } = $props();
@@ -107,46 +108,16 @@
 		if (step > 1) step -= 1;
 	}
 
-	// Step 4: Password setup
-	let newPassword = $state('');
-	let confirmPassword = $state('');
-	let pwError = $state('');
-	let pwSuccess = $state(false);
-
-	async function saveSecuritySettings() {
-		pwError = '';
-		pwSuccess = false;
-		if (newPassword && newPassword !== confirmPassword) {
-			pwError = 'Passwords do not match';
-			return;
-		}
-		if (newPassword && newPassword.length < 6) {
-			pwError = 'Password must be at least 6 characters';
-			return;
-		}
-		if (!newPassword) {
-			// Password is optional - can skip
-			pwSuccess = true;
-			return;
-		}
-		try {
-			const r = await fetch('/api/pi-password', {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ newPassword, confirmPassword })
-			});
-			if (!r.ok) throw new Error('Failed to set password');
-			pwSuccess = true;
-		} catch (e) {
-			pwError = e instanceof Error ? e.message : 'Failed to set password';
-		}
-	}
+	let secStep = $state<SetupSecurityStep | null>(null);
 
 	async function finish() {
 		if (!canFinish) return;
 		saving = true;
 		errorMsg = '';
 		try {
+			// Password / Google credentials first: if they're invalid the
+			// family should fix them here, not discover it post-setup.
+			if (secStep && !(await secStep.save())) return;
 			const res = await fetch('/setup/complete', {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
@@ -344,43 +315,7 @@
 		</section>
 	{:else}
 		<section class="panel">
-			<h1 class="type-title">Security Setup</h1>
-			<p class="type-body sub">Set a new Pi password (optional). This becomes your SSH login password.</p>
-
-			<div class="secform">
-				<label class="field">
-					<span class="type-label">New Password (leave blank to keep default)</span>
-					<input
-						class="input"
-						type="password"
-						placeholder="Minimum 6 characters, or leave blank"
-						bind:value={newPassword}
-						maxlength="40"
-					/>
-				</label>
-				<label class="field">
-					<span class="type-label">Confirm Password</span>
-					<input
-						class="input"
-						type="password"
-						placeholder="Re-enter password"
-						bind:value={confirmPassword}
-						maxlength="40"
-					/>
-				</label>
-
-				<p class="type-caption hint" style="margin-top: 12px;">
-					💡 Google Calendar setup happens per-profile after you complete this wizard. Each family member can connect their own Google account in Settings.
-				</p>
-
-				<button type="button" class="savebtn" onclick={saveSecuritySettings}>
-					{pwSuccess ? '✅ Done' : 'Save & Continue'}
-				</button>
-
-				{#if pwError}
-					<p class="type-caption error">{pwError}</p>
-				{/if}
-			</div>
+			<SetupSecurityStep bind:this={secStep} />
 		</section>
 	{/if}
 

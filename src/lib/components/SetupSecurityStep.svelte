@@ -1,192 +1,130 @@
 <script lang="ts">
-	import { Lock, AlertCircle, CheckCircle2 } from 'lucide-svelte';
-
-	let password = $state('');
-	let confirmPassword = $state('');
-	let googleClientId = $state('');
-	let googleClientSecret = $state('');
+	/**
+	 * Final setup step, shared by BOTH wizards (the on-screen touch flow and
+	 * the phone flow). Deliberately one component rather than a copy in each:
+	 * the two wizards previously drifted apart, and a step that sets a device
+	 * password is exactly the kind of thing that must not exist in only one.
+	 *
+	 * Both fields are optional — a family with no Google account, or one happy
+	 * with the default password, can walk straight past this.
+	 */
+	let pw = $state('');
+	let pw2 = $state('');
+	let clientId = $state('');
+	let clientSecret = $state('');
 
 	let saving = $state(false);
-	let error = $state('');
-	let success = $state(false);
+	let savedPw = $state(false);
+	let savedGoogle = $state(false);
+	let err = $state('');
 
-	async function handleSave() {
-		error = '';
-		success = false;
-
-		// Validate password
-		if (password !== confirmPassword) {
-			error = 'Passwords do not match';
-			return;
-		}
-
-		if (password.length < 6) {
-			error = 'Password must be at least 6 characters';
-			return;
-		}
-
+	export async function save(): Promise<boolean> {
+		err = '';
 		saving = true;
-
 		try {
-			// Save password
-			if (password) {
-				const pwRes = await fetch('/api/pi-password', {
+			if (pw || pw2) {
+				if (pw !== pw2) throw new Error('The passwords do not match.');
+				if (pw.length < 6) throw new Error('Use at least 6 characters.');
+				const r = await fetch('/api/pi-password', {
 					method: 'POST',
 					headers: { 'content-type': 'application/json' },
-					body: JSON.stringify({ newPassword: password, confirmPassword })
+					body: JSON.stringify({ newPassword: pw, confirmPassword: pw2 })
 				});
-
-				if (!pwRes.ok) {
-					const msg = await pwRes.text();
-					throw new Error(`Password update failed: ${msg}`);
-				}
+				if (!r.ok) throw new Error('Could not change the device password.');
+				savedPw = true;
 			}
-
-			// Save environment variables (Google OAuth)
-			if (googleClientId || googleClientSecret) {
-				const envRes = await fetch('/api/setup-env', {
+			if (clientId || clientSecret) {
+				const r = await fetch('/api/setup-env', {
 					method: 'POST',
 					headers: { 'content-type': 'application/json' },
-					body: JSON.stringify({
-						googleClientId,
-						googleClientSecret
-					})
+					body: JSON.stringify({ googleClientId: clientId, googleClientSecret: clientSecret })
 				});
-
-				if (!envRes.ok) {
-					const msg = await envRes.text();
-					throw new Error(`Environment setup failed: ${msg}`);
+				if (!r.ok) {
+					const msg = await r.text().catch(() => '');
+					throw new Error(msg || 'Could not save the Google credentials.');
 				}
+				savedGoogle = true;
 			}
-
-			success = true;
-			// Clear sensitive data from memory
-			password = '';
-			confirmPassword = '';
-			googleClientId = '';
-			googleClientSecret = '';
-		} catch (err) {
-			error = err instanceof Error ? err.message : 'Setup failed';
+			return true;
+		} catch (e) {
+			err = e instanceof Error ? e.message : 'Something went wrong.';
+			return false;
 		} finally {
 			saving = false;
 		}
 	}
 </script>
 
-<div class="w-full max-w-md mx-auto p-6 bg-white rounded-lg shadow-lg space-y-6">
-	<div class="text-center space-y-2">
-		<div class="flex justify-center">
-			<Lock class="w-12 h-12 text-blue-600" />
-		</div>
-		<h2 class="text-2xl font-bold text-gray-900">Security Setup</h2>
-		<p class="text-gray-600">Set your Pi password and optional Google Calendar credentials</p>
-	</div>
+<h1 class="type-title">Device &amp; accounts</h1>
+<p class="type-body sub">Both of these are optional — you can skip straight past them.</p>
 
-	{#if error}
-		<div class="bg-red-50 border border-red-200 rounded-lg p-4 flex gap-3">
-			<AlertCircle class="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-			<div class="text-red-800 text-sm">{error}</div>
-		</div>
-	{/if}
-
-	{#if success}
-		<div class="bg-green-50 border border-green-200 rounded-lg p-4 flex gap-3">
-			<CheckCircle2 class="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-			<div class="text-green-800 text-sm">Security settings saved successfully!</div>
-		</div>
-	{/if}
-
-	<div class="space-y-4">
-		<!-- Password Section -->
-		<div class="border-t pt-4 space-y-4">
-			<h3 class="font-semibold text-gray-900">Pi Login Password</h3>
-			<p class="text-sm text-gray-600">
-				This password will be used for SSH access and system login. Choose something strong.
-			</p>
-
-			<div>
-				<label class="block text-sm font-medium text-gray-700 mb-2">New Password</label>
-				<input
-					type="password"
-					bind:value={password}
-					placeholder="Minimum 6 characters"
-					class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-				/>
-			</div>
-
-			<div>
-				<label class="block text-sm font-medium text-gray-700 mb-2">Confirm Password</label>
-				<input
-					type="password"
-					bind:value={confirmPassword}
-					placeholder="Re-enter password"
-					class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-				/>
-			</div>
-		</div>
-
-		<!-- Google OAuth Section -->
-		<div class="border-t pt-4 space-y-4">
-			<h3 class="font-semibold text-gray-900">Google Calendar (Optional)</h3>
-			<p class="text-sm text-gray-600">
-				Add your Google OAuth credentials to enable calendar sync. You can skip this and add it later
-				in Settings.
-			</p>
-
-			<div>
-				<label class="block text-sm font-medium text-gray-700 mb-2">Client ID</label>
-				<input
-					type="text"
-					bind:value={googleClientId}
-					placeholder="Leave blank to skip"
-					class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-				/>
-				<p class="text-xs text-gray-500 mt-1">
-					From Google Cloud Console → OAuth 2.0 Client IDs
-				</p>
-			</div>
-
-			<div>
-				<label class="block text-sm font-medium text-gray-700 mb-2">Client Secret</label>
-				<input
-					type="password"
-					bind:value={googleClientSecret}
-					placeholder="Leave blank to skip"
-					class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-				/>
-				<p class="text-xs text-gray-500 mt-1">Kept secure, never stored in Git</p>
-			</div>
-		</div>
-
-		<!-- Info Box -->
-		<div class="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-900">
-			<p class="font-medium mb-2">🔐 Security Note:</p>
-			<ul class="list-disc list-inside space-y-1 text-xs">
-				<li>Credentials are encrypted and never leave your Pi</li>
-				<li>They are NOT stored in the GitHub repository</li>
-				<li>Accessible only to the Pi system and your family</li>
-			</ul>
-		</div>
-
-		<button
-			on:click={handleSave}
-			disabled={saving || (!password && !googleClientId)}
-			class="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-3 rounded-lg transition-colors"
-		>
-			{#if saving}
-				<span class="flex items-center justify-center gap-2">
-					<div class="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
-					Saving...
-				</span>
-			{:else}
-				Continue to Dashboard
-			{/if}
-		</button>
-	</div>
+<div class="grp">
+	<h2 class="type-label grp-h">Device password</h2>
+	<p class="type-caption sub">Replaces the default password used to sign in to this device.</p>
+	<label class="field">
+		<span class="type-label">New password</span>
+		<input class="input" type="password" bind:value={pw} maxlength="64" placeholder="Leave blank to keep the current one" />
+	</label>
+	<label class="field">
+		<span class="type-label">Confirm password</span>
+		<input class="input" type="password" bind:value={pw2} maxlength="64" placeholder="Repeat it" />
+	</label>
+	{#if savedPw}<p class="type-caption ok">Password updated.</p>{/if}
 </div>
 
+<div class="grp">
+	<h2 class="type-label grp-h">Google Calendar</h2>
+	<p class="type-caption sub">
+		Paste the OAuth client for this device (a “TVs and Limited Input” client from the Google Cloud
+		console). Each person connects their own Google account afterwards, from Settings.
+	</p>
+	<label class="field">
+		<span class="type-label">Client ID</span>
+		<input class="input" type="text" bind:value={clientId} placeholder="…apps.googleusercontent.com" />
+	</label>
+	<label class="field">
+		<span class="type-label">Client secret</span>
+		<input class="input" type="password" bind:value={clientSecret} placeholder="Leave blank to set this up later" />
+	</label>
+	{#if savedGoogle}<p class="type-caption ok">Google credentials saved.</p>{/if}
+	<p class="type-caption sub">Stored only on this device, never in the project's source.</p>
+</div>
+
+{#if err}<p class="type-label err">{err}</p>{/if}
+{#if saving}<p class="type-caption sub">Saving…</p>{/if}
+
 <style>
-	:global(body) {
-		background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+	.sub {
+		color: var(--color-text-secondary);
+	}
+	.grp {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-2);
+		padding: var(--space-3) 0;
+		border-top: 1px solid var(--color-border-hairline);
+	}
+	.grp-h {
+		color: var(--color-text-primary);
+	}
+	.field {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+	}
+	.input {
+		padding: 12px 14px;
+		border-radius: var(--radius-md);
+		border: 1px solid var(--color-border-subtle);
+		background: var(--color-surface);
+		color: var(--color-text-primary);
+		font-size: var(--text-lg);
+		width: 100%;
+	}
+	.ok {
+		color: var(--color-accent-success);
+	}
+	.err {
+		color: var(--color-accent-warning);
 	}
 </style>

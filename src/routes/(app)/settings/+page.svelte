@@ -3,6 +3,7 @@
 	import { admin } from '$lib/stores/admin.svelte';
 	import { routinesOn } from '$lib/types';
 	import type { FeatureFlags } from '$lib/config';
+	import { FEATURE_LABELS, FEATURE_KEYS } from '$lib/features';
 	import ProfileEditor from '$lib/components/ProfileEditor.svelte';
 	import GoogleConnect from '$lib/components/GoogleConnect.svelte';
 	import CalendarLinks from '$lib/components/CalendarLinks.svelte';
@@ -196,21 +197,8 @@
 		}, 400);
 	}
 
-	const featureLabels: Record<keyof FeatureFlags, string> = {
-		calendar: 'Calendar',
-		lists: 'Lists',
-		tasks: 'Tasks',
-		rewards: 'Rewards',
-		meals: 'Meal planning',
-		recipes: 'Recipes',
-		photos: 'Photos',
-		sleep: 'Sleep mode',
-		routines: 'Kid routines',
-		feelings: "Today's Feelings",
-		sitesOfInterest: 'Sites of Interest',
-		chores: 'Chores'
-	};
-	const featureKeys = Object.keys(featureLabels) as (keyof FeatureFlags)[];
+	const featureLabels = FEATURE_LABELS;
+	const featureKeys = FEATURE_KEYS;
 
 	function toggleFeature(k: keyof FeatureFlags) {
 		family.config.features[k] = !family.config.features[k];

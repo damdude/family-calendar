@@ -11,6 +11,7 @@
 		todayDateStr
 	} from '$lib/setup/types';
 	import { PROFILE_COLORS, profileColorVar, profileTint } from '$lib/design/colors';
+	import SetupSecurityStep from '$lib/components/SetupSecurityStep.svelte';
 	import { Check, Plus, X, ChevronRight, ChevronLeft } from 'lucide-svelte';
 
 	let { data }: { data: PageData } = $props();
@@ -114,18 +115,23 @@
 	const canFinish = $derived(canLeaveStep1 && draft.profiles.length > 0);
 
 	function next() {
-		if (step < 3) step += 1;
+		if (step < 4) step += 1;
 		sync();
 	}
 	function back() {
 		if (step > 1) step -= 1;
 	}
 
+	let secStep = $state<SetupSecurityStep | null>(null);
+
 	async function finish() {
 		if (!canFinish) return;
 		saving = true;
 		errorMsg = '';
 		try {
+			// Password / Google credentials first: if they're invalid the
+			// family should fix them here, not discover it post-setup.
+			if (secStep && !(await secStep.save())) return;
 			const res = await fetch('/setup/complete', {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
@@ -153,7 +159,7 @@
 		<header class="whead">
 			<span class="brand type-label">Family Calendar setup</span>
 			<div class="steps" aria-hidden="true">
-				{#each [1, 2, 3] as s (s)}
+				{#each [1, 2, 3, 4] as s (s)}
 					<span class="pip" class:on={s <= step}></span>
 				{/each}
 			</div>
@@ -281,7 +287,7 @@
 					{/if}
 				</div>
 			</section>
-		{:else}
+		{:else if step === 3}
 			<section class="panel">
 				<h1 class="type-title">Review</h1>
 				<div class="review">
@@ -312,6 +318,10 @@
 				</p>
 				{#if errorMsg}<p class="err type-label">{errorMsg}</p>{/if}
 			</section>
+		{:else}
+			<section class="panel">
+				<SetupSecurityStep bind:this={secStep} />
+			</section>
 		{/if}
 
 		<footer class="nav">
@@ -323,7 +333,7 @@
 				<span></span>
 			{/if}
 
-			{#if step < 3}
+			{#if step < 4}
 				<button
 					type="button"
 					class="btn primary"

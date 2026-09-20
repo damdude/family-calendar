@@ -1,62 +1,56 @@
 import { error, json } from '@sveltejs/kit';
 import { z } from 'zod';
-import { writeFileSync, readFileSync } from 'fs';
-import { join } from 'path';
+import fsp from 'node:fs/promises';
+import path from 'node:path';
 import type { RequestHandler } from './$types';
 
 const BodySchema = z.object({
-	googleClientId: z.string().optional().default(''),
-	googleClientSecret: z.string().optional().default('')
+	googleClientId: z.string().trim().default(''),
+	googleClientSecret: z.string().trim().default('')
 });
 
+const ENV_PATH = path.resolve('.env');
+
+/** Rewrite a single KEY=value line in an .env file, preserving everything else
+ *  (comments, ordering, unrelated keys). Appends the key if absent. */
+function setEnvLine(contents: string, key: string, value: string): string {
+	const lines = contents.split('\n');
+	const i = lines.findIndex((l) => l.startsWith(`${key}=`));
+	if (i === -1) return `${contents.replace(/\n*$/, '')}\n${key}=${value}\n`;
+	lines[i] = `${key}=${value}`;
+	return lines.join('\n');
+}
+
 /**
- * Save environment variables to .env during setup.
- * These are sensitive credentials that should be kept secure and never committed.
+ * Save the device-level Google OAuth client credentials from the setup wizard.
+ *
+ * These are written to .env so they survive a restart, AND applied to
+ * process.env immediately — isGoogleConfigured() reads process.env at call
+ * time, so without the second step the family would have to restart the
+ * service before any profile could connect an account.
  */
 export const POST: RequestHandler = async ({ request }) => {
 	const parsed = BodySchema.safeParse(await request.json().catch(() => null));
-	if (!parsed.success) throw error(400, parsed.error.message);
+	if (!parsed.success) throw error(400, 'invalid credentials payload');
 
 	const { googleClientId, googleClientSecret } = parsed.data;
+	if (!googleClientId && !googleClientSecret) return json({ ok: true, saved: false });
+	if (!googleClientId || !googleClientSecret) {
+		throw error(400, 'Both the client ID and the client secret are required.');
+	}
 
 	try {
-		const envPath = join(process.cwd(), '.env');
+		let contents = await fsp.readFile(ENV_PATH, 'utf8').catch(() => '');
+		contents = setEnvLine(contents, 'GOOGLE_OAUTH_CLIENT_ID', googleClientId);
+		contents = setEnvLine(contents, 'GOOGLE_OAUTH_CLIENT_SECRET', googleClientSecret);
+		await fsp.writeFile(ENV_PATH, contents, { mode: 0o600 });
 
-		// Read existing .env (if it exists) to preserve other vars
-		let envContent = '';
-		try {
-			envContent = readFileSync(envPath, 'utf-8');
-		} catch {
-			// File doesn't exist yet, that's fine
-		}
+		process.env.GOOGLE_OAUTH_CLIENT_ID = googleClientId;
+		process.env.GOOGLE_OAUTH_CLIENT_SECRET = googleClientSecret;
 
-		// Parse existing env vars
-		const envMap = new Map<string, string>();
-		envContent.split('\n').forEach((line) => {
-			const match = line.match(/^([^=]+)=(.*)/);
-			if (match && !line.startsWith('#')) {
-				envMap.set(match[1], match[2]);
-			}
-		});
-
-		// Update with new values (only if provided/non-empty)
-		if (googleClientId) {
-			envMap.set('GOOGLE_OAUTH_CLIENT_ID', googleClientId);
-		}
-		if (googleClientSecret) {
-			envMap.set('GOOGLE_OAUTH_CLIENT_SECRET', googleClientSecret);
-		}
-
-		// Write back
-		const newEnv = Array.from(envMap.entries())
-			.map(([key, val]) => `${key}=${val}`)
-			.join('\n');
-
-		writeFileSync(envPath, newEnv, 'utf-8');
-
-		return json({ ok: true, message: 'Environment variables saved' });
+		return json({ ok: true, saved: true });
 	} catch (err) {
-		console.error('Failed to save environment:', err);
-		throw error(500, 'Failed to save environment variables');
+		console.error('Failed to save Google credentials:', err);
+		throw error(500, 'Could not save the credentials to this device.');
 	}
 };
