@@ -242,8 +242,8 @@
 				})
 			);
 			if (r.ok) {
-				resetMsg = '✅ Factory reset complete. Reloading...';
-				setTimeout(() => location.reload(), 1500);
+				resetMsg =
+					'Factory reset complete. The device is forgetting its Wi-Fi and restarting — it will come back up asking to be set up from scratch.';
 			} else {
 				resetErr = `Failed: ${r.status}`;
 			}
@@ -728,8 +728,8 @@
 		<section class="card danger">
 			<div class="cardhead"><h2 class="type-heading">Factory Reset</h2></div>
 			<p class="type-body sub">
-				Clear all configuration, family data, and credentials. The setup wizard will appear on the
-				next reload. <strong>This cannot be undone.</strong>
+				Returns the device to its just-flashed state, including forgetting the Wi-Fi network, then
+				restarts it. <strong>This cannot be undone.</strong>
 			</p>
 			{#if !showResetConfirm}
 				<button type="button" class="resetbtn" onclick={() => (showResetConfirm = true)}>
@@ -744,6 +744,7 @@
 						<li>❌ Remove all photos</li>
 						<li>❌ Reset Google Calendar connections</li>
 						<li>❌ Clear all chores and rewards</li>
+						<li>❌ Forget the Wi-Fi network and restart the device</li>
 					</ul>
 					<div class="resetbtns">
 						<button type="button" class="cancelbtn" onclick={() => (showResetConfirm = false)}>

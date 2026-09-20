@@ -145,6 +145,10 @@ install -m 755 "${APP_DIR}/scripts/wifi-join.sh" /usr/local/bin/fc-wifi-join 2>/
 # password arrives on stdin, never as an argument.
 install -m 755 "${APP_DIR}/scripts/set-password.sh" /usr/local/bin/fc-set-password 2>/dev/null || true
 
+# Forgets stored Wi-Fi during a factory reset; those credentials live in
+# NetworkManager, outside the app's data directory.
+install -m 755 "${APP_DIR}/scripts/factory-reset-net.sh" /usr/local/bin/fc-factory-reset-net 2>/dev/null || true
+
 cat > /etc/systemd/system/family-calendar-wifi.service <<UNIT
 [Unit]
 Description=Family Calendar first-boot Wi-Fi onboarding (captive portal)
@@ -174,6 +178,7 @@ ${DASH_USER} ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart family-calendar, \
   /usr/local/bin/fc-nas-mount, \
   /usr/local/bin/fc-wifi-join, \
   /usr/local/bin/fc-set-password, \
+  /usr/local/bin/fc-factory-reset-net, \
   /usr/bin/systemctl reboot, /sbin/reboot
 SUDO
 chmod 440 /etc/sudoers.d/family-calendar
