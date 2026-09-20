@@ -1,6 +1,6 @@
 import { error, json } from '@sveltejs/kit';
 import { loadConfig, saveConfig } from '$lib/server/config';
-import { getDatabase } from '$lib/server/db';
+import { getDb } from '$lib/server/db';
 import type { RequestHandler } from './$types';
 
 /**
@@ -16,7 +16,7 @@ export const POST: RequestHandler = async ({ request }) => {
 	}
 
 	try {
-		const db = getDatabase();
+		const db = getDb();
 
 		// Clear all tables
 		db.exec(`
