@@ -42,6 +42,31 @@ export interface DeviceCode {
 	interval: number;
 }
 
+/**
+ * Google explains OAuth failures in the response BODY, not the status line —
+ * a device-code 401 is almost always {"error":"invalid_client"}, which means
+ * the credentials are for the wrong kind of OAuth client rather than being
+ * mistyped. Reporting only "failed: 401" hid that and sent debugging in the
+ * wrong direction, so every one of these now carries Google's own wording.
+ */
+async function googleError(res: Response, what: string): Promise<Error> {
+	const raw = await res.text().catch(() => '');
+	let detail = raw.slice(0, 300);
+	try {
+		const j = JSON.parse(raw);
+		const code = j.error ?? '';
+		const desc = j.error_description ?? '';
+		if (code || desc) detail = [code, desc].filter(Boolean).join(': ');
+	} catch {
+		/* not JSON — keep the truncated raw body */
+	}
+	const hint =
+		res.status === 401 && /invalid_client/.test(raw)
+			? ' — check the OAuth client is the "TVs and Limited Input devices" type; other types are rejected by the device flow'
+			: '';
+	return new Error(`${what} failed: ${res.status}${detail ? ` (${detail})` : ''}${hint}`);
+}
+
 /** Step 1: request a device + user code to show on the Pi. */
 export async function startDeviceFlow(): Promise<DeviceCode> {
 	const { clientId } = creds();
@@ -50,7 +75,7 @@ export async function startDeviceFlow(): Promise<DeviceCode> {
 		headers: { 'content-type': 'application/x-www-form-urlencoded' },
 		body: new URLSearchParams({ client_id: clientId, scope: CALENDAR_SCOPE })
 	});
-	if (!res.ok) throw new Error(`device code request failed: ${res.status}`);
+	if (!res.ok) throw await googleError(res, 'device code request');
 	const j = await res.json();
 	return {
 		deviceCode: j.device_code,
@@ -116,7 +141,7 @@ export async function refreshAccessToken(
 			grant_type: 'refresh_token'
 		})
 	});
-	if (!res.ok) throw new Error(`token refresh failed: ${res.status}`);
+	if (!res.ok) throw await googleError(res, 'token refresh');
 	const j = await res.json();
 	return { accessToken: j.access_token, expiresIn: j.expires_in };
 }
@@ -132,7 +157,7 @@ export async function listCalendars(accessToken: string): Promise<GoogleCalendar
 	const res = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList', {
 		headers: { authorization: `Bearer ${accessToken}` }
 	});
-	if (!res.ok) throw new Error(`calendarList failed: ${res.status}`);
+	if (!res.ok) throw await googleError(res, 'calendarList');
 	const j = await res.json();
 	return (j.items ?? []).map((c: Record<string, unknown>) => ({
 		id: c.id as string,
@@ -172,7 +197,7 @@ export async function listEvents(
 	url.searchParams.set('maxResults', '250');
 
 	const res = await fetch(url, { headers: { authorization: `Bearer ${accessToken}` } });
-	if (!res.ok) throw new Error(`events.list failed: ${res.status}`);
+	if (!res.ok) throw await googleError(res, 'events.list');
 	const j = await res.json();
 
 	return (j.items ?? [])
