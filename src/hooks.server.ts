@@ -2,7 +2,8 @@ import { json } from '@sveltejs/kit';
 import type { Handle } from '@sveltejs/kit';
 import { startScheduler } from '$lib/server/cron';
 import { isPinSet } from '$lib/server/pin';
-import { isValidSessionToken, SESSION_COOKIE } from '$lib/server/session';
+import { ELEVATED_COOKIE, isValidSessionToken, SESSION_COOKIE } from '$lib/server/session';
+import { loadConfig } from '$lib/server/config';
 
 // Start background jobs (calendar sync, later: scrape, OTA) once on boot.
 startScheduler();
@@ -26,12 +27,25 @@ const PIN_GATED_PATHS = new Set([
 	'/api/storage/nas/browse',
 	'/api/storage/nas/mount',
 	'/api/storage/nas/shares',
+	'/api/update/install'
+]);
+
+/**
+ * Actions that change the device itself rather than the family's content:
+ * installing new code, wiping everything, moving where data lives, mounting a
+ * network share. These require the device LOGIN password — the one chosen in
+ * the setup wizard — re-entered within the last few minutes, on whichever
+ * screen is being used (the TV's on-screen keyboard or the phone).
+ *
+ * Only enforced once that password has actually been set. A device still on
+ * the shipped default, or one that was just factory-reset, would otherwise
+ * demand a password nobody has chosen yet and could never be set up again.
+ */
+const PASSWORD_GATED_PATHS = new Set([
 	'/api/update/install',
-	// Erases every profile, calendar, chore, photo and credential on the
-	// device. The endpoint's `confirm` string is in client JS, so it proves
-	// intent, not authority — without this a single unauthenticated POST
-	// from anything on the LAN could wipe the appliance.
-	'/api/factory-reset'
+	'/api/factory-reset',
+	'/api/storage/migrate',
+	'/api/storage/nas/mount'
 ]);
 
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
@@ -72,6 +86,16 @@ export const handle: Handle = async ({ event, resolve }) => {
 		}
 		if (originHost !== host) {
 			return json({ message: 'Cross-site request blocked' }, { status: 403 });
+		}
+	}
+
+	if (PASSWORD_GATED_PATHS.has(pathname)) {
+		const { devicePasswordSet } = await loadConfig();
+		if (devicePasswordSet && !isValidSessionToken(event.cookies.get(ELEVATED_COOKIE), 'elevated')) {
+			return json(
+				{ message: 'Device password required', needsDevicePassword: true },
+				{ status: 401 }
+			);
 		}
 	}
 

@@ -18,16 +18,31 @@ export const SESSION_COOKIE = 'fc_session';
 const TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days — re-enter the PIN roughly monthly, not every visit
 export const SESSION_MAX_AGE_SECONDS = TTL_MS / 1000;
 
+/**
+ * 'pin' proves the parental PIN was entered; 'elevated' proves the device
+ * LOGIN password was entered just now, and is what the genuinely destructive
+ * actions require (installing an update, wiping the device, moving where data
+ * lives). Elevated is deliberately short-lived: it should cover the action the
+ * family is in the middle of, not linger on a screen anyone walks past.
+ */
+export type SessionScope = 'pin' | 'elevated';
+export const ELEVATED_COOKIE = 'fc_elevated';
+const ELEVATED_TTL_MS = 5 * 60 * 1000;
+export const ELEVATED_MAX_AGE_SECONDS = ELEVATED_TTL_MS / 1000;
+
 function sign(b64Payload: string): string {
 	return crypto.createHmac('sha256', sessionSigningKey()).update(b64Payload).digest('base64url');
 }
 
-export function createSessionToken(): string {
-	const b64 = Buffer.from(JSON.stringify({ iat: Date.now() })).toString('base64url');
+export function createSessionToken(scope: SessionScope = 'pin'): string {
+	const b64 = Buffer.from(JSON.stringify({ iat: Date.now(), scope })).toString('base64url');
 	return `${b64}.${sign(b64)}`;
 }
 
-export function isValidSessionToken(token: string | undefined | null): boolean {
+export function isValidSessionToken(
+	token: string | undefined | null,
+	scope: SessionScope = 'pin'
+): boolean {
 	if (!token) return false;
 	const dot = token.indexOf('.');
 	if (dot < 0) return false;
@@ -46,7 +61,13 @@ export function isValidSessionToken(token: string | undefined | null): boolean {
 
 	try {
 		const payload = JSON.parse(Buffer.from(b64, 'base64url').toString('utf8'));
-		return typeof payload.iat === 'number' && Date.now() - payload.iat <= TTL_MS;
+		if (typeof payload.iat !== 'number') return false;
+		// Tokens minted before scopes existed carry no scope; they were only
+		// ever PIN sessions, so treat them as such rather than rejecting them.
+		const tokenScope: SessionScope = payload.scope === 'elevated' ? 'elevated' : 'pin';
+		if (tokenScope !== scope) return false;
+		const ttl = scope === 'elevated' ? ELEVATED_TTL_MS : TTL_MS;
+		return Date.now() - payload.iat <= ttl;
 	} catch {
 		return false;
 	}

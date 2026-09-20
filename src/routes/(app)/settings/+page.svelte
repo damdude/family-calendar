@@ -10,6 +10,7 @@
 	import StoragePanel from '$lib/components/StoragePanel.svelte';
 	import PinPad from '$lib/components/PinPad.svelte';
 	import WifiPicker from '$lib/components/WifiPicker.svelte';
+	import DevicePasswordPrompt from '$lib/components/DevicePasswordPrompt.svelte';
 	import { QrCode, Check, RefreshCw, Wifi } from 'lucide-svelte';
 
 	// Wi-Fi status + "change network" panel.
@@ -141,10 +142,29 @@
 		}
 	}
 
+	let pwPrompt = $state<DevicePasswordPrompt | null>(null);
+
+	/**
+	 * Run a request that the server may gate behind the device password. On a
+	 * 401 asking for it, prompt (on screen or on the phone, whichever is being
+	 * used) and replay the request once.
+	 */
+	async function privileged(run: () => Promise<Response>): Promise<Response> {
+		const first = await run();
+		if (first.status !== 401) return first;
+		const body = await first
+			.clone()
+			.json()
+			.catch(() => null);
+		if (!body?.needsDevicePassword) return first;
+		const ok = await pwPrompt?.request();
+		return ok ? run() : first;
+	}
+
 	async function installUpdate() {
 		installing = true;
 		try {
-			await fetch('/api/update/install', { method: 'POST' });
+			await privileged(() => fetch('/api/update/install', { method: 'POST' }));
 			await loadVersion();
 		} finally {
 			installing = false;
@@ -214,11 +234,13 @@
 		resetMsg = '';
 		resetErr = '';
 		try {
-			const r = await fetch('/api/factory-reset', {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ confirm: 'FACTORY_RESET_CONFIRM' })
-			});
+			const r = await privileged(() =>
+				fetch('/api/factory-reset', {
+					method: 'POST',
+					headers: { 'content-type': 'application/json' },
+					body: JSON.stringify({ confirm: 'FACTORY_RESET_CONFIRM' })
+				})
+			);
 			if (r.ok) {
 				resetMsg = '✅ Factory reset complete. Reloading...';
 				setTimeout(() => location.reload(), 1500);
@@ -232,6 +254,8 @@
 		}
 	}
 </script>
+
+<DevicePasswordPrompt bind:this={pwPrompt} />
 
 <div class="settings">
 	<div class="pagehead">

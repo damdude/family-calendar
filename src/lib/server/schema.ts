@@ -178,6 +178,13 @@ export const PersistedConfigSchema = z.object({
 	displayMode: z.enum(['tv', 'touch']).nullable().default(null),
 	/** The family chose "set up Wi-Fi later". */
 	wifiSkipped: z.boolean().default(false),
+	/**
+	 * The setup wizard successfully replaced the default device password.
+	 * Gates the elevated-password prompt in hooks.server.ts: a device still on
+	 * the shipped default (or freshly factory-reset) must not demand a password
+	 * nobody has set yet, which would make it impossible to finish setting up.
+	 */
+	devicePasswordSet: z.boolean().default(false),
 	family: PersistedFamilySchema.default({
 		name: '',
 		timezone: 'UTC',

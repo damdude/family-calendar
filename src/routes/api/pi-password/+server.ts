@@ -2,6 +2,7 @@ import { error, json } from '@sveltejs/kit';
 import { z } from 'zod';
 import { spawn } from 'node:child_process';
 import { getSession } from '$lib/server/pairing';
+import { loadConfig, saveConfig } from '$lib/server/config';
 import type { RequestHandler } from './$types';
 
 /** Control characters would corrupt the single `user:password` line the helper
@@ -75,5 +76,11 @@ export const POST: RequestHandler = async ({ request }) => {
 		console.error('Password change failed:', result.message);
 		throw error(500, 'Could not change the device password.');
 	}
+
+	// From here on the device has a password the family actually chose, so the
+	// privileged actions can start demanding it.
+	const config = await loadConfig();
+	if (!config.devicePasswordSet) await saveConfig({ ...config, devicePasswordSet: true });
+
 	return json({ ok: true });
 };
