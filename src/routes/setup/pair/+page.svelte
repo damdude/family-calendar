@@ -124,6 +124,20 @@
 
 	let secStep = $state<SetupSecurityStep | null>(null);
 
+	// The wizard can sit open for a long time — reading the Google Cloud
+	// console in another tab, finding a Wi-Fi password. Keep the pairing
+	// session warm so it can't lapse mid-setup.
+	$effect(() => {
+		const id = setInterval(() => {
+			fetch('/setup/heartbeat', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ token: data.token })
+			}).catch(() => {});
+		}, 300_000);
+		return () => clearInterval(id);
+	});
+
 	async function finish() {
 		if (!canFinish) return;
 		saving = true;

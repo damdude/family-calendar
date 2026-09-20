@@ -66,6 +66,12 @@ export function getSession(token: string | null | undefined): PairingSession | n
 		sessions.delete(token);
 		return null;
 	}
+	// Reading a live session counts as activity. Without this the "sliding
+	// inactivity window" described above was really a fixed timer from
+	// creation: a family that paused partway through the wizard came back to
+	// a dead token, and the failure surfaced as whatever the step they were
+	// on happened to be doing.
+	s.lastActiveAt = Date.now();
 	return s;
 }
 

@@ -15,6 +15,15 @@
 	let clientId = $state('');
 	let clientSecret = $state('');
 
+	/** SvelteKit's error() replies with { message }. Reporting a hardcoded
+	 *  string instead hid a real cause once already: an expired setup session
+	 *  surfaced as "could not change the device password", which is a
+	 *  different problem entirely. */
+	async function serverMessage(r: Response, fallback: string): Promise<string> {
+		const body = await r.json().catch(() => null);
+		return typeof body?.message === 'string' && body.message ? body.message : fallback;
+	}
+
 	let saving = $state(false);
 	let savedPw = $state(false);
 	let savedGoogle = $state(false);
