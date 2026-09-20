@@ -41,7 +41,7 @@
 					headers: { 'content-type': 'application/json' },
 					body: JSON.stringify({ token, newPassword: pw, confirmPassword: pw2 })
 				});
-				if (!r.ok) throw new Error('Could not change the device password.');
+				if (!r.ok) throw new Error(await serverMessage(r, 'Could not change the device password.'));
 				savedPw = true;
 			}
 			if (clientId || clientSecret) {
@@ -54,10 +54,8 @@
 						googleClientSecret: clientSecret
 					})
 				});
-				if (!r.ok) {
-					const msg = await r.text().catch(() => '');
-					throw new Error(msg || 'Could not save the Google credentials.');
-				}
+				if (!r.ok)
+					throw new Error(await serverMessage(r, 'Could not save the Google credentials.'));
 				savedGoogle = true;
 			}
 			return true;
