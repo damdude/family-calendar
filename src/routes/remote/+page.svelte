@@ -835,12 +835,34 @@
 		sleep: 'Sleep mode',
 		routines: 'Kid routines',
 		feelings: "Today's Feelings",
-		sitesOfInterest: 'Sites of Interest'
+		sitesOfInterest: 'Sites of Interest',
+		chores: 'Chores'
 	};
 	const featureKeys = Object.keys(featureLabels) as (keyof FeatureFlags)[];
 	function toggleFeature(k: keyof FeatureFlags) {
 		cfg.app.features[k] = !cfg.app.features[k];
 		persistCfg();
+	}
+
+	// Factory reset (mirrors the one in the on-device Settings page).
+	let showResetConfirm = $state(false);
+	let resetting = $state(false);
+	let resetErr = $state('');
+	async function performFactoryReset() {
+		resetting = true;
+		resetErr = '';
+		try {
+			const r = await fetch('/api/factory-reset', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ confirm: 'FACTORY_RESET_CONFIRM' })
+			});
+			if (!r.ok) throw new Error(`HTTP ${r.status}`);
+			window.location.href = '/setup';
+		} catch (e) {
+			resetErr = e instanceof Error ? e.message : 'Factory reset failed';
+			resetting = false;
+		}
 	}
 
 	async function setDisplayMode(mode: 'tv' | 'touch') {
@@ -2336,6 +2358,37 @@
 						Current: {data.latitude.toFixed(2)}, {data.longitude.toFixed(2)} ({data.timezone})
 					</p>
 				{/if}
+			</section>
+
+			<section class="card">
+				<h2 class="type-label sec-h">Factory reset</h2>
+				<p class="type-caption sub">
+					Clears all configuration, family data and credentials, then reopens the setup wizard.
+					This cannot be undone.
+				</p>
+				{#if !showResetConfirm}
+					<button type="button" class="btn danger" onclick={() => (showResetConfirm = true)}>
+						Factory reset
+					</button>
+				{:else}
+					<p class="type-caption sub">
+						Deletes every profile, calendar, chore, meal, list, photo and reward.
+					</p>
+					<div class="row">
+						<button type="button" class="btn" onclick={() => (showResetConfirm = false)}>
+							Cancel
+						</button>
+						<button
+							type="button"
+							class="btn danger"
+							disabled={resetting}
+							onclick={performFactoryReset}
+						>
+							{resetting ? 'Resetting…' : 'Yes, erase everything'}
+						</button>
+					</div>
+				{/if}
+				{#if resetErr}<p class="type-caption err">{resetErr}</p>{/if}
 			</section>
 
 			<section class="card">

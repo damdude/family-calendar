@@ -9,6 +9,7 @@ import path from 'node:path';
 import { z } from 'zod';
 import { DATA_DIR } from './paths';
 import { atomicWriteFile } from './atomicWrite';
+import { loadConfig } from './config';
 
 const MealSchema = z.object({
 	id: z.number().int(),
@@ -154,7 +155,7 @@ export type ListInput = z.infer<typeof ListSchema>;
 export type RewardInput = z.infer<typeof RewardSchema>;
 export type ChoreInput = z.infer<typeof ChoreSchema>;
 
-function emptyData(): FamilyDataPersist {
+export function emptyData(): FamilyDataPersist {
 	return {
 		meals: [],
 		lists: [],
@@ -514,7 +515,7 @@ export async function resetCompletedChores(frequency: 'daily' | 'weekly'): Promi
 		// Reset if it matches the frequency (daily resets every day, weekly on Sunday)
 		let shouldReset = false;
 		if (frequency === 'daily') {
-			shouldReset = chore.completed && chore.dueDate && chore.dueDate !== today;
+			shouldReset = Boolean(chore.completed && chore.dueDate && chore.dueDate !== today);
 		} else if (frequency === 'weekly' && now.getDay() === 0) {
 			// Sunday - reset weekly chores
 			shouldReset = chore.completed;

@@ -1,6 +1,6 @@
 import { error, json } from '@sveltejs/kit';
 import { z } from 'zod';
-import { completeChore, loadFamilyData, saveFamilyData } from '$lib/server/familydata';
+import { completeChore, emptyData, loadFamilyData, saveFamilyData } from '$lib/server/familydata';
 import type { RequestHandler } from './$types';
 
 const CompleteBody = z.object({ profileId: z.number().int() });
@@ -16,11 +16,11 @@ export const POST: RequestHandler = async ({ params, request }) => {
 		if (!chore) throw new Error('Chore not found');
 
 		// Award stars to the profile
-		const data = (await loadFamilyData()) || { stars: [] };
-		let starBalance = data.stars?.find((s) => s.profileId === parsed.data.profileId);
+		const data = (await loadFamilyData()) ?? emptyData();
+		let starBalance = data.stars.find((s) => s.profileId === parsed.data.profileId);
 		if (!starBalance) {
 			starBalance = { profileId: parsed.data.profileId, stars: 0 };
-			data.stars?.push(starBalance);
+			data.stars.push(starBalance);
 		}
 		starBalance.stars += chore.starReward;
 		await saveFamilyData(data);

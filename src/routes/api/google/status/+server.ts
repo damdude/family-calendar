@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { isGoogleConfigured } from '$lib/server/google';
-import { isGoogleConnected, getAllGoogleTokens } from '$lib/server/sync';
+import { isGoogleConnected } from '$lib/server/sync';
 import { getOAuthToken, getAllGoogleTokens as getAllGoogleTokensRepo } from '$lib/server/db/repo';
 import type { RequestHandler } from './$types';
 
