@@ -19,7 +19,7 @@
 import dns from 'node:dns/promises';
 import net from 'node:net';
 
-function isPrivateIp(ip: string): boolean {
+export function isPrivateIp(ip: string): boolean {
 	if (net.isIPv4(ip)) {
 		const parts = ip.split('.').map(Number);
 		const [a, b] = parts;

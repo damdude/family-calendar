@@ -3,6 +3,7 @@ import { z } from 'zod';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { getSession } from '$lib/server/pairing';
+import { setEnvLine } from '$lib/server/envFile';
 import type { RequestHandler } from './$types';
 
 const BodySchema = z.object({
@@ -12,16 +13,6 @@ const BodySchema = z.object({
 });
 
 const ENV_PATH = path.resolve('.env');
-
-/** Rewrite a single KEY=value line in an .env file, preserving everything else
- *  (comments, ordering, unrelated keys). Appends the key if absent. */
-function setEnvLine(contents: string, key: string, value: string): string {
-	const lines = contents.split('\n');
-	const i = lines.findIndex((l) => l.startsWith(`${key}=`));
-	if (i === -1) return `${contents.replace(/\n*$/, '')}\n${key}=${value}\n`;
-	lines[i] = `${key}=${value}`;
-	return lines.join('\n');
-}
 
 /**
  * Save the device-level Google OAuth client credentials from the setup wizard.

@@ -1,0 +1,43 @@
+name: CI
+
+# Nothing ran the type checker, the linter or any test before this workflow
+# existed, so breakage only surfaced on the device: a route that imported a
+# name the module never exported, a config object missing required fields, and
+# a feature flag absent from the schema all shipped green because `vite build`
+# does not typecheck.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # better-sqlite3 builds from source here (.npmrc), which needs no extra
+      # setup on the runner but is why this is `npm ci` rather than a cache-only
+      # install.
+      - run: npm ci
+
+      # svelte-kit sync generates ./$types, which svelte-check needs.
+      - run: npx svelte-kit sync
+
+      - name: Typecheck
+        run: npx svelte-check --threshold error
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build

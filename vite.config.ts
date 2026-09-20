@@ -1,7 +1,7 @@
 import adapter from '@sveltejs/adapter-node';
 import { sveltekit } from '@sveltejs/kit/vite';
 import tailwindcss from '@tailwindcss/vite';
-import { defineConfig } from 'vite';
+import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
 	plugins: [
@@ -17,5 +17,13 @@ export default defineConfig({
 			// server, required for SQLite/cron/SSE). `build/` runs with `node build`.
 			adapter: adapter()
 		})
-	]
+	],
+
+	test: {
+		// Server-side logic only — these are pure-function tests, so they need
+		// Node rather than a DOM, and the SvelteKit plugin above already
+		// supplies the $lib resolution they rely on.
+		environment: 'node',
+		include: ['src/**/*.test.ts']
+	}
 });

@@ -13,7 +13,9 @@
 		"lint": "prettier --check . && eslint .",
 		"format": "prettier --write .",
 		"dev:first-boot": "node scripts/dev-first-boot.mjs",
-		"dev:offline": "FC_FORCE_OFFLINE=1 vite dev"
+		"dev:offline": "FC_FORCE_OFFLINE=1 vite dev",
+		"test": "vitest run",
+		"test:watch": "vitest"
 	},
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",
@@ -37,7 +39,8 @@
 		"tailwindcss": "^4.3.3",
 		"typescript": "^6.0.3",
 		"typescript-eslint": "^8.60.1",
-		"vite": "^8.0.16"
+		"vite": "^8.0.16",
+		"vitest": "^5.0.1"
 	},
 	"dependencies": {
 		"@mozilla/readability": "^0.6.0",

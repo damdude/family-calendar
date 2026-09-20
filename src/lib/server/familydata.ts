@@ -480,7 +480,7 @@ export interface ChoreStats {
 }
 
 /** Pure: stats for one profile from an already-loaded data set. */
-function choreStatsFor(chores: ChoreInput[], profileId: number): ChoreStats {
+export function choreStatsFor(chores: ChoreInput[], profileId: number): ChoreStats {
 	let totalClaimed = 0;
 	let totalCompleted = 0;
 	let totalStarsEarned = 0;
