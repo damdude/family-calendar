@@ -79,7 +79,8 @@ const FeatureFlagsSchema = z
 		sleep: z.boolean().default(true),
 		routines: z.boolean().default(true),
 		feelings: z.boolean().default(true),
-		sitesOfInterest: z.boolean().default(true)
+		sitesOfInterest: z.boolean().default(true),
+		chores: z.boolean().default(true)
 	})
 	.prefault({});
 

@@ -99,6 +99,7 @@
 		null
 	);
 	let checking = $state(false);
+	let checkMsg = $state('');
 	let installing = $state(false);
 	let pollTimer: ReturnType<typeof setInterval>;
 
@@ -121,17 +122,21 @@
 
 	async function checkUpdates() {
 		checking = true;
+		checkMsg = '';
 		try {
 			const r = await fetch('/api/update', { method: 'POST' });
-			if (!r.ok) {
-				console.error('Update check failed:', r.status);
-			}
-			// The check itself finishes in well under a second (just a git
-			// fetch) — one short delay then a reload is simpler and just as
-			// accurate as trying to detect completion some other way.
-			setTimeout(loadVersion, 1500);
-		} catch (err) {
-			console.error('Update check error:', err);
+			if (!r.ok) throw new Error(`HTTP ${r.status}`);
+			// The systemd unit runs a git fetch; hold `checking` until it has
+			// finished and the re-read state is in hand, so the spinner is
+			// visible for the whole check rather than a single frame.
+			await new Promise((res) => setTimeout(res, 2500));
+			await loadVersion();
+			const u = version?.update;
+			if (u?.status === 'available') checkMsg = '';
+			else if (u?.status === 'failed') checkMsg = `Check failed: ${u.error ?? 'unknown error'}`;
+			else checkMsg = "You're on the latest version";
+		} catch {
+			checkMsg = 'Could not run the update check.';
 		} finally {
 			checking = false;
 		}
@@ -564,8 +569,8 @@
 						<RefreshCw size={15} class={checking ? 'spin' : ''} /> {checking ? 'Checking…' : 'Check now'}
 					</button>
 				</div>
-				{#if !checking && version && !version.update}
-					<p class="type-caption hint">You're on the latest version</p>
+				{#if checkMsg}
+					<p class="type-caption hint">{checkMsg}</p>
 				{/if}
 				<div class="row">
 					<span class="type-label">Last updated <span class="hint type-caption">{lastUpdatedLabel}</span
