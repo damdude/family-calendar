@@ -21,12 +21,28 @@ import { emptyDraft, type SetupDraft } from '$lib/setup/types';
 // short enough to clean up abandoned sessions.
 const TTL_MS = 30 * 60 * 1000;
 
+/** A Google account authorised during the wizard, before the profile it
+ *  belongs to has a real id. */
+export interface PendingGoogleToken {
+	refreshToken: string;
+	accessToken: string;
+	accessExpiresAt: number;
+}
+
 export interface PairingSession {
 	token: string;
 	createdAt: number;
 	lastActiveAt: number;
 	claimedAt?: number;
 	draft: SetupDraft;
+	/**
+	 * Google tokens captured mid-wizard, keyed by the DRAFT profile id, and
+	 * deliberately kept out of `draft`: the draft is broadcast to the kiosk
+	 * over SSE for the live preview, and refresh tokens have no business on
+	 * that channel. Persisted against the real profile ids by
+	 * /setup/complete, which is the first moment those ids exist.
+	 */
+	pendingGoogle: Map<string, PendingGoogleToken>;
 	completed: boolean;
 	// Flag: this token's page has been served (don't rotate on re-render)
 	pageServed?: boolean;
@@ -51,6 +67,7 @@ export function createPairing(): { token: string; expiresAt: number } {
 		createdAt: now,
 		lastActiveAt: now,
 		draft: emptyDraft(),
+		pendingGoogle: new Map(),
 		completed: false
 	});
 	return { token, expiresAt: now + TTL_MS };
@@ -92,6 +109,18 @@ export function updateDraft(token: string, draft: SetupDraft): PairingSession | 
 		s.lastActiveAt = Date.now();
 	}
 	return s;
+}
+
+/** Hold a Google authorisation until the profile it belongs to has a real id. */
+export function stashPendingGoogle(
+	token: string,
+	draftProfileId: string,
+	value: PendingGoogleToken
+): boolean {
+	const s = getSession(token);
+	if (!s) return false;
+	s.pendingGoogle.set(draftProfileId, value);
+	return true;
 }
 
 export function markComplete(token: string): PairingSession | null {

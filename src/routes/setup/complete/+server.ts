@@ -1,6 +1,9 @@
 import { error } from '@sveltejs/kit';
 import { z } from 'zod';
 import { getSession, markComplete } from '$lib/server/pairing';
+import { saveOAuthToken } from '$lib/server/db/repo';
+import { GOOGLE_PROVIDER } from '$lib/server/google';
+import { syncGoogle } from '$lib/server/sync';
 import { SetupDraftSchema, type PersistedProfile } from '$lib/server/schema';
 import { loadConfig, saveConfig } from '$lib/server/config';
 import { publish } from '$lib/server/bus';
@@ -18,7 +21,8 @@ export const POST: RequestHandler = async ({ request }) => {
 	if (!parsed.success) throw error(400, 'invalid setup payload');
 
 	const { token, draft } = parsed.data;
-	if (!getSession(token)) throw error(410, 'This setup session has expired.');
+	const session = getSession(token);
+	if (!session) throw error(410, 'This setup session has expired.');
 	if (draft.profiles.length === 0) throw error(400, 'add at least one profile');
 
 	const current = await loadConfig();
@@ -39,6 +43,28 @@ export const POST: RequestHandler = async ({ request }) => {
 		profiles,
 		app: { ...current.app, view: { ...current.app.view, weekStartsOn: draft.family.weekStartsOn } }
 	});
+
+	// Google accounts connected during the wizard were held against draft ids
+	// because the real ones did not exist yet. They do now.
+	let connected = 0;
+	draft.profiles.forEach((p, i) => {
+		const pending = session.pendingGoogle.get(p.id);
+		if (!pending) return;
+		saveOAuthToken({
+			provider: GOOGLE_PROVIDER,
+			profileId: i + 1,
+			refreshToken: pending.refreshToken,
+			accessToken: pending.accessToken,
+			accessExpiresAt: pending.accessExpiresAt
+		});
+		connected++;
+	});
+	session.pendingGoogle.clear();
+	if (connected > 0) {
+		// Best effort: the dashboard should not be held up by a first sync, and
+		// Settings can retry it.
+		syncGoogle().catch(() => {});
+	}
 
 	markComplete(token);
 	publish(token, { type: 'complete' });

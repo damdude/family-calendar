@@ -1,8 +1,26 @@
 <script lang="ts">
+	/**
+	 * Connect one Google account, in either of the two places that needs it:
+	 *
+	 *  - Settings, against a real `profileId`.
+	 *  - The setup wizard, where the person is still a draft and has no id
+	 *    yet, so the grant is held on the pairing session against
+	 *    `draftProfileId` and written out by /setup/complete.
+	 *
+	 * One component rather than a wizard copy: a near-identical second copy of
+	 * the settings UI is exactly how the phone remote ended up missing half
+	 * the features it was supposed to have.
+	 */
 	import { onMount } from 'svelte';
 	import { Loader, X, Check } from 'lucide-svelte';
 
-	let { profileId }: { profileId: number } = $props();
+	let {
+		profileId,
+		setupToken,
+		draftProfileId
+	}: { profileId?: number; setupToken?: string; draftProfileId?: string } = $props();
+
+	const wizardMode = $derived(!!setupToken && !!draftProfileId);
 
 	let connected = $state(false);
 	let accountEmail = $state<string | null>(null);
@@ -13,8 +31,9 @@
 	let isPolling = $state(false);
 	let error = $state<string | null>(null);
 
-	// Load initial status
 	onMount(async () => {
+		// Nothing to look up mid-wizard: the profile does not exist yet.
+		if (wizardMode || profileId === undefined) return;
 		try {
 			const res = await fetch(`/api/google/status?profileId=${profileId}`);
 			const data = await res.json();
@@ -25,22 +44,29 @@
 				connected = true;
 				accountEmail = conn.accountEmail;
 			}
-		} catch (e) {
-			console.error('Failed to load Google status:', e);
+		} catch {
+			/* status is advisory; connecting still works */
 		}
 	});
 
 	async function startConnect() {
 		error = null;
 		try {
-			const res = await fetch(`/api/google/connect?profileId=${profileId}`, { method: 'POST' });
-			if (!res.ok) throw new Error(await res.text());
+			const qs = wizardMode || profileId === undefined ? '' : `?profileId=${profileId}`;
+			const res = await fetch(`/api/google/connect${qs}`, { method: 'POST' });
+			if (!res.ok) {
+				const body = await res.json().catch(() => null);
+				throw new Error(body?.message || 'Could not start Google sign-in');
+			}
 			const { userCode: uc, verificationUrl: vu, deviceCode: dc } = await res.json();
 			userCode = uc;
 			verificationUrl = vu;
 			deviceCode = dc;
 			showingFlow = true;
-			// Start polling after a short delay
+			// Must be set BEFORE scheduling the poll: pollForToken bails when it
+			// is false, so the first tick used to return immediately and nothing
+			// ever noticed the authorisation until the button was pressed again.
+			isPolling = true;
 			setTimeout(pollForToken, 1000);
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to start Google sign-in';
@@ -53,7 +79,9 @@
 			const res = await fetch('/api/google/poll', {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ deviceCode, profileId })
+				body: JSON.stringify(
+					wizardMode ? { deviceCode, setupToken, draftProfileId } : { deviceCode, profileId }
+				)
 			});
 			const result = await res.json();
 
@@ -71,25 +99,23 @@
 				return;
 			}
 
-			// denied or expired
 			error = result.error || 'Authorization failed';
 			isPolling = false;
+			showingFlow = false;
 		} catch (e) {
-			console.error('Poll error:', e);
-			if (isPolling) setTimeout(pollForToken, 3000);
-		}
-	}
-
-	function handleShowFlow() {
-		if (!showingFlow) {
-			startConnect();
-		} else {
-			isPolling = true;
-			pollForToken();
+			error = e instanceof Error ? e.message : 'Authorization failed';
+			isPolling = false;
+			showingFlow = false;
 		}
 	}
 
 	async function disconnect() {
+		// Mid-wizard there is nothing persisted to disconnect from yet.
+		if (wizardMode || profileId === undefined) {
+			connected = false;
+			accountEmail = null;
+			return;
+		}
 		if (!confirm('Disconnect Google Calendar?')) return;
 		try {
 			await fetch(`/api/google/disconnect?profileId=${profileId}`, { method: 'POST' });
@@ -134,7 +160,7 @@
 			{/if}
 		</div>
 	{:else}
-		<button type="button" class="connect" onclick={handleShowFlow}>
+		<button type="button" class="connect" onclick={startConnect}>
 			{#if isPolling}
 				<Loader size={14} />
 				Waiting...

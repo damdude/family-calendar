@@ -12,6 +12,7 @@
 	} from '$lib/setup/types';
 	import { PROFILE_COLORS, profileColorVar, profileTint } from '$lib/design/colors';
 	import SetupSecurityStep from '$lib/components/SetupSecurityStep.svelte';
+	import GoogleCalendarConnect from '$lib/components/GoogleCalendarConnect.svelte';
 	import { Check, Plus, X, ChevronRight, ChevronLeft } from 'lucide-svelte';
 
 	let { data }: { data: PageData } = $props();
@@ -114,7 +115,10 @@
 	const canLeaveStep1 = $derived(draft.family.name.trim().length > 0);
 	const canFinish = $derived(canLeaveStep1 && draft.profiles.length > 0);
 
-	function next() {
+	async function next() {
+		// Device credentials must be saved before the People step — connecting
+		// an account there uses exactly the OAuth client saved here.
+		if (step === 2 && secStep && !(await secStep.save())) return;
 		if (step < 4) step += 1;
 		sync();
 	}
@@ -123,6 +127,17 @@
 	}
 
 	let secStep = $state<SetupSecurityStep | null>(null);
+
+	// Only offer per-person Google connect once a device OAuth client exists —
+	// otherwise the button is there to fail.
+	let googleReady = $state(false);
+	$effect(() => {
+		if (step !== 3) return;
+		fetch('/api/google/status')
+			.then((r) => (r.ok ? r.json() : null))
+			.then((d) => (googleReady = !!d?.configured))
+			.catch(() => {});
+	});
 
 	// The wizard can sit open for a long time — reading the Google Cloud
 	// console in another tab, finding a Wi-Fi password. Keep the pairing
@@ -143,9 +158,6 @@
 		saving = true;
 		errorMsg = '';
 		try {
-			// Password / Google credentials first: if they're invalid the
-			// family should fix them here, not discover it post-setup.
-			if (secStep && !(await secStep.save())) return;
 			const res = await fetch('/setup/complete', {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
@@ -229,6 +241,10 @@
 			</section>
 		{:else if step === 2}
 			<section class="panel">
+				<SetupSecurityStep token={data.token} bind:this={secStep} />
+			</section>
+		{:else if step === 3}
+			<section class="panel">
 				<h1 class="type-title">Add people</h1>
 				<p class="type-body sub">Everyone who shares the calendar. You can add more later.</p>
 
@@ -236,19 +252,26 @@
 					<ul class="people">
 						{#each draft.profiles as p (p.id)}
 							<li id="person-{p.id}" class="person" style:background={profileTint(p.color, 30)}>
-								<span class="pav" style:background={profileTint(p.color, 55)}>{p.avatarEmoji}</span>
-								<span class="pinfo">
-									<span class="type-label">{p.name}</span>
-									<span class="type-caption">{p.age} yrs</span>
-								</span>
-								<button
-									type="button"
-									class="remove"
-									aria-label="Remove {p.name}"
-									onclick={() => removeProfile(p.id)}
-								>
-									<X size={16} />
-								</button>
+								<div class="prow">
+									<span class="pav" style:background={profileTint(p.color, 55)}
+										>{p.avatarEmoji}</span
+									>
+									<span class="pinfo">
+										<span class="type-label">{p.name}</span>
+										<span class="type-caption">{p.age} yrs</span>
+									</span>
+									<button
+										type="button"
+										class="remove"
+										aria-label="Remove {p.name}"
+										onclick={() => removeProfile(p.id)}
+									>
+										<X size={16} />
+									</button>
+								</div>
+								{#if googleReady}
+									<GoogleCalendarConnect setupToken={data.token} draftProfileId={p.id} />
+								{/if}
 							</li>
 						{/each}
 					</ul>
@@ -301,7 +324,7 @@
 					{/if}
 				</div>
 			</section>
-		{:else if step === 3}
+		{:else}
 			<section class="panel">
 				<h1 class="type-title">Review</h1>
 				<div class="review">
@@ -331,10 +354,6 @@
 					display after setup.
 				</p>
 				{#if errorMsg}<p class="err type-label">{errorMsg}</p>{/if}
-			</section>
-		{:else}
-			<section class="panel">
-				<SetupSecurityStep token={data.token} bind:this={secStep} />
 			</section>
 		{/if}
 
@@ -456,10 +475,17 @@
 	}
 	.person {
 		display: flex;
-		align-items: center;
+		flex-direction: column;
+		gap: 8px;
+		align-items: stretch;
 		gap: var(--space-3);
 		padding: 8px 10px;
 		border-radius: var(--radius-md);
+	}
+	.prow {
+		display: flex;
+		align-items: center;
+		gap: var(--space-3);
 	}
 	.pav {
 		display: grid;
