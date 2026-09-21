@@ -2,11 +2,13 @@ import { error, json } from '@sveltejs/kit';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { defaultPersisted, loadConfig, saveConfig } from '$lib/server/config';
+import { defaultPersisted, saveConfig } from '$lib/server/config';
 import { emptyData, saveFamilyData } from '$lib/server/familydata';
 import { getDb } from '$lib/server/db';
 import { DATA_DIR, POINTER_PATH } from '$lib/server/paths';
 import { setEnvLine } from '$lib/server/envFile';
+import { DEFAULT_DEVICE_PASSWORD, setDevicePassword } from '$lib/server/devicePassword';
+import { logEvent } from '$lib/server/debugLog';
 import type { RequestHandler } from './$types';
 
 const ENV_PATH = path.resolve('.env');
@@ -44,6 +46,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		throw error(400, 'Factory reset requires confirmation');
 	}
 
+	logEvent('factoryReset.started');
 	try {
 		// Synced calendar data lives in SQLite. Order matters: event_overrides
 		// and events reference calendars.
@@ -88,13 +91,23 @@ export const POST: RequestHandler = async ({ request }) => {
 			/* no .env on a dev box — nothing to clear */
 		}
 
+		// The login password is part of what "factory" means, so it goes back to
+		// the shipped default rather than surviving the wipe. Reaching this
+		// point already required the current password (hooks.server.ts gates
+		// this route), so the reset is authorised; the wizard is where the next
+		// household chooses a new one. Clearing config.devicePasswordSet below
+		// is then simply true, rather than a claim that contradicts the device.
+		const pwReset = await setDevicePassword(DEFAULT_DEVICE_PASSWORD);
+		logEvent('factoryReset.password', { ok: pwReset.ok, detail: pwReset.message });
+		if (!pwReset.ok) {
+			// Worth knowing, but not worth aborting: everything else is already
+			// gone, and leaving the device half-reset would be worse.
+			console.error('Factory reset could not restore the default password:', pwReset.message);
+		}
+
 		// Schema defaults = the unconfigured state, which sends the app back
-		// to /setup on the next load. devicePasswordSet is carried over
-		// deliberately: a factory reset does NOT reset the device's login
-		// password, so clearing the flag left the privileged actions ungated
-		// while the old password was still the one that worked.
-		const before = await loadConfig();
-		await saveConfig({ ...defaultPersisted(), devicePasswordSet: before.devicePasswordSet });
+		// to /setup on the next load.
+		await saveConfig(defaultPersisted());
 	} catch (err) {
 		console.error('Factory reset failed:', err);
 		throw error(500, 'Factory reset failed');

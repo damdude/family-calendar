@@ -111,6 +111,8 @@ export interface AppConfig {
 	updates: UpdatePrefs;
 	/** Master switch for celebration animations (confetti, star bursts). */
 	celebrations: boolean;
+	/** Write diagnostics to data/debug.log. */
+	debugLogging: boolean;
 }
 
 /**
@@ -215,5 +217,6 @@ export const defaultConfig: AppConfig = {
 		paused: false,
 		intervalHours: 4
 	},
-	celebrations: true
+	celebrations: true,
+	debugLogging: true
 };

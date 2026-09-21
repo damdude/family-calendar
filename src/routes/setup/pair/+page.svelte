@@ -13,6 +13,7 @@
 	import { PROFILE_COLORS, profileColorVar, profileTint } from '$lib/design/colors';
 	import SetupSecurityStep from '$lib/components/SetupSecurityStep.svelte';
 	import GoogleCalendarConnect from '$lib/components/GoogleCalendarConnect.svelte';
+	import { uiLog } from '$lib/debug';
 	import { Check, Plus, X, ChevronRight, ChevronLeft } from 'lucide-svelte';
 
 	let { data }: { data: PageData } = $props();
@@ -115,15 +116,19 @@
 	const canLeaveStep1 = $derived(draft.family.name.trim().length > 0);
 	const canFinish = $derived(canLeaveStep1 && draft.profiles.length > 0);
 
+	const STEP_NAMES = ['family', 'device-accounts', 'people', 'review'];
+
 	async function next() {
 		// Device credentials must be saved before the People step — connecting
 		// an account there uses exactly the OAuth client saved here.
 		if (step === 2 && secStep && !(await secStep.save())) return;
 		if (step < 4) step += 1;
 		sync();
+		uiLog('wizard.step', { wizard: 'phone', step, name: STEP_NAMES[step - 1] });
 	}
 	function back() {
 		if (step > 1) step -= 1;
+		uiLog('wizard.back', { wizard: 'phone', step, name: STEP_NAMES[step - 1] });
 	}
 
 	let secStep = $state<SetupSecurityStep | null>(null);
@@ -164,6 +169,7 @@
 				body: JSON.stringify({ token: data.token, draft: $state.snapshot(draft) })
 			});
 			if (!res.ok) throw new Error(await res.text());
+			uiLog('wizard.finished', { wizard: 'phone', profiles: draft.profiles.length });
 			finished = true;
 		} catch (e) {
 			errorMsg = e instanceof Error ? e.message : 'Something went wrong. Please try again.';

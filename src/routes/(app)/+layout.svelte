@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { family } from '$lib/stores/family.svelte';
 	import { screensaver } from '$lib/stores/screensaver.svelte';
+	import { uiLog } from '$lib/debug';
 	import { mirror } from '$lib/stores/mirror.svelte';
 	import Sidebar from '$lib/components/Sidebar.svelte';
 	import TopBar from '$lib/components/TopBar.svelte';
@@ -93,6 +94,7 @@
 	const AWAY_TIMEOUT_MS = 20 * 60_000;
 	$effect(() => {
 		const _path = page.url.pathname; // any navigation counts as activity, wherever it came from
+		untrack(() => uiLog('nav', { path: _path }));
 		untrack(() => (lastActivity = Date.now()));
 	});
 	$effect(() => {

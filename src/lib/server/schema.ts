@@ -147,7 +147,14 @@ export const AppConfigSchema = z
 		screensaver: ScreensaverSchema,
 		kiosk: KioskPrefsSchema,
 		updates: UpdatePrefsSchema,
-		celebrations: z.boolean().default(true)
+		celebrations: z.boolean().default(true),
+		/**
+		 * Diagnostic logging (data/debug.log). Defaults ON: the run worth
+		 * capturing is almost always the first one, and nobody gets the chance
+		 * to enable anything beforehand. Turned off from Settings once a device
+		 * is behaving.
+		 */
+		debugLogging: z.boolean().default(true)
 	})
 	.prefault({});
 

@@ -57,7 +57,11 @@ export const handle: Handle = async ({ event, resolve }) => {
 	const { method } = event.request;
 	// Setup and every mutation are worth a line; routine GET polling is not,
 	// or the interesting run scrolls out of the file.
-	const traced = pathname.startsWith('/setup') || pathname.startsWith('/api/');
+	// The log endpoint must not log itself — every UI event would otherwise
+	// arrive paired with a request line describing its own delivery.
+	const traced =
+		(pathname.startsWith('/setup') || pathname.startsWith('/api/')) &&
+		pathname !== '/api/debug/log';
 
 	// Every mutating /api/ route parses its body with request.json(), which
 	// doesn't care what Content-Type it's labeled with — so a cross-site

@@ -29,11 +29,29 @@ ssh pi@<device-ip> 'tail -f family-calendar/data/debug.log'
 
 ## What it records
 
-Requests to `/api/*` and `/setup*` (method, path, status, duration), the
-decisions the access gates made, and explicit events through the wizard:
-Wi-Fi join attempts and their result, the device-password change, the shape
-of submitted Google credentials, the Google device-flow handshake, and setup
-completion.
+**Server side** — requests to `/api/*` and `/setup*` (method, path, status,
+duration), the decisions the access gates made, and explicit events: Wi-Fi
+join attempts and their result, the device-password change, the shape of
+submitted Google credentials, the Google device-flow handshake, setup
+completion, and each stage of a factory reset.
+
+**Browser side**, via `/api/debug/log` — the transitions the server never
+sees on its own, which are usually the context that makes a later failure
+interpretable:
+
+| Event                                     | Recorded                                |
+| ----------------------------------------- | --------------------------------------- |
+| `ui.wizard.step` / `ui.wizard.back`       | which wizard, step number and name      |
+| `ui.wizard.personAdded` / `personRemoved` | running total                           |
+| `ui.wizard.finished` / `finishFailed`     | profile count, or the failure           |
+| `ui.nav`                                  | which tab or page was opened            |
+| `ui.settings.saved`                       | which settings groups changed           |
+| `ui.settings.feature`                     | which feature was switched, and to what |
+| `ui.settings.debugLogging`                | this switch itself                      |
+
+Settings changes are detected by diffing the saved payload rather than by
+instrumenting each control, so a switch added later cannot quietly go
+unrecorded.
 
 ## What it never records
 
@@ -62,9 +80,13 @@ rewriting a pasted client ID, say — without the credential appearing anywhere.
 
 ## Turning it off
 
-Logging is on by default, because the run worth capturing is usually the
-first one and nobody gets a chance to enable anything beforehand. To disable,
-set `FC_DEBUG=0` in `~/family-calendar/.env` and restart:
+**Settings → Diagnostics → Debug logging.** Takes effect immediately, no
+restart. On by default, because the run worth capturing is usually the first
+one and nobody gets the chance to enable anything beforehand.
+
+`FC_DEBUG` in `.env` overrides the setting either way — `0` forces it off,
+`1` forces it on — for a device that cannot reach the UI. That needs a
+restart:
 
 ```bash
 sudo systemctl restart family-calendar

@@ -23,6 +23,7 @@
 	import OnScreenKeyboard from './OnScreenKeyboard.svelte';
 	import SetupSecurityStep from './SetupSecurityStep.svelte';
 	import GoogleCalendarConnect from './GoogleCalendarConnect.svelte';
+	import { uiLog } from '$lib/debug';
 	import { Plus, X, Check, ChevronRight, ChevronLeft } from 'lucide-svelte';
 
 	let { token, oncomplete }: { token: string; oncomplete: (familyName: string) => void } = $props();
@@ -81,6 +82,7 @@
 			avatarEmoji: newAvatar
 		};
 		draft.profiles.push(p);
+		uiLog('wizard.personAdded', { total: draft.profiles.length, age: p.age });
 		newName = '';
 		newBirthdate = defaultBirthdate();
 		newColor = suggestColor();
@@ -97,10 +99,13 @@
 	function removeProfile(id: string) {
 		const i = draft.profiles.findIndex((p) => p.id === id);
 		if (i >= 0) draft.profiles.splice(i, 1);
+		uiLog('wizard.personRemoved', { total: draft.profiles.length });
 	}
 
 	const canLeaveStep1 = $derived(draft.family.name.trim().length > 0);
 	const canFinish = $derived(canLeaveStep1 && draft.profiles.length > 0);
+
+	const STEP_NAMES = ['family', 'device-accounts', 'people', 'review'];
 
 	async function next() {
 		// The device credentials have to be stored before the People step:
@@ -108,9 +113,11 @@
 		// the OAuth client this step saves. A validation failure keeps us here.
 		if (step === 2 && secStep && !(await secStep.save())) return;
 		if (step < 4) step += 1;
+		uiLog('wizard.step', { wizard: 'touch', step, name: STEP_NAMES[step - 1] });
 	}
 	function back() {
 		if (step > 1) step -= 1;
+		uiLog('wizard.back', { wizard: 'touch', step, name: STEP_NAMES[step - 1] });
 	}
 
 	let secStep = $state<SetupSecurityStep | null>(null);
@@ -152,9 +159,11 @@
 				body: JSON.stringify({ token, draft: $state.snapshot(draft) })
 			});
 			if (!res.ok) throw new Error(await res.text());
+			uiLog('wizard.finished', { wizard: 'touch', profiles: draft.profiles.length });
 			oncomplete(draft.family.name);
 		} catch (e) {
 			errorMsg = e instanceof Error ? e.message : 'Something went wrong. Please try again.';
+			uiLog('wizard.finishFailed', { wizard: 'touch', detail: errorMsg });
 		} finally {
 			saving = false;
 		}

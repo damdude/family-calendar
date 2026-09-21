@@ -1,15 +1,10 @@
 import { error, json } from '@sveltejs/kit';
 import { z } from 'zod';
-import { spawn } from 'node:child_process';
 import { getSession } from '$lib/server/pairing';
 import { loadConfig, saveConfig } from '$lib/server/config';
 import { logEvent } from '$lib/server/debugLog';
+import { CONTROL_CHARS, setDevicePassword } from '$lib/server/devicePassword';
 import type { RequestHandler } from './$types';
-
-/** Control characters would corrupt the single `user:password` line the helper
- *  feeds to chpasswd, so they are refused outright rather than escaped. */
-// eslint-disable-next-line no-control-regex
-const CONTROL_CHARS = /[\x00-\x1f\x7f]/;
 
 const BodySchema = z.object({
 	token: z.string(),
@@ -46,39 +41,7 @@ export const POST: RequestHandler = async ({ request }) => {
 	}
 	logEvent('password.attempt', { length: newPassword.length });
 
-	const result = await new Promise<{ ok: boolean; message?: string }>((resolve) => {
-		let child;
-		try {
-			child = spawn('sudo', ['/usr/local/bin/fc-set-password'], {
-				stdio: ['pipe', 'ignore', 'pipe']
-			});
-		} catch {
-			return resolve({ ok: false, message: 'helper unavailable' });
-		}
-		let done = false;
-		const finish = (v: { ok: boolean; message?: string }) => {
-			if (!done) {
-				done = true;
-				resolve(v);
-			}
-		};
-		const timer = setTimeout(() => {
-			child.kill('SIGKILL');
-			finish({ ok: false, message: 'timed out' });
-		}, 15_000);
-		let errOut = '';
-		child.stderr.on('data', (d) => (errOut += d.toString()));
-		child.on('error', () => {
-			clearTimeout(timer);
-			finish({ ok: false, message: 'helper unavailable' });
-		});
-		child.on('close', (code) => {
-			clearTimeout(timer);
-			finish(code === 0 ? { ok: true } : { ok: false, message: errOut.trim() || 'failed' });
-		});
-		child.stdin.write(newPassword + '\n');
-		child.stdin.end();
-	});
+	const result = await setDevicePassword(newPassword);
 
 	logEvent('password.result', { ok: result.ok, detail: result.message });
 	if (!result.ok) {

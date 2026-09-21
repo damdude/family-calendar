@@ -24,11 +24,27 @@ const MAX_BYTES = 2 * 1024 * 1024;
 
 const SENSITIVE = /pass|secret|token|passphrase|credential|refresh|authorization|cookie|psk/i;
 
-/** True unless explicitly switched off, so a fresh device records its first
- *  run without anyone having to enable anything first — which is exactly the
- *  run that cannot be observed any other way. */
+/**
+ * Mirrors app.debugLogging from config.json. Cached rather than read per call
+ * because logEvent is synchronous and sits in the request path; config.ts
+ * refreshes this whenever it loads or saves, which is often enough that a
+ * toggle in Settings takes effect immediately with no restart.
+ */
+let configEnabled = true;
+export function setDebugEnabled(on: boolean): void {
+	configEnabled = on;
+}
+
+/**
+ * FC_DEBUG wins if set, so a device can be forced quiet (or loud) without
+ * reaching the UI. Otherwise the setting decides, defaulting on: the run
+ * worth capturing is usually the first one, and nobody gets the chance to
+ * enable anything beforehand.
+ */
 export function debugEnabled(): boolean {
-	return process.env.FC_DEBUG !== '0';
+	if (process.env.FC_DEBUG === '0') return false;
+	if (process.env.FC_DEBUG === '1') return true;
+	return configEnabled;
 }
 
 export function redact(value: unknown, keyHint = '', depth = 0): unknown {

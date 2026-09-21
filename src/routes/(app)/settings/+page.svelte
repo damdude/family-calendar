@@ -12,6 +12,7 @@
 	import WifiPicker from '$lib/components/WifiPicker.svelte';
 	import DevicePasswordPrompt from '$lib/components/DevicePasswordPrompt.svelte';
 	import Spinner from '$lib/components/Spinner.svelte';
+	import { uiLog } from '$lib/debug';
 	import { QrCode, Check, RefreshCw, Wifi } from 'lucide-svelte';
 
 	// Wi-Fi status + "change network" panel.
@@ -208,14 +209,32 @@
 	// Persist store snapshot to config.json (debounced) on any change.
 	let saveTimer: ReturnType<typeof setTimeout>;
 	let savedFlash = $state(false);
+	/** Diffed rather than logged per-control: instrumenting each switch means
+	 *  the next one added is silently missing from the log. */
+	let lastSaved = '';
+	function changedTopLevel(next: Record<string, unknown>): string[] {
+		let prev: Record<string, unknown> = {};
+		try {
+			prev = lastSaved ? JSON.parse(lastSaved) : {};
+		} catch {
+			/* first save */
+		}
+		const keys = new Set([...Object.keys(prev), ...Object.keys(next)]);
+		return [...keys].filter((k) => JSON.stringify(prev[k]) !== JSON.stringify(next[k]));
+	}
+
 	function persist() {
 		clearTimeout(saveTimer);
 		saveTimer = setTimeout(async () => {
 			try {
+				const payload = family.toPersisted();
+				const app = (payload as unknown as { app: Record<string, unknown> }).app ?? {};
+				uiLog('settings.saved', { changed: changedTopLevel(app) });
+				lastSaved = JSON.stringify(app);
 				await fetch('/api/config', {
 					method: 'POST',
 					headers: { 'content-type': 'application/json' },
-					body: JSON.stringify(family.toPersisted())
+					body: JSON.stringify(payload)
 				});
 				savedFlash = true;
 				setTimeout(() => (savedFlash = false), 1400);
@@ -230,6 +249,7 @@
 
 	function toggleFeature(k: keyof FeatureFlags) {
 		family.config.features[k] = !family.config.features[k];
+		uiLog('settings.feature', { key: k, on: family.config.features[k] });
 		persist();
 	}
 
@@ -741,12 +761,48 @@
 			<a class="pairbtn pressable" href="/setup"><QrCode size={18} /> Show pairing code</a>
 		</section>
 
+		<!-- Diagnostics -->
+		<section class="card">
+			<div class="cardhead">
+				<h2 class="type-heading">Diagnostics</h2>
+				<p class="type-caption sub">
+					Records what the device does — wizard steps, settings changes, which tab is open, Wi-Fi
+					and Google attempts — so a problem can be diagnosed after the fact. Passwords, secrets and
+					tokens are never written.
+				</p>
+			</div>
+			<div class="rowset">
+				<div class="row">
+					<span class="type-label"
+						>Debug logging <span class="hint type-caption">data/debug.log · fetch over SSH</span
+						></span
+					>
+					<button
+						type="button"
+						class="switch"
+						class:on={family.config.debugLogging}
+						role="switch"
+						aria-checked={family.config.debugLogging}
+						aria-label="Debug logging"
+						onclick={() => {
+							family.config.debugLogging = !family.config.debugLogging;
+							uiLog('settings.debugLogging', { on: family.config.debugLogging });
+							persist();
+						}}
+					>
+						<span class="knob"></span>
+					</button>
+				</div>
+			</div>
+		</section>
+
 		<!-- Factory Reset -->
 		<section class="card danger">
 			<div class="cardhead"><h2 class="type-heading">Factory Reset</h2></div>
 			<p class="type-body sub">
-				Returns the device to its just-flashed state, including forgetting the Wi-Fi network, then
-				restarts it. <strong>This cannot be undone.</strong>
+				Returns the device to its just-flashed state — forgetting the Wi-Fi network and resetting
+				the device password — then restarts it. You'll be asked for the current password first.
+				<strong>This cannot be undone.</strong>
 			</p>
 			{#if !showResetConfirm}
 				<button type="button" class="resetbtn" onclick={() => (showResetConfirm = true)}>
@@ -762,6 +818,7 @@
 						<li>❌ Reset Google Calendar connections</li>
 						<li>❌ Clear all chores and rewards</li>
 						<li>❌ Forget the Wi-Fi network and restart the device</li>
+						<li>❌ Reset the device password back to its factory default</li>
 					</ul>
 					<div class="resetbtns">
 						<button type="button" class="cancelbtn" onclick={() => (showResetConfirm = false)}>
