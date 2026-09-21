@@ -4,6 +4,7 @@
 	 * password with the virtual keyboard, join. No phone needed.
 	 */
 	import OnScreenKeyboard from './OnScreenKeyboard.svelte';
+	import Spinner from './Spinner.svelte';
 	import { Wifi, Lock, RefreshCw, Check, ArrowLeft } from 'lucide-svelte';
 
 	let { onjoined }: { onjoined?: () => void } = $props();
@@ -109,7 +110,7 @@
 		</ul>
 	{:else if joining}
 		<div class="joinstate">
-			<div class="spinner"></div>
+			<Spinner size={36} label="Connecting to Wi-Fi" />
 			<p class="type-heading">Connecting to {selected.ssid}</p>
 			<p class="type-body sub">Applying settings and connecting to your network…</p>
 		</div>
@@ -252,23 +253,5 @@
 		gap: var(--space-4);
 		padding: var(--space-4) var(--space-2);
 		text-align: center;
-	}
-	.spinner {
-		width: 40px;
-		height: 40px;
-		border: 3px solid var(--color-border-subtle);
-		border-top-color: var(--color-accent-primary);
-		border-radius: 50%;
-		animation: spin 1s linear infinite;
-	}
-	@keyframes spin {
-		to {
-			transform: rotate(360deg);
-		}
-	}
-	@media (prefers-reduced-motion: reduce) {
-		.spinner {
-			animation: none;
-		}
 	}
 </style>

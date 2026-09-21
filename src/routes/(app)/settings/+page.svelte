@@ -11,6 +11,7 @@
 	import PinPad from '$lib/components/PinPad.svelte';
 	import WifiPicker from '$lib/components/WifiPicker.svelte';
 	import DevicePasswordPrompt from '$lib/components/DevicePasswordPrompt.svelte';
+	import Spinner from '$lib/components/Spinner.svelte';
 	import { QrCode, Check, RefreshCw, Wifi } from 'lucide-svelte';
 
 	// Wi-Fi status + "change network" panel.
@@ -576,7 +577,9 @@
 						></span
 					>
 					<button type="button" class="pairbtn small" disabled={checking} onclick={checkUpdates}>
-						<RefreshCw size={15} class={checking ? 'spin' : ''} />
+						{#if checking}<Spinner size={15} label="Checking for updates" />{:else}<RefreshCw
+								size={15}
+							/>{/if}
 						{checking ? 'Checking…' : 'Check now'}
 					</button>
 				</div>
@@ -613,7 +616,9 @@
 			<!-- Right under the settings above, as its own block: install progress. -->
 			{#if version?.update?.status === 'installing'}
 				<div class="updateblock installing">
-					<p class="type-label">Installing update…</p>
+					<p class="type-label installing-head">
+						<Spinner size={16} label="Installing update" /> Installing update…
+					</p>
 					<div class="progressbar">
 						<div class="progressfill" style:width="{version.update.progress ?? 0}%"></div>
 					</div>
@@ -636,6 +641,7 @@
 							disabled={installing}
 							onclick={installUpdate}
 						>
+							{#if installing}<Spinner size={14} />{/if}
 							{installing ? 'Starting…' : 'Install now'}
 						</button>
 						<button type="button" class="laterbtn" onclick={dismissUpdate}>Later</button>
@@ -757,7 +763,7 @@
 							onclick={performFactoryReset}
 						>
 							{#if resetting}
-								Resetting…
+								<Spinner size={14} /> Resetting…
 							{:else}
 								Yes, Delete Everything
 							{/if}
@@ -1154,19 +1160,9 @@
 			color-mix(in srgb, var(--color-accent-warning) 30%, var(--color-border-subtle));
 	}
 
-	@keyframes spin {
-		to {
-			transform: rotate(360deg);
-		}
-	}
-
-	:global(.spin) {
-		animation: spin 1s linear infinite;
-	}
-
-	@media (prefers-reduced-motion: reduce) {
-		:global(.spin) {
-			animation: none;
-		}
+	.installing-head {
+		display: flex;
+		align-items: center;
+		gap: 8px;
 	}
 </style>

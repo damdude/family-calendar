@@ -9,6 +9,7 @@
 	 */
 	import { family } from '$lib/stores/family.svelte';
 	import OnScreenKeyboard from './OnScreenKeyboard.svelte';
+	import Spinner from './Spinner.svelte';
 	import { Lock } from 'lucide-svelte';
 
 	let open = $state(false);
@@ -86,6 +87,7 @@
 			<div class="row">
 				<button type="button" class="btn" onclick={() => settle(false)}>Cancel</button>
 				<button type="button" class="btn primary" disabled={!password || busy} onclick={submit}>
+					{#if busy}<Spinner size={14} />{/if}
 					{busy ? 'Checking…' : 'Continue'}
 				</button>
 			</div>

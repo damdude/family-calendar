@@ -12,7 +12,8 @@
 	 * the features it was supposed to have.
 	 */
 	import { onMount } from 'svelte';
-	import { Loader, X, Check } from 'lucide-svelte';
+	import { X, Check } from 'lucide-svelte';
+	import Spinner from './Spinner.svelte';
 
 	let {
 		profileId,
@@ -152,7 +153,9 @@
 						Visit: <a href={verificationUrl} target="_blank" rel="noopener">{verificationUrl}</a>
 					</li>
 					<li>Enter code: <strong>{userCode}</strong></li>
-					<li>Waiting for authorization...</li>
+					<li class="waiting">
+						<Spinner size={14} label="Waiting for Google" /> Waiting for authorisation…
+					</li>
 				</ol>
 			</div>
 			{#if error}
@@ -162,8 +165,8 @@
 	{:else}
 		<button type="button" class="connect" onclick={startConnect}>
 			{#if isPolling}
-				<Loader size={14} />
-				Waiting...
+				<Spinner size={14} />
+				Waiting…
 			{:else}
 				Connect Google Calendar
 			{/if}
@@ -291,6 +294,11 @@
 		text-decoration: underline;
 	}
 
+	.waiting {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+	}
 	.error {
 		margin-top: 8px;
 		padding: 8px;

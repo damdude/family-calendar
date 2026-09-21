@@ -60,10 +60,15 @@ async function googleError(res: Response, what: string): Promise<Error> {
 	} catch {
 		/* not JSON — keep the truncated raw body */
 	}
-	const hint =
-		res.status === 401 && /invalid_client/.test(raw)
-			? ' — check the OAuth client is the "TVs and Limited Input devices" type; other types are rejected by the device flow'
-			: '';
+	// Google uses invalid_client for two quite different situations and the
+	// description is the only way to tell them apart, so don't collapse them
+	// into one guess.
+	let hint = '';
+	if (res.status === 401 && /invalid_client/.test(raw)) {
+		hint = /not found/i.test(raw)
+			? ' — Google does not recognise this client ID at all. Check it was copied whole, and that the client (and its project) still exists.'
+			: ' — the client exists but rejected this request; check it is the "TVs and Limited Input devices" type, since other types are refused by the device flow.';
+	}
 	return new Error(`${what} failed: ${res.status}${detail ? ` (${detail})` : ''}${hint}`);
 }
 
