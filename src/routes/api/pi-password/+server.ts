@@ -4,6 +4,7 @@ import { getSession } from '$lib/server/pairing';
 import { loadConfig, saveConfig } from '$lib/server/config';
 import { logEvent } from '$lib/server/debugLog';
 import { CONTROL_CHARS, setDevicePassword } from '$lib/server/devicePassword';
+import { verifyDevicePassword } from '$lib/server/deviceAuth';
 import type { RequestHandler } from './$types';
 
 const BodySchema = z.object({
@@ -44,6 +45,24 @@ export const POST: RequestHandler = async ({ request }) => {
 	const result = await setDevicePassword(newPassword);
 
 	logEvent('password.result', { ok: result.ok, detail: result.message });
+
+	// Prove the password that was stored is the one that was submitted, while
+	// the person is still standing here. A browser password manager offering
+	// to generate a "strong password" can fill both fields without the family
+	// registering it, and the divergence would otherwise only surface days
+	// later as "the update won't accept my password" — by which point the
+	// device is locked out of updates, factory reset AND ssh, and the only
+	// way back is reflashing the card.
+	if (result.ok) {
+		const roundTrip = await verifyDevicePassword(newPassword);
+		logEvent('password.verified', { ok: roundTrip });
+		if (!roundTrip) {
+			throw error(
+				500,
+				'The password was changed but did not verify afterwards. Re-enter it, and if your browser offered to fill a generated password, decline it.'
+			);
+		}
+	}
 	if (!result.ok) {
 		console.error('Password change failed:', result.message);
 		throw error(500, 'Could not change the device password.');

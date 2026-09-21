@@ -149,6 +149,13 @@ install -m 755 "${APP_DIR}/scripts/set-password.sh" /usr/local/bin/fc-set-passwo
 # NetworkManager, outside the app's data directory.
 install -m 755 "${APP_DIR}/scripts/factory-reset-net.sh" /usr/local/bin/fc-factory-reset-net 2>/dev/null || true
 
+# Boot-time recovery: a marker file on the FAT boot partition resets the
+# device password. Without it a mistyped password locks the family out of
+# ssh, updates and factory reset simultaneously, leaving reflashing as the
+# only way back.
+install -m 755 "${APP_DIR}/scripts/recovery-check.sh" /usr/local/bin/fc-recovery-check 2>/dev/null || true
+install -m 644 "${APP_DIR}/deploy/family-calendar-recovery.service" /etc/systemd/system/ 2>/dev/null || true
+
 cat > /etc/systemd/system/family-calendar-wifi.service <<UNIT
 [Unit]
 Description=Family Calendar first-boot Wi-Fi onboarding (captive portal)
@@ -223,6 +230,7 @@ usermod -aG seat,video,input,render,systemd-journal "${DASH_USER}" 2>/dev/null |
 systemctl enable seatd.service >/dev/null 2>&1 || true
 systemctl enable ssh.service >/dev/null 2>&1 || true
 systemctl enable NetworkManager.service >/dev/null 2>&1 || true
+systemctl enable family-calendar-recovery.service >/dev/null 2>&1 || true
 systemctl enable family-calendar-wifi.service >/dev/null 2>&1 || true
 systemctl enable family-calendar.service >/dev/null 2>&1 || true
 systemctl enable family-calendar-kiosk.service >/dev/null 2>&1 || true

@@ -1,0 +1,18 @@
+[Unit]
+Description=Family Calendar boot-time recovery check
+# Before the app, so a password reset is in place by the time anything reads
+# the config or anyone tries to log in.
+Before=family-calendar.service
+DefaultDependencies=no
+After=local-fs.target
+Wants=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/fc-recovery-check
+RemainAfterExit=yes
+StandardOutput=journal
+SyslogIdentifier=family-calendar-recovery
+
+[Install]
+WantedBy=multi-user.target
