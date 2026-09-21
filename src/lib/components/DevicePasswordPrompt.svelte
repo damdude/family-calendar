@@ -22,12 +22,20 @@
 	// knowing the password. See $lib/server/recovery.
 	let mode = $state<'password' | 'recovery'>('password');
 	let recoveryCode = $state('');
+	let recoveryPw = $state('');
+	let recoveryPw2 = $state('');
 	let recoveryErr = $state('');
 	let recoveryBusy = $state(false);
+	/** Touch mode shares one on-screen keyboard between three fields, so it has
+	 *  to track which one is being typed into. */
+	let activeField = $state<'code' | 'pw' | 'pw2'>('code');
 
 	async function beginRecovery() {
 		recoveryErr = '';
 		recoveryCode = '';
+		recoveryPw = '';
+		recoveryPw2 = '';
+		activeField = 'code';
 		mode = 'recovery';
 		try {
 			await fetch('/api/recovery/start', { method: 'POST' });
@@ -37,14 +45,18 @@
 	}
 
 	async function submitRecovery() {
-		if (!recoveryCode || recoveryBusy) return;
+		if (!recoveryCode || !recoveryPw || recoveryBusy) return;
 		recoveryBusy = true;
 		recoveryErr = '';
 		try {
 			const r = await fetch('/api/recovery/verify', {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ code: recoveryCode })
+				body: JSON.stringify({
+					code: recoveryCode,
+					newPassword: recoveryPw,
+					confirmPassword: recoveryPw2
+				})
 			});
 			const body = await r.json().catch(() => null);
 			if (r.ok) {
@@ -67,6 +79,8 @@
 		err = '';
 		mode = 'password';
 		recoveryCode = '';
+		recoveryPw = '';
+		recoveryPw2 = '';
 		recoveryErr = '';
 		open = true;
 		return new Promise<boolean>((resolve) => (resolver = resolve));
@@ -78,6 +92,8 @@
 		busy = false;
 		mode = 'password';
 		recoveryCode = '';
+		recoveryPw = '';
+		recoveryPw2 = '';
 		recoveryErr = '';
 		resolver?.(ok);
 		resolver = null;
@@ -154,7 +170,9 @@
 					display.
 				</p>
 
+				<label class="fieldlbl type-caption sub" for="rec-code">Code from the screen</label>
 				<input
+					id="rec-code"
 					class="input code"
 					type="text"
 					inputmode="numeric"
@@ -164,18 +182,55 @@
 					maxlength="4"
 					placeholder="0000"
 					readonly={needsOnScreenKeyboard}
+					onclick={() => (activeField = 'code')}
 					bind:value={recoveryCode}
 					onkeydown={(e) => e.key === 'Enter' && submitRecovery()}
 				/>
+				{#if needsOnScreenKeyboard && activeField === 'code'}
+					<OnScreenKeyboard bind:value={recoveryCode} onenter={() => (activeField = 'pw')} />
+				{/if}
 
-				{#if needsOnScreenKeyboard}
-					<OnScreenKeyboard bind:value={recoveryCode} onenter={submitRecovery} />
+				<label class="fieldlbl type-caption sub" for="rec-pw">New device password</label>
+				<input
+					id="rec-pw"
+					class="input"
+					type="password"
+					autocapitalize="none"
+					autocorrect="off"
+					spellcheck="false"
+					placeholder="At least 6 characters"
+					readonly={needsOnScreenKeyboard}
+					onclick={() => (activeField = 'pw')}
+					bind:value={recoveryPw}
+					onkeydown={(e) => e.key === 'Enter' && submitRecovery()}
+				/>
+				{#if needsOnScreenKeyboard && activeField === 'pw'}
+					<OnScreenKeyboard bind:value={recoveryPw} onenter={() => (activeField = 'pw2')} />
+				{/if}
+
+				<label class="fieldlbl type-caption sub" for="rec-pw2">Confirm password</label>
+				<input
+					id="rec-pw2"
+					class="input"
+					type="password"
+					autocapitalize="none"
+					autocorrect="off"
+					spellcheck="false"
+					placeholder="Repeat it"
+					readonly={needsOnScreenKeyboard}
+					onclick={() => (activeField = 'pw2')}
+					bind:value={recoveryPw2}
+					onkeydown={(e) => e.key === 'Enter' && submitRecovery()}
+				/>
+				{#if needsOnScreenKeyboard && activeField === 'pw2'}
+					<OnScreenKeyboard bind:value={recoveryPw2} onenter={submitRecovery} />
 				{/if}
 
 				{#if recoveryErr}<p class="type-caption err">{recoveryErr}</p>{/if}
 
 				<p class="type-caption sub">
-					This resets the password to its factory default. Set a new one in Settings straight after.
+					This becomes the password for this device — the calendar's own prompts and signing in over
+					the network both use it.
 				</p>
 
 				<div class="row">
@@ -183,11 +238,11 @@
 					<button
 						type="button"
 						class="btn primary"
-						disabled={!recoveryCode || recoveryBusy}
+						disabled={!recoveryCode || !recoveryPw || recoveryBusy}
 						onclick={submitRecovery}
 					>
 						{#if recoveryBusy}<Spinner size={14} />{/if}
-						{recoveryBusy ? 'Checking…' : 'Reset password'}
+						{recoveryBusy ? 'Saving…' : 'Set password'}
 					</button>
 				</div>
 			{/if}
@@ -263,6 +318,10 @@
 		color: var(--color-text-secondary);
 		text-decoration: underline;
 		font-size: var(--text-sm);
+	}
+	.fieldlbl {
+		align-self: flex-start;
+		margin-top: 2px;
 	}
 	.code {
 		text-align: center;

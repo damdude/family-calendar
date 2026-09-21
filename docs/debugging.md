@@ -102,10 +102,20 @@ Recovery requires being **physically in front of the display**:
 1. On the phone or tablet that is asking for the password, choose
    **"Forgotten it? Recover using the screen"**.
 2. A four-digit code appears **on the calendar screen itself**.
-3. Type that code back on the phone.
-4. The device password resets to the factory default. Set a new one from
-   Settings straight away — that page is gated on this password, so the reset
-   is what lets you back in to change it.
+3. Type that code back on the phone, along with the **new password** you want.
+4. That becomes the device password immediately — for the calendar's own
+   prompts and for signing in over the network — and whatever you were doing
+   when it asked carries straight on.
+
+The new password is validated before the code is consumed, so a typo or a
+mismatch costs nothing: the code stays live and you can correct it without
+walking back to the screen for a fresh one. It is also re-checked after being
+set, the same way the setup wizard does, so a password manager quietly
+filling a generated value fails loudly instead of locking you out later.
+
+An earlier version reset to the shipped default and asked you to change it
+afterwards. That was worse: it left a window in which the device was
+protected by a publicly known password.
 
 ## Why the code is trustworthy
 
