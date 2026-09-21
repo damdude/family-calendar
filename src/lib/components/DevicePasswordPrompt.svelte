@@ -18,11 +18,56 @@
 	let err = $state('');
 	let resolver: ((ok: boolean) => void) | null = null;
 
+	// Recovery: prove presence by reading a code off the display, rather than
+	// knowing the password. See $lib/server/recovery.
+	let mode = $state<'password' | 'recovery'>('password');
+	let recoveryCode = $state('');
+	let recoveryErr = $state('');
+	let recoveryBusy = $state(false);
+
+	async function beginRecovery() {
+		recoveryErr = '';
+		recoveryCode = '';
+		mode = 'recovery';
+		try {
+			await fetch('/api/recovery/start', { method: 'POST' });
+		} catch {
+			recoveryErr = 'Could not reach the device.';
+		}
+	}
+
+	async function submitRecovery() {
+		if (!recoveryCode || recoveryBusy) return;
+		recoveryBusy = true;
+		recoveryErr = '';
+		try {
+			const r = await fetch('/api/recovery/verify', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ code: recoveryCode })
+			});
+			const body = await r.json().catch(() => null);
+			if (r.ok) {
+				// The gate keys off devicePasswordSet, which the reset just
+				// cleared, so replaying the original action now succeeds.
+				return settle(true);
+			}
+			recoveryErr = body?.message ?? 'That code was not accepted.';
+		} catch {
+			recoveryErr = 'Could not reach the device.';
+		} finally {
+			recoveryBusy = false;
+		}
+	}
+
 	const needsOnScreenKeyboard = $derived(family.displayMode === 'touch');
 
 	export function request(): Promise<boolean> {
 		password = '';
 		err = '';
+		mode = 'password';
+		recoveryCode = '';
+		recoveryErr = '';
 		open = true;
 		return new Promise<boolean>((resolve) => (resolver = resolve));
 	}
@@ -31,6 +76,9 @@
 		open = false;
 		password = '';
 		busy = false;
+		mode = 'password';
+		recoveryCode = '';
+		recoveryErr = '';
 		resolver?.(ok);
 		resolver = null;
 	}
@@ -69,28 +117,80 @@
 				This changes the device itself, so it needs the password you chose when setting up.
 			</p>
 
-			<input
-				class="input"
-				type="password"
-				placeholder="Device password"
-				readonly={needsOnScreenKeyboard}
-				bind:value={password}
-				onkeydown={(e) => e.key === 'Enter' && submit()}
-			/>
+			{#if mode === 'password'}
+				<input
+					class="input"
+					type="password"
+					autocapitalize="none"
+					autocorrect="off"
+					spellcheck="false"
+					placeholder="Device password"
+					readonly={needsOnScreenKeyboard}
+					bind:value={password}
+					onkeydown={(e) => e.key === 'Enter' && submit()}
+				/>
 
-			{#if needsOnScreenKeyboard}
-				<OnScreenKeyboard bind:value={password} onenter={submit} />
-			{/if}
+				{#if needsOnScreenKeyboard}
+					<OnScreenKeyboard bind:value={password} onenter={submit} />
+				{/if}
 
-			{#if err}<p class="type-caption err">{err}</p>{/if}
+				{#if err}<p class="type-caption err">{err}</p>{/if}
 
-			<div class="row">
-				<button type="button" class="btn" onclick={() => settle(false)}>Cancel</button>
-				<button type="button" class="btn primary" disabled={!password || busy} onclick={submit}>
-					{#if busy}<Spinner size={14} />{/if}
-					{busy ? 'Checking…' : 'Continue'}
+				<button type="button" class="linkbtn" onclick={beginRecovery}>
+					Forgotten it? Recover using the screen
 				</button>
-			</div>
+
+				<div class="row">
+					<button type="button" class="btn" onclick={() => settle(false)}>Cancel</button>
+					<button type="button" class="btn primary" disabled={!password || busy} onclick={submit}>
+						{#if busy}<Spinner size={14} />{/if}
+						{busy ? 'Checking…' : 'Continue'}
+					</button>
+				</div>
+			{:else}
+				<p class="type-body sub">
+					A four-digit code is now showing on the calendar screen. Read it from there and type it
+					here. It is deliberately not available over the network — you have to be in front of the
+					display.
+				</p>
+
+				<input
+					class="input code"
+					type="text"
+					inputmode="numeric"
+					autocapitalize="none"
+					autocorrect="off"
+					spellcheck="false"
+					maxlength="4"
+					placeholder="0000"
+					readonly={needsOnScreenKeyboard}
+					bind:value={recoveryCode}
+					onkeydown={(e) => e.key === 'Enter' && submitRecovery()}
+				/>
+
+				{#if needsOnScreenKeyboard}
+					<OnScreenKeyboard bind:value={recoveryCode} onenter={submitRecovery} />
+				{/if}
+
+				{#if recoveryErr}<p class="type-caption err">{recoveryErr}</p>{/if}
+
+				<p class="type-caption sub">
+					This resets the password to its factory default. Set a new one in Settings straight after.
+				</p>
+
+				<div class="row">
+					<button type="button" class="btn" onclick={() => (mode = 'password')}>Back</button>
+					<button
+						type="button"
+						class="btn primary"
+						disabled={!recoveryCode || recoveryBusy}
+						onclick={submitRecovery}
+					>
+						{#if recoveryBusy}<Spinner size={14} />{/if}
+						{recoveryBusy ? 'Checking…' : 'Reset password'}
+					</button>
+				</div>
+			{/if}
 		</div>
 	</div>
 {/if}
@@ -155,5 +255,19 @@
 	}
 	.err {
 		color: var(--color-accent-warning);
+	}
+	.linkbtn {
+		align-self: flex-start;
+		background: none;
+		padding: 0;
+		color: var(--color-text-secondary);
+		text-decoration: underline;
+		font-size: var(--text-sm);
+	}
+	.code {
+		text-align: center;
+		font-size: 2rem;
+		letter-spacing: 0.4em;
+		font-variant-numeric: tabular-nums;
 	}
 </style>

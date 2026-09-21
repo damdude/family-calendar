@@ -4,6 +4,7 @@
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { mirror } from '$lib/stores/mirror.svelte';
+	import RecoveryCode from '$lib/components/RecoveryCode.svelte';
 
 	let { children } = $props();
 
@@ -60,3 +61,7 @@
 </svelte:head>
 
 {@render children()}
+
+<!-- Only ever visible on the kiosk itself: the code endpoint refuses anything
+     that is not loopback, which is what makes it proof of being in the room. -->
+<RecoveryCode />

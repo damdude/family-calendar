@@ -95,33 +95,40 @@ sudo systemctl restart family-calendar
 # Locked out: recovering the device password
 
 Losing the device password closes every door at once — ssh needs it, and so
-do the update and factory-reset buttons. There is a deliberate way back that
-does not cost you the family's data.
+do the update and factory-reset buttons.
 
-Put the SD card in any computer. The small FAT partition (`bootfs`) mounts
-automatically. Create an empty file called `fc-reset-password` in its root:
+Recovery requires being **physically in front of the display**:
 
-```bash
-touch /Volumes/bootfs/fc-reset-password        # macOS
-touch /media/$USER/bootfs/fc-reset-password    # Linux
+1. On the phone or tablet that is asking for the password, choose
+   **"Forgotten it? Recover using the screen"**.
+2. A four-digit code appears **on the calendar screen itself**.
+3. Type that code back on the phone.
+4. The device password resets to the factory default. Set a new one from
+   Settings straight away — that page is gated on this password, so the reset
+   is what lets you back in to change it.
+
+## Why the code is trustworthy
+
+It is held in memory and written nowhere — not the config, not the log, not
+the database — so it cannot be read back off the disk. And
+`/api/recovery/code` answers **only requests arriving on loopback**, which is
+how the kiosk's own browser reaches the server. A phone or laptop on the
+network arrives from a routable address and is refused:
+
+```
+GET /api/recovery/code  from 127.0.0.1     → {"code":"0879"}
+GET /api/recovery/code  from 192.168.7.33  → 403 {"reason":"not-local"}
 ```
 
-Put the card back and power on. At boot the device resets its password to the
-factory default (`changeme`), clears the flag that gates the privileged
-actions, and renames the marker to `fc-reset-password.done` so it doesn't fire
-again. Set a new password from Settings, or on the next run of the wizard.
+That refusal is the entire proof of presence. Starting a challenge is open to
+anyone on the network on purpose — it returns nothing but an expiry, so doing
+it without being in the room only puts a code on a screen you cannot see.
 
-This grants nothing an attacker didn't already have: anyone who can create
-that file can already read and rewrite the entire card, and no password check
-on the running system could have prevented it. What it avoids is having to
-erase everything to recover from a typo.
+The code is single-use, expires after five minutes, is compared in constant
+time, and locks out after five wrong guesses rather than allowing all 10,000
+to be tried.
 
-## Why the wizard now re-checks the password
-
-`/api/pi-password` verifies the new password immediately after setting it,
-before reporting success. A browser password manager offering to generate a
-"strong password" can fill both fields without anyone registering it, and the
-divergence would otherwise surface days later as "the update won't accept my
-password" — at which point the device is locked out of updates, factory reset
-and ssh simultaneously. Failing loudly at the moment of setting is much
-cheaper.
+Residual, stated plainly: someone already logged in over ssh could ask
+loopback for the code. That is not a new hole — ssh requires the very
+password being recovered, so being in that position means already having it
+(or an ssh key, which is a trust relationship someone set up deliberately).
