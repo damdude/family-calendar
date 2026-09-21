@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { RefreshCw, Link2, Link2Off } from 'lucide-svelte';
+	import GoogleCredentialsForm from './GoogleCredentialsForm.svelte';
 
 	type Status = { configured: boolean; connected: boolean; account: string | null };
 
@@ -9,6 +10,9 @@
 	let polling = $state(false);
 	let message = $state('');
 	let syncing = $state(false);
+	// Credentials can be present but wrong, so this has to be reachable when
+	// configured — not only when nothing is set at all.
+	let showCreds = $state(false);
 
 	async function loadStatus() {
 		const res = await fetch('/api/google/status');
@@ -81,11 +85,8 @@
 	{#if !status}
 		<p class="type-body sub">Checking…</p>
 	{:else if !status.configured}
-		<p class="type-body sub">
-			Google Calendar isn't configured on this device yet. Add
-			<code>GOOGLE_OAUTH_CLIENT_ID</code> and <code>GOOGLE_OAUTH_CLIENT_SECRET</code> to
-			<code>.env</code> (a "TVs and Limited Input" OAuth client), then restart.
-		</p>
+		<p class="type-body sub">Google Calendar isn't set up on this device yet.</p>
+		<GoogleCredentialsForm onsaved={loadStatus} />
 	{:else if status.connected}
 		<div class="connected">
 			<span class="badge ok"
@@ -116,9 +117,35 @@
 	{/if}
 
 	{#if message}<p class="type-caption msg">{message}</p>{/if}
+
+	{#if status?.configured}
+		<div class="credsrow">
+			<button type="button" class="linkbtn" onclick={() => (showCreds = !showCreds)}>
+				{showCreds ? 'Cancel' : 'Change Google credentials'}
+			</button>
+		</div>
+		{#if showCreds}
+			<GoogleCredentialsForm
+				onsaved={() => {
+					showCreds = false;
+					loadStatus();
+				}}
+			/>
+		{/if}
+	{/if}
 </div>
 
 <style>
+	.credsrow {
+		margin-top: var(--space-2);
+	}
+	.linkbtn {
+		background: none;
+		color: var(--color-text-secondary);
+		text-decoration: underline;
+		font-size: var(--text-sm);
+	}
+
 	.gc {
 		display: flex;
 		flex-direction: column;

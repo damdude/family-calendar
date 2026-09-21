@@ -7,7 +7,14 @@ set -u
 
 AP_SSID="FamilyCalendar Setup"
 WC_BIN=/usr/local/sbin/wifi-connect
+
+# Portal page. Prefer the one that ships with the app, so an OTA update can
+# change it: /usr/local/share needs root to write, which the update runs
+# without, and a page nobody can fix after flashing is a page that stays
+# wrong. Falls back to Balena's bundled UI if the app copy is missing.
 WC_UI=/usr/local/share/wifi-connect/ui
+FC_UI="${FC_APP_DIR:-/home/pi/family-calendar}/deploy/captive-portal"
+[ -f "$FC_UI/index.html" ] && WC_UI="$FC_UI"
 # The setup hotspot used to broadcast open — anyone within Wi-Fi range of the
 # house, not just the family, could join it and reach the setup portal (and,
 # while it's up, the app's own API on the Pi). The app's own setup screen

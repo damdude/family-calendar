@@ -135,7 +135,10 @@
 			const u = version?.update;
 			if (u?.status === 'available') checkMsg = '';
 			else if (u?.status === 'failed') checkMsg = `Check failed: ${u.error ?? 'unknown error'}`;
-			else checkMsg = "You're on the latest version";
+			else
+				checkMsg = version?.update?.installedAt
+					? `You're on the latest version — last updated ${lastUpdatedLabel}`
+					: "You're on the latest version";
 		} catch {
 			checkMsg = 'Could not run the update check.';
 		} finally {
@@ -184,6 +187,12 @@
 	const showAvailable = $derived(
 		version?.update?.status === 'available' && version.update.targetCommit !== dismissedTarget
 	);
+	// An install that finished within this session's memory is worth
+	// confirming on screen; older ones are just the "Last updated" row.
+	const justInstalled = $derived.by(() => {
+		const t = version?.update?.installedAt;
+		return !!t && version?.update?.status === 'idle' && Date.now() - t < 10 * 60_000;
+	});
 	const lastUpdatedLabel = $derived.by(() => {
 		const t = version?.update?.installedAt;
 		if (!t) return 'never (still on the version this device was built with)';
@@ -647,6 +656,8 @@
 						<button type="button" class="laterbtn" onclick={dismissUpdate}>Later</button>
 					</div>
 				</div>
+			{:else if justInstalled}
+				<p class="type-caption hint success">Updated successfully — {lastUpdatedLabel}</p>
 			{:else if version?.update?.status === 'failed'}
 				<div class="updateblock failed">
 					<p class="type-label">Update failed</p>

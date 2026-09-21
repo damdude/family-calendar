@@ -79,6 +79,9 @@
 		<input
 			class="input"
 			type="password"
+			autocapitalize="none"
+			autocorrect="off"
+			spellcheck="false"
 			bind:value={pw}
 			maxlength="64"
 			placeholder="Leave blank to keep the current one"
@@ -86,7 +89,16 @@
 	</label>
 	<label class="field">
 		<span class="type-label">Confirm password</span>
-		<input class="input" type="password" bind:value={pw2} maxlength="64" placeholder="Repeat it" />
+		<input
+			class="input"
+			type="password"
+			autocapitalize="none"
+			autocorrect="off"
+			spellcheck="false"
+			bind:value={pw2}
+			maxlength="64"
+			placeholder="Repeat it"
+		/>
 	</label>
 	{#if savedPw}<p class="type-caption ok">Password updated.</p>{/if}
 </div>
@@ -102,6 +114,9 @@
 		<input
 			class="input"
 			type="text"
+			autocapitalize="none"
+			autocorrect="off"
+			spellcheck="false"
 			bind:value={clientId}
 			placeholder="…apps.googleusercontent.com"
 		/>
@@ -111,6 +126,9 @@
 		<input
 			class="input"
 			type="password"
+			autocapitalize="none"
+			autocorrect="off"
+			spellcheck="false"
 			bind:value={clientSecret}
 			placeholder="Leave blank to set this up later"
 		/>
