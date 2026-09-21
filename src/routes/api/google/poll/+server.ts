@@ -4,6 +4,7 @@ import { GOOGLE_PROVIDER, pollDeviceToken } from '$lib/server/google';
 import { saveOAuthToken } from '$lib/server/db/repo';
 import { syncGoogle } from '$lib/server/sync';
 import { stashPendingGoogle } from '$lib/server/pairing';
+import { logEvent } from '$lib/server/debugLog';
 import type { RequestHandler } from './$types';
 
 const Body = z.object({
@@ -21,6 +22,7 @@ export const POST: RequestHandler = async ({ request }) => {
 	if (!parsed.success) throw error(400, 'missing deviceCode');
 
 	const result = await pollDeviceToken(parsed.data.deviceCode);
+	logEvent('google.poll', { status: result.status });
 	if (result.status === 'granted') {
 		const { setupToken, draftProfileId } = parsed.data;
 		if (setupToken && draftProfileId) {

@@ -5,6 +5,7 @@ import path from 'node:path';
 import { getSession } from '$lib/server/pairing';
 import { ELEVATED_COOKIE, isValidSessionToken } from '$lib/server/session';
 import { setEnvLine } from '$lib/server/envFile';
+import { logEvent } from '$lib/server/debugLog';
 import type { RequestHandler } from './$types';
 
 const BodySchema = z.object({
@@ -42,6 +43,17 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 			{ status: 401 }
 		);
 	}
+	// Shape, not content. A client ID that does not end in the Google suffix,
+	// or whose length is off, is the signature of a value mangled in transit
+	// (iOS autocorrect did exactly this) rather than a wrong client.
+	logEvent('googleCreds.received', {
+		via: viaSetup ? 'setup-token' : 'device-password',
+		clientIdLength: googleClientId.length,
+		clientIdSuffixOk: googleClientId.endsWith('.apps.googleusercontent.com'),
+		clientIdHasSpace: /\s/.test(googleClientId),
+		clientIdHasUppercase: /[A-Z]/.test(googleClientId),
+		secretLength: googleClientSecret.length
+	});
 	if (!googleClientId && !googleClientSecret) return json({ ok: true, saved: false });
 	if (!googleClientId || !googleClientSecret) {
 		throw error(400, 'Both the client ID and the client secret are required.');
@@ -56,6 +68,7 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 		process.env.GOOGLE_OAUTH_CLIENT_ID = googleClientId;
 		process.env.GOOGLE_OAUTH_CLIENT_SECRET = googleClientSecret;
 
+		logEvent('googleCreds.saved');
 		return json({ ok: true, saved: true });
 	} catch (err) {
 		console.error('Failed to save Google credentials:', err);

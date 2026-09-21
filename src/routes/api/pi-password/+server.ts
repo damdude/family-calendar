@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { spawn } from 'node:child_process';
 import { getSession } from '$lib/server/pairing';
 import { loadConfig, saveConfig } from '$lib/server/config';
+import { logEvent } from '$lib/server/debugLog';
 import type { RequestHandler } from './$types';
 
 /** Control characters would corrupt the single `user:password` line the helper
@@ -35,8 +36,15 @@ export const POST: RequestHandler = async ({ request }) => {
 	if (!parsed.success) throw error(400, parsed.error.issues[0]?.message ?? 'invalid request');
 
 	const { token, newPassword, confirmPassword } = parsed.data;
-	if (!getSession(token)) throw error(403, 'This setup session has expired.');
-	if (newPassword !== confirmPassword) throw error(400, 'The passwords do not match.');
+	if (!getSession(token)) {
+		logEvent('password.rejected', { reason: 'setup session expired' });
+		throw error(403, 'This setup session has expired.');
+	}
+	if (newPassword !== confirmPassword) {
+		logEvent('password.rejected', { reason: 'mismatch' });
+		throw error(400, 'The passwords do not match.');
+	}
+	logEvent('password.attempt', { length: newPassword.length });
 
 	const result = await new Promise<{ ok: boolean; message?: string }>((resolve) => {
 		let child;
@@ -72,6 +80,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		child.stdin.end();
 	});
 
+	logEvent('password.result', { ok: result.ok, detail: result.message });
 	if (!result.ok) {
 		console.error('Password change failed:', result.message);
 		throw error(500, 'Could not change the device password.');

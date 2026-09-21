@@ -4,6 +4,7 @@ import { startScheduler } from '$lib/server/cron';
 import { isPinSet } from '$lib/server/pin';
 import { ELEVATED_COOKIE, isValidSessionToken, SESSION_COOKIE } from '$lib/server/session';
 import { loadConfig } from '$lib/server/config';
+import { logEvent } from '$lib/server/debugLog';
 
 // Start background jobs (calendar sync, later: scrape, OTA) once on boot.
 startScheduler();
@@ -51,8 +52,12 @@ const PASSWORD_GATED_PATHS = new Set([
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 export const handle: Handle = async ({ event, resolve }) => {
+	const startedAt = Date.now();
 	const { pathname } = event.url;
 	const { method } = event.request;
+	// Setup and every mutation are worth a line; routine GET polling is not,
+	// or the interesting run scrolls out of the file.
+	const traced = pathname.startsWith('/setup') || pathname.startsWith('/api/');
 
 	// Every mutating /api/ route parses its body with request.json(), which
 	// doesn't care what Content-Type it's labeled with — so a cross-site
@@ -85,6 +90,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 			return json({ message: 'Cross-site request blocked' }, { status: 403 });
 		}
 		if (originHost !== host) {
+			logEvent('blocked.crossSite', { method, pathname, origin, host });
 			return json({ message: 'Cross-site request blocked' }, { status: 403 });
 		}
 	}
@@ -92,6 +98,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 	if (PASSWORD_GATED_PATHS.has(pathname)) {
 		const { devicePasswordSet } = await loadConfig();
 		if (devicePasswordSet && !isValidSessionToken(event.cookies.get(ELEVATED_COOKIE), 'elevated')) {
+			logEvent('gate.devicePasswordRequired', { pathname });
 			return json(
 				{ message: 'Device password required', needsDevicePassword: true },
 				{ status: 401 }
@@ -102,9 +109,19 @@ export const handle: Handle = async ({ event, resolve }) => {
 	if (PIN_GATED_PATHS.has(pathname) && (await isPinSet())) {
 		const token = event.cookies.get(SESSION_COOKIE);
 		if (!isValidSessionToken(token)) {
+			logEvent('gate.pinRequired', { pathname });
 			return json({ message: 'PIN required' }, { status: 401 });
 		}
 	}
 
-	return resolve(event);
+	const response = await resolve(event);
+	if (traced && (method !== 'GET' || response.status >= 400 || pathname.startsWith('/setup'))) {
+		logEvent('request', {
+			method,
+			pathname,
+			status: response.status,
+			ms: Date.now() - startedAt
+		});
+	}
+	return response;
 };

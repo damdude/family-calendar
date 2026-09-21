@@ -2,7 +2,7 @@ import { error, json } from '@sveltejs/kit';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { defaultPersisted, saveConfig } from '$lib/server/config';
+import { defaultPersisted, loadConfig, saveConfig } from '$lib/server/config';
 import { emptyData, saveFamilyData } from '$lib/server/familydata';
 import { getDb } from '$lib/server/db';
 import { DATA_DIR, POINTER_PATH } from '$lib/server/paths';
@@ -89,8 +89,12 @@ export const POST: RequestHandler = async ({ request }) => {
 		}
 
 		// Schema defaults = the unconfigured state, which sends the app back
-		// to /setup on the next load.
-		await saveConfig(defaultPersisted());
+		// to /setup on the next load. devicePasswordSet is carried over
+		// deliberately: a factory reset does NOT reset the device's login
+		// password, so clearing the flag left the privileged actions ungated
+		// while the old password was still the one that worked.
+		const before = await loadConfig();
+		await saveConfig({ ...defaultPersisted(), devicePasswordSet: before.devicePasswordSet });
 	} catch (err) {
 		console.error('Factory reset failed:', err);
 		throw error(500, 'Factory reset failed');

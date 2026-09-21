@@ -7,6 +7,7 @@ import { syncGoogle } from '$lib/server/sync';
 import { SetupDraftSchema, type PersistedProfile } from '$lib/server/schema';
 import { loadConfig, saveConfig } from '$lib/server/config';
 import { publish } from '$lib/server/bus';
+import { logEvent } from '$lib/server/debugLog';
 import type { RequestHandler } from './$types';
 
 const BodySchema = z.object({ token: z.string(), draft: SetupDraftSchema });
@@ -66,6 +67,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		syncGoogle().catch(() => {});
 	}
 
+	logEvent('setup.completed', { profiles: profiles.length, googleConnected: connected });
 	markComplete(token);
 	publish(token, { type: 'complete' });
 
