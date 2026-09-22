@@ -154,13 +154,6 @@
 	.sub {
 		color: var(--color-text-secondary);
 	}
-	code {
-		font-family: ui-monospace, monospace;
-		font-size: 0.85em;
-		background: var(--color-surface-elevated);
-		padding: 1px 5px;
-		border-radius: 5px;
-	}
 	.connected {
 		display: flex;
 		align-items: center;

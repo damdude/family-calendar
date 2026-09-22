@@ -1,25 +1,41 @@
 /**
- * Setup pairing sessions (server-only, in-memory).
+ * Setup pairing sessions (server-only).
  *
- * A pairing token gates the phone wizard and the kiosk↔phone channel. Tokens
- * are rotated each time the kiosk opens /setup and hold an in-progress draft
- * that the phone updates and completion persists. Expiry is a sliding
- * inactivity window (20 min since the session was last touched), not a flat
- * timer from creation — filling in a whole family (several kids, each with a
- * date-of-birth picker, color, avatar) can easily take longer than a fixed
- * "since scanned" timer allows, and there was no warning before it lapsed.
- * An abandoned scan still expires; active use never does.
+ * A pairing token gates the phone wizard and the kiosk↔phone channel, and
+ * carries the in-progress draft that completion persists. Expiry is a sliding
+ * inactivity window, not a flat timer from creation — filling in a whole
+ * family takes as long as it takes, and there was no warning before it
+ * lapsed.
  *
- * In-memory is intentional: pairing state should never survive a restart, and
- * a single-family appliance has exactly one kiosk.
+ * These used to be memory-only, on the reasoning that pairing state should
+ * not survive a restart. In practice that meant powering the device off
+ * halfway through setup threw away everything entered so far and left the
+ * phone on a dead link, with no way forward but rescanning — and it was not
+ * buying much: during setup the device has no password at all, so anything on
+ * the network could already load /setup and mint itself a fresh token. So
+ * they are now written to disk, ENCRYPTED with the device key, because the
+ * draft can carry Google refresh tokens for accounts connected mid-wizard.
+ *
+ * The file is removed as soon as setup completes; nothing here outlives that.
  */
 
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 import { emptyDraft, type SetupDraft } from '$lib/setup/types';
+import { DATA_DIR } from './paths';
+import { decryptString, encryptString } from './crypto';
 
-// Inactivity timeout: 30 minutes. Long enough for multi-child setup,
-// short enough to clean up abandoned sessions.
-const TTL_MS = 30 * 60 * 1000;
+/**
+ * Sliding inactivity window. Generous on purpose: setup is routinely
+ * interrupted — someone leaves the house partway through — and coming back to
+ * a dead link is a far more likely outcome than a stale token being abused on
+ * a device that has no password yet. Still bounded, so a genuinely abandoned
+ * setup does eventually stop being resumable.
+ */
+const TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+const STORE_PATH = path.join(DATA_DIR, 'setup-session.enc');
 
 /** A Google account authorised during the wizard, before the profile it
  *  belongs to has a real id. */
@@ -50,6 +66,51 @@ export interface PairingSession {
 
 const sessions = new Map<string, PairingSession>();
 
+/** Shape written to disk — Map is not JSON, so pendingGoogle goes as pairs. */
+type StoredSession = Omit<PairingSession, 'pendingGoogle'> & {
+	pendingGoogle: [string, PendingGoogleToken][];
+};
+
+function persist(): void {
+	try {
+		const payload: StoredSession[] = [...sessions.values()].map((s) => ({
+			...s,
+			pendingGoogle: [...s.pendingGoogle.entries()]
+		}));
+		fs.mkdirSync(DATA_DIR, { recursive: true });
+		fs.writeFileSync(STORE_PATH, encryptString(JSON.stringify(payload)), { mode: 0o600 });
+	} catch {
+		/* setup still works for this boot; it just won't survive the next one */
+	}
+}
+
+function restore(): void {
+	try {
+		const raw = fs.readFileSync(STORE_PATH);
+		const parsed = JSON.parse(decryptString(raw)) as StoredSession[];
+		const now = Date.now();
+		for (const s of parsed) {
+			if (now - s.lastActiveAt > TTL_MS) continue;
+			sessions.set(s.token, { ...s, pendingGoogle: new Map(s.pendingGoogle) });
+		}
+	} catch {
+		/* no store, unreadable, or a device key change — start fresh */
+	}
+}
+
+restore();
+
+/** Remove the on-disk copy. Called once setup finishes; nothing about a
+ *  configured device should still be resumable. */
+export function clearPersistedSessions(): void {
+	sessions.clear();
+	try {
+		fs.rmSync(STORE_PATH, { force: true });
+	} catch {
+		/* best effort */
+	}
+}
+
 function prune() {
 	const now = Date.now();
 	for (const [token, s] of sessions) {
@@ -70,6 +131,7 @@ export function createPairing(): { token: string; expiresAt: number } {
 		pendingGoogle: new Map(),
 		completed: false
 	});
+	persist();
 	return { token, expiresAt: now + TTL_MS };
 }
 
@@ -89,6 +151,7 @@ export function getSession(token: string | null | undefined): PairingSession | n
 	// a dead token, and the failure surfaced as whatever the step they were
 	// on happened to be doing.
 	s.lastActiveAt = Date.now();
+	persist();
 	return s;
 }
 
@@ -98,6 +161,7 @@ export function claimPairing(token: string): PairingSession | null {
 	if (s) {
 		s.claimedAt = Date.now();
 		s.lastActiveAt = s.claimedAt;
+		persist();
 	}
 	return s;
 }
@@ -107,6 +171,7 @@ export function updateDraft(token: string, draft: SetupDraft): PairingSession | 
 	if (s) {
 		s.draft = draft;
 		s.lastActiveAt = Date.now();
+		persist();
 	}
 	return s;
 }
@@ -120,6 +185,7 @@ export function stashPendingGoogle(
 	const s = getSession(token);
 	if (!s) return false;
 	s.pendingGoogle.set(draftProfileId, value);
+	persist();
 	return true;
 }
 
@@ -128,6 +194,7 @@ export function markComplete(token: string): PairingSession | null {
 	if (s) {
 		s.completed = true;
 		s.lastActiveAt = Date.now();
+		persist();
 	}
 	return s;
 }

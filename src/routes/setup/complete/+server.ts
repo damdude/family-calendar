@@ -1,6 +1,6 @@
 import { error } from '@sveltejs/kit';
 import { z } from 'zod';
-import { getSession, markComplete } from '$lib/server/pairing';
+import { clearPersistedSessions, getSession, markComplete } from '$lib/server/pairing';
 import { saveOAuthToken } from '$lib/server/db/repo';
 import { GOOGLE_PROVIDER } from '$lib/server/google';
 import { syncGoogle } from '$lib/server/sync';
@@ -70,6 +70,8 @@ export const POST: RequestHandler = async ({ request }) => {
 	logEvent('setup.completed', { profiles: profiles.length, googleConnected: connected });
 	markComplete(token);
 	publish(token, { type: 'complete' });
+	// Setup is done: drop the resumable state, including its on-disk copy.
+	clearPersistedSessions();
 
 	// Clear the setup token cookie since setup is done
 	return new Response(JSON.stringify({ ok: true }), {

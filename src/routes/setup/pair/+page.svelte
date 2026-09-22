@@ -7,6 +7,7 @@
 		AVATAR_CHOICES,
 		ageFromBirthdate,
 		defaultBirthdate,
+		emptyDraft,
 		randomId,
 		todayDateStr
 	} from '$lib/setup/types';
@@ -24,10 +25,13 @@
 	let errorMsg = $state('');
 
 	// Seed once from the load data; the wizard owns `draft` thereafter.
+	// `data.draft` is null only on an expired link, where the wizard never
+	// renders — but the seed still has to typecheck, so fall back to an empty
+	// draft rather than asserting.
 	let draft = $state<SetupDraft>(
 		untrack(() => ({
-			family: { ...data.draft.family },
-			profiles: [...data.draft.profiles]
+			family: { ...(data.draft?.family ?? emptyDraft().family) },
+			profiles: [...(data.draft?.profiles ?? [])]
 		}))
 	);
 
@@ -180,7 +184,18 @@
 </script>
 
 <div class="wizard">
-	{#if finished}
+	{#if data.expired}
+		<div class="done">
+			<h1 class="type-title">This link is no longer active</h1>
+			<p class="type-body sub">
+				Look at the calendar screen — it's showing a QR code right now. Scan that one and you'll
+				carry on from wherever you left off; nothing you entered has been lost.
+			</p>
+			<p class="type-caption sub">
+				Setup links stop working once the device has been left alone for a long time.
+			</p>
+		</div>
+	{:else if finished}
 		<div class="done">
 			<div class="tick"><Check size={40} strokeWidth={3} /></div>
 			<h1 class="type-title">You're all set!</h1>

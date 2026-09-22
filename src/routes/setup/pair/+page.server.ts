@@ -1,4 +1,3 @@
-import { error } from '@sveltejs/kit';
 import { claimPairing } from '$lib/server/pairing';
 import type { PageServerLoad } from './$types';
 
@@ -18,9 +17,14 @@ export const load: PageServerLoad = async ({ url }) => {
 	const token = url.searchParams.get('token');
 	const session = token ? claimPairing(token) : null;
 	if (!session) {
-		throw error(410, 'This setup link has expired. Scan a fresh code from the display.');
+		// Deliberately not a thrown error. A bare 410 reads as a dead end —
+		// which is how it was reported — when the way forward is simply to
+		// scan the code currently on the display. Sessions now survive a
+		// restart, so reaching this at all should be rare.
+		return { expired: true as const, token: null, draft: null, timezones: [] };
 	}
 	return {
+		expired: false as const,
 		token: session.token,
 		draft: session.draft,
 		timezones: timezones()
