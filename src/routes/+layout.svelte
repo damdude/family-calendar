@@ -5,6 +5,7 @@
 	import { goto } from '$app/navigation';
 	import { mirror } from '$lib/stores/mirror.svelte';
 	import RecoveryCode from '$lib/components/RecoveryCode.svelte';
+	import UpdateOverlay from '$lib/components/UpdateOverlay.svelte';
 
 	let { children } = $props();
 
@@ -68,3 +69,7 @@
 <!-- Only ever visible on the kiosk itself: the code endpoint refuses anything
      that is not loopback, which is what makes it proof of being in the room. -->
 <RecoveryCode />
+
+<!-- Global, not route-gated: whichever screen is being looked at during an
+     install should show it, same as the recovery code above. -->
+<UpdateOverlay />
