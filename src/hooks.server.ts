@@ -46,7 +46,10 @@ const PASSWORD_GATED_PATHS = new Set([
 	'/api/update/install',
 	'/api/factory-reset',
 	'/api/storage/migrate',
-	'/api/storage/nas/mount'
+	'/api/storage/nas/mount',
+	// Not destructive, but an unauthenticated POST from anything on the LAN
+	// would otherwise be a standing way to interrupt the family mid-use.
+	'/api/system/reboot'
 ]);
 
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);

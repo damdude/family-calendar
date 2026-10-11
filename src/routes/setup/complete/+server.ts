@@ -8,6 +8,7 @@ import { SetupDraftSchema, type PersistedProfile } from '$lib/server/schema';
 import { loadConfig, saveConfig } from '$lib/server/config';
 import { publish } from '$lib/server/bus';
 import { logEvent } from '$lib/server/debugLog';
+import { applySystemTimezone } from '$lib/server/systemTime';
 import type { RequestHandler } from './$types';
 
 const BodySchema = z.object({ token: z.string(), draft: SetupDraftSchema });
@@ -44,6 +45,16 @@ export const POST: RequestHandler = async ({ request }) => {
 		profiles,
 		app: { ...current.app, view: { ...current.app.view, weekStartsOn: draft.family.weekStartsOn } }
 	});
+
+	// First real chance the device has to know its own time zone — up to now
+	// it has been running on whatever the image shipped with.
+	if (draft.family.timezone && draft.family.timezone !== current.family.timezone) {
+		applySystemTimezone(draft.family.timezone)
+			.then((r) =>
+				logEvent('timezone.applied', { zone: draft.family.timezone, ok: r.ok, detail: r.message })
+			)
+			.catch(() => {});
+	}
 
 	// Google accounts connected during the wizard were held against draft ids
 	// because the real ones did not exist yet. They do now.

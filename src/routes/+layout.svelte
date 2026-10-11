@@ -41,13 +41,16 @@
 	// the only path excluded.
 	$effect(() => {
 		if (mirror.role !== 'controller' || !mirror.token) return;
+		// /remote itself calls mirror.reportPath() immediately on every tab
+		// switch (and the Settings link does the same before it navigates
+		// away) — this interval exists only to resend after a dropped
+		// request or a missed tick, not to discover the path in the first
+		// place, which is why it is safe to keep reading the same
+		// mirror.activePath rather than page.url.pathname: the latter is
+		// only a fallback for the short window before the page has set one.
 		const report = () => {
 			if (page.url.pathname.startsWith('/pair')) return;
-			fetch('/api/mirror/nav', {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ token: mirror.token, path: mirror.activePath ?? page.url.pathname })
-			}).catch(() => {});
+			mirror.reportPath(mirror.activePath ?? page.url.pathname);
 		};
 		report();
 		const id = setInterval(report, 5000);

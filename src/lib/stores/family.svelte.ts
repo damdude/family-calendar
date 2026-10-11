@@ -99,6 +99,9 @@ class FamilyStore {
 	 *  default location (src/lib/sun.ts). */
 	latitude = $state<number | undefined>(undefined);
 	longitude = $state<number | undefined>(undefined);
+	/** Human-readable "City, Region" from the location picker — display only;
+	 *  latitude/longitude remain the source of truth for sunrise/sunset. */
+	locationName = $state<string | undefined>(undefined);
 	/** Shared/household addresses — an invite sent to one of these tags every
 	 *  profile, not any one person (see sync.ts's attendee matching). */
 	sharedEmails = $state<string[]>([]);
@@ -185,6 +188,7 @@ class FamilyStore {
 		this.wifiSkipped = !!cfg.wifiSkipped;
 		this.latitude = cfg.family.latitude;
 		this.longitude = cfg.family.longitude;
+		this.locationName = cfg.family.locationName;
 		this.sharedEmails = cfg.family.sharedEmails ?? [];
 		if (!cfg.setupComplete) return;
 		if (cfg.family.name) this.data.familyName = cfg.family.name;
@@ -464,6 +468,7 @@ class FamilyStore {
 				weekStartsOn: this.data.weekStartsOn,
 				latitude: this.latitude,
 				longitude: this.longitude,
+				locationName: this.locationName,
 				sharedEmails: this.sharedEmails
 			},
 			profiles: this.data.profiles.map((p) => ({

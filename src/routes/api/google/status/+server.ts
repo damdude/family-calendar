@@ -1,6 +1,5 @@
 import { json } from '@sveltejs/kit';
 import { isGoogleConfigured } from '$lib/server/google';
-import { isGoogleConnected } from '$lib/server/sync';
 import { getOAuthToken, getAllGoogleTokens as getAllGoogleTokensRepo } from '$lib/server/db/repo';
 import type { RequestHandler } from './$types';
 
@@ -22,7 +21,14 @@ export const GET: RequestHandler = ({ url }) => {
 		configured: isGoogleConfigured(),
 		clientIdMasked,
 		clientSecretSet: !!process.env.GOOGLE_OAUTH_CLIENT_SECRET,
-		connected: isGoogleConnected(),
+		// Whether THIS identity (the profile asked about, or the shared/no-
+		// profile account when the query omits profileId) has a token — not
+		// "does a token exist anywhere." The previous version answered the
+		// latter from "does any token exist", so the device-wide "Calendars" card
+		// (which never passes profileId) showed "Connected" the moment ANY
+		// profile connected their own account, with no email to show for it —
+		// an orphaned-looking state with nothing actually wrong underneath.
+		connected: !!token,
 		allConnections: getAllGoogleTokensRepo().map((t) => ({
 			profileId: t.profileId ?? null,
 			accountEmail: t.accountEmail ?? null

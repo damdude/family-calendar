@@ -1,8 +1,15 @@
 <script lang="ts">
 	import { RefreshCw, Link2, Link2Off } from 'lucide-svelte';
 	import GoogleCredentialsForm from './GoogleCredentialsForm.svelte';
+	import { family } from '$lib/stores/family.svelte';
 
-	type Status = { configured: boolean; connected: boolean; account: string | null };
+	type Connection = { profileId: number | null; accountEmail: string | null };
+	type Status = {
+		configured: boolean;
+		connected: boolean;
+		account: string | null;
+		allConnections?: Connection[];
+	};
 
 	let status = $state<Status | null>(null);
 	let userCode = $state<string | null>(null);
@@ -13,6 +20,20 @@
 	// Credentials can be present but wrong, so this has to be reachable when
 	// configured — not only when nothing is set at all.
 	let showCreds = $state(false);
+
+	/** Every connection this device knows about, with a name attached — "shared
+	 *  account" for the no-profile identity this card itself manages, or the
+	 *  matching profile's name. Shown unconditionally so a per-profile
+	 *  connection (made from that person's own card in the Family section)
+	 *  is never invisible here just because THIS card's own identity (the
+	 *  shared account) has nothing connected. */
+	const connections = $derived.by(() => {
+		return (status?.allConnections ?? []).map((c) => {
+			if (c.profileId === null) return { ...c, label: 'Shared account' };
+			const p = family.profiles.find((x) => x.id === c.profileId);
+			return { ...c, label: p ? p.name : `Profile #${c.profileId}` };
+		});
+	});
 
 	async function loadStatus() {
 		const res = await fetch('/api/google/status');
@@ -84,13 +105,31 @@
 <div class="gc">
 	{#if !status}
 		<p class="type-body sub">Checking…</p>
-	{:else if !status.configured}
+	{:else}
+		{#if connections.length}
+			<ul class="connlist">
+				{#each connections as c (c.profileId ?? 'shared')}
+					<li class="connrow">
+						<span class="badge ok"><Link2 size={14} /> {c.label}</span>
+						<span class="type-caption sub">{c.accountEmail ?? '(no account email on file)'}</span>
+					</li>
+				{/each}
+			</ul>
+			<p class="type-caption sub">
+				Per-person accounts are connected from that person's own card, under Family.
+			</p>
+		{/if}
+	{/if}
+
+	{#if status && !status.configured}
 		<p class="type-body sub">Google Calendar isn't set up on this device yet.</p>
 		<GoogleCredentialsForm onsaved={loadStatus} />
-	{:else if status.connected}
+	{:else if status?.connected}
 		<div class="connected">
 			<span class="badge ok"
-				><Link2 size={16} /> Connected{status.account ? ` · ${status.account}` : ''}</span
+				><Link2 size={16} /> Shared account connected{status.account
+					? ` · ${status.account}`
+					: ''}</span
 			>
 			<div class="actions">
 				<button type="button" class="btn" disabled={syncing} onclick={syncNow}>
@@ -110,9 +149,9 @@
 			<div class="code">{userCode}</div>
 			<p class="type-caption sub">Waiting for you to approve…</p>
 		</div>
-	{:else}
+	{:else if status?.configured}
 		<button type="button" class="btn primary" onclick={connect}
-			><Link2 size={16} /> Connect Google Calendar</button
+			><Link2 size={16} /> Connect a shared account</button
 		>
 	{/if}
 
@@ -153,6 +192,20 @@
 	}
 	.sub {
 		color: var(--color-text-secondary);
+	}
+	.connlist {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+	}
+	.connrow {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
+		flex-wrap: wrap;
 	}
 	.connected {
 		display: flex;

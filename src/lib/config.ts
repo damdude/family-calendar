@@ -127,6 +127,8 @@ export interface PersistedFamily {
 	/** Drives the sunrise/sunset auto theme (src/lib/sun.ts); optional. */
 	latitude?: number;
 	longitude?: number;
+	/** Human-readable "City, Region" from the location picker — display only. */
+	locationName?: string;
 	/** Shared/household addresses — an invite sent to one of these tags the
 	 *  whole family, not any one person. */
 	sharedEmails?: string[];

@@ -244,6 +244,89 @@
 		}, 400);
 	}
 
+	// --- Location & time zone ---
+	// Powers the sunrise/sunset auto theme (lat/long) AND the device's actual
+	// system clock offset (timezone — applied server-side in /api/config when
+	// it changes). Both were only ever set once, during the wizard, with no
+	// way back into them afterwards.
+	let locQuery = $state('');
+	let locResults = $state<
+		{
+			name: string;
+			admin1?: string;
+			country?: string;
+			latitude: number;
+			longitude: number;
+			timezone: string;
+		}[]
+	>([]);
+	let locSearching = $state(false);
+	let locErr = $state('');
+	let locSearchTimer: ReturnType<typeof setTimeout>;
+
+	function searchLocation() {
+		clearTimeout(locSearchTimer);
+		locErr = '';
+		if (locQuery.trim().length < 2) {
+			locResults = [];
+			return;
+		}
+		locSearchTimer = setTimeout(async () => {
+			locSearching = true;
+			try {
+				const r = await fetch(`/api/location-search?q=${encodeURIComponent(locQuery.trim())}`);
+				if (!r.ok) throw new Error();
+				locResults = (await r.json()).results ?? [];
+			} catch {
+				locErr = "Couldn't search — check the device is online.";
+				locResults = [];
+			} finally {
+				locSearching = false;
+			}
+		}, 400);
+	}
+
+	function pickLocation(r: (typeof locResults)[number]) {
+		family.latitude = r.latitude;
+		family.longitude = r.longitude;
+		family.locationName = [r.name, r.admin1 || r.country].filter(Boolean).join(', ');
+		family.data.timezone = r.timezone;
+		locQuery = '';
+		locResults = [];
+		uiLog('settings.location', { timezone: r.timezone });
+		persist();
+	}
+
+	let timezones = $state<string[]>([]);
+	$effect(() => {
+		try {
+			const fn = (Intl as unknown as { supportedValuesOf?: (k: string) => string[] })
+				.supportedValuesOf;
+			if (fn) timezones = fn('timeZone');
+		} catch {
+			/* manual picker just won't offer the full list */
+		}
+	});
+
+	// --- Restart ---
+	let restarting = $state(false);
+	async function restartDevice() {
+		if (!confirm('Restart the calendar now? It will be back in about a minute.')) return;
+		restarting = true;
+		try {
+			const r = await privileged(() => fetch('/api/system/reboot', { method: 'POST' }));
+			if (!r.ok) {
+				restarting = false;
+				const body = await r.json().catch(() => null);
+				alert(body?.message ?? 'Could not restart the device.');
+			}
+			// On success the server is about to go away; leave the button in its
+			// "restarting" state rather than resetting it.
+		} catch {
+			restarting = false;
+		}
+	}
+
 	const featureLabels = FEATURE_LABELS;
 	const featureKeys = FEATURE_KEYS;
 
@@ -429,6 +512,67 @@
 				</p>
 				<ProfileEditor onChange={persist} />
 			</div>
+		</section>
+
+		<!-- Location & time zone -->
+		<section class="card">
+			<div class="cardhead">
+				<h2 class="type-heading">Location &amp; time zone</h2>
+				<p class="type-caption sub">
+					Sets the device's clock and drives sunrise/sunset for the auto light/dark theme.
+				</p>
+			</div>
+			<label class="field">
+				<span class="type-label lbl">Search for a city</span>
+				<input
+					class="input"
+					type="text"
+					placeholder="e.g. Austin, Texas"
+					bind:value={locQuery}
+					oninput={searchLocation}
+				/>
+			</label>
+			{#if locSearching}
+				<p class="type-caption sub"><Spinner size={13} /> Searching…</p>
+			{:else if locErr}
+				<p class="type-caption err">{locErr}</p>
+			{:else if locResults.length}
+				<ul class="locresults">
+					{#each locResults as r (r.name + r.latitude)}
+						<li>
+							<button type="button" class="locresult" onclick={() => pickLocation(r)}>
+								<span class="type-body">{r.name}</span>
+								<span class="type-caption sub"
+									>{[r.admin1, r.country].filter(Boolean).join(', ')} · {r.timezone}</span
+								>
+							</button>
+						</li>
+					{/each}
+				</ul>
+			{/if}
+
+			<label class="field">
+				<span class="type-label lbl">Time zone</span>
+				<select
+					class="input"
+					value={family.data.timezone}
+					onchange={(e) => {
+						family.data.timezone = (e.currentTarget as HTMLSelectElement).value;
+						uiLog('settings.timezoneManual', { timezone: family.data.timezone });
+						persist();
+					}}
+				>
+					{#if !timezones.includes(family.data.timezone)}
+						<option value={family.data.timezone}>{family.data.timezone}</option>
+					{/if}
+					{#each timezones as tz (tz)}
+						<option value={tz}>{tz}</option>
+					{/each}
+				</select>
+			</label>
+			<p class="type-caption sub">
+				Current: {family.locationName ?? 'not set'} — {family.data.timezone}
+			</p>
 		</section>
 
 		<!-- Routines -->
@@ -638,6 +782,15 @@
 						}}
 					>
 						<span class="knob"></span>
+					</button>
+				</div>
+				<div class="row">
+					<span class="type-label"
+						>Restart device <span class="hint type-caption">takes about a minute</span></span
+					>
+					<button type="button" class="pairbtn small" disabled={restarting} onclick={restartDevice}>
+						{#if restarting}<Spinner size={15} label="Restarting" />{/if}
+						{restarting ? 'Restarting…' : 'Restart'}
 					</button>
 				</div>
 			</div>
@@ -1232,5 +1385,32 @@
 		display: flex;
 		align-items: center;
 		gap: 8px;
+	}
+
+	.err {
+		color: var(--color-accent-warning);
+	}
+	.locresults {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		max-height: 220px;
+		overflow-y: auto;
+	}
+	.locresult {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		width: 100%;
+		padding: 10px 12px;
+		border-radius: var(--radius-md);
+		background: var(--color-surface-elevated);
+		text-align: left;
+	}
+	.locresult:hover {
+		background: color-mix(in srgb, var(--color-text-primary) 6%, var(--color-surface-elevated));
 	}
 </style>

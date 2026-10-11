@@ -149,6 +149,11 @@ install -m 755 "${APP_DIR}/scripts/set-password.sh" /usr/local/bin/fc-set-passwo
 # NetworkManager, outside the app's data directory.
 install -m 755 "${APP_DIR}/scripts/factory-reset-net.sh" /usr/local/bin/fc-factory-reset-net 2>/dev/null || true
 
+# Applies the family's chosen IANA time zone to the OS clock (Settings ->
+# Location & time zone), which nothing previously did — the device just ran
+# on whatever zone the image shipped with.
+install -m 755 "${APP_DIR}/scripts/set-timezone.sh" /usr/local/bin/fc-set-timezone 2>/dev/null || true
+
 cat > /etc/systemd/system/family-calendar-wifi.service <<UNIT
 [Unit]
 Description=Family Calendar first-boot Wi-Fi onboarding (captive portal)
@@ -179,6 +184,7 @@ ${DASH_USER} ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart family-calendar, \
   /usr/local/bin/fc-wifi-join, \
   /usr/local/bin/fc-set-password, \
   /usr/local/bin/fc-factory-reset-net, \
+  /usr/local/bin/fc-set-timezone, \
   /usr/bin/systemctl reboot, /sbin/reboot
 SUDO
 chmod 440 /etc/sudoers.d/family-calendar

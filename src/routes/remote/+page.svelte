@@ -6,6 +6,9 @@
 	import { autoEmojiFor } from '$lib/meals';
 	import { formatRange } from '$lib/time';
 	import Avatar from '$lib/components/Avatar.svelte';
+	import MobileTabBar from '$lib/components/MobileTabBar.svelte';
+	import type { TabBarItem } from '$lib/components/tabBar';
+	import ChoreBoard from '$lib/components/ChoreBoard.svelte';
 	import {
 		Check,
 		Plus,
@@ -13,6 +16,7 @@
 		CalendarDays,
 		ListChecks,
 		SquareCheck,
+		ClipboardCheck,
 		Settings,
 		Trash2,
 		Pencil,
@@ -35,7 +39,8 @@
 	});
 
 	let stopped = $state(false);
-	type Tab = 'calendar' | 'lists' | 'tasks' | 'meals' | 'recipes' | 'routines' | 'rewards';
+	type Tab =
+		'calendar' | 'lists' | 'tasks' | 'chores' | 'meals' | 'recipes' | 'routines' | 'rewards';
 	let tab = $state<Tab>('calendar');
 
 	// The display follows whichever tab is active here (not a full mirror —
@@ -45,14 +50,49 @@
 		calendar: '/',
 		lists: '/lists',
 		tasks: '/tasks',
+		chores: '/chores',
 		recipes: '/recipes',
 		meals: '/meals',
 		routines: '/routines',
 		rewards: '/rewards'
 	};
-	$effect(() => {
-		mirror.activePath = TAB_PATH[tab];
+
+	/** Switch tabs AND tell the display immediately — waiting for the layout's
+	 *  periodic heartbeat (every 5s) made following read as laggy/broken. */
+	function selectTab(next: Tab) {
+		tab = next;
+		mirror.reportPath(TAB_PATH[next]);
+	}
+
+	/** Settings is a real navigation (the shared /settings page, not a tab
+	 *  state here), so it carries its own value outside Tab — MobileTabBar
+	 *  only ever invokes onselect for a button item, never for an href one,
+	 *  so 'settings' can never actually reach selectTab below. */
+	type BarValue = Tab | 'settings';
+	const tabBarItems = $derived.by((): TabBarItem<BarValue>[] => {
+		const items: TabBarItem<BarValue>[] = [
+			{ value: 'calendar', label: 'Calendar', icon: CalendarDays },
+			{ value: 'lists', label: 'Lists', icon: ListChecks },
+			{ value: 'tasks', label: 'Tasks', icon: SquareCheck },
+			{ value: 'chores', label: 'Chores', icon: ClipboardCheck },
+			{ value: 'meals', label: 'Meals', icon: UtensilsCrossed },
+			{ value: 'recipes', label: 'Recipes', icon: BookOpen }
+		];
+		if (data.routines.length) items.push({ value: 'routines', label: 'Routines', icon: Sparkles });
+		items.push({ value: 'rewards', label: 'Rewards', icon: Gift });
+		items.push({
+			value: 'settings',
+			label: 'Settings',
+			icon: Settings,
+			href: '/settings',
+			onclick: () => mirror.reportPath('/settings')
+		});
+		return items;
 	});
+	function selectBarTab(v: BarValue) {
+		if (v === 'settings') return; // href item — navigates on its own
+		selectTab(v);
+	}
 
 	function done() {
 		mirror.stop();
@@ -634,55 +674,6 @@
 		<p class="live type-caption">
 			<Smartphone size={13} /> Live — shows up on the display right away
 		</p>
-
-		<nav class="tabs">
-			<button
-				type="button"
-				class="tab"
-				class:on={tab === 'calendar'}
-				onclick={() => (tab = 'calendar')}
-			>
-				<CalendarDays size={16} /> Calendar
-			</button>
-			<button type="button" class="tab" class:on={tab === 'lists'} onclick={() => (tab = 'lists')}>
-				<ListChecks size={16} /> Lists
-			</button>
-			<button type="button" class="tab" class:on={tab === 'tasks'} onclick={() => (tab = 'tasks')}>
-				<SquareCheck size={16} /> Tasks
-			</button>
-			<button type="button" class="tab" class:on={tab === 'meals'} onclick={() => (tab = 'meals')}>
-				<UtensilsCrossed size={16} /> Meals
-			</button>
-			<button
-				type="button"
-				class="tab"
-				class:on={tab === 'recipes'}
-				onclick={() => (tab = 'recipes')}
-			>
-				<BookOpen size={16} /> Recipes
-			</button>
-			{#if data.routines.length}
-				<button
-					type="button"
-					class="tab"
-					class:on={tab === 'routines'}
-					onclick={() => (tab = 'routines')}
-				>
-					<Sparkles size={16} /> Routines
-				</button>
-			{/if}
-			<button
-				type="button"
-				class="tab"
-				class:on={tab === 'rewards'}
-				onclick={() => (tab = 'rewards')}
-			>
-				<Gift size={16} /> Rewards
-			</button>
-			<a class="tab" href="/settings">
-				<Settings size={16} /> Settings
-			</a>
-		</nav>
 
 		{#if tab === 'calendar'}
 			<section class="card">
@@ -1327,6 +1318,14 @@
 				<p class="type-caption saved-msg"><Star size={14} strokeWidth={3} /> {claimedToast}</p>
 			{/if}
 		{/if}
+
+		{#if tab === 'chores'}
+			<ChoreBoard />
+		{/if}
+
+		<div class="tabbarslot">
+			<MobileTabBar items={tabBarItems} active={tab} onselect={selectBarTab} />
+		</div>
 	</div>
 {/if}
 
@@ -1338,10 +1337,20 @@
 		max-width: 460px;
 		margin: 0 auto;
 		min-height: 100vh;
-		padding: var(--space-5) var(--space-4) var(--space-8);
+		padding: var(--space-5) var(--space-4) 0;
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-4);
+	}
+	/* Pulls the bar out to the full viewport width and down to the true
+	   bottom edge, undoing .wrap's own side/bottom padding, while margin-top:
+	   auto pushes it to the end of the flex column — pinned at the viewport
+	   bottom via its own position: sticky once content is taller than the
+	   screen, and sitting flush against the bottom edge even when it isn't. */
+	.tabbarslot {
+		margin-top: auto;
+		margin-left: calc(-1 * var(--space-4));
+		margin-right: calc(-1 * var(--space-4));
 	}
 	.head {
 		display: flex;
@@ -1367,36 +1376,6 @@
 		gap: 6px;
 		color: var(--color-accent-success);
 		margin-top: -8px;
-	}
-	.tabs {
-		display: flex;
-		gap: var(--space-2);
-		background: var(--color-surface-elevated);
-		padding: 4px;
-		border-radius: var(--radius-pill);
-		overflow-x: auto;
-		scrollbar-width: none;
-	}
-	.tabs::-webkit-scrollbar {
-		display: none;
-	}
-	.tab {
-		flex: none;
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		gap: 6px;
-		padding: 9px 12px;
-		border-radius: var(--radius-pill);
-		color: var(--color-text-secondary);
-		font-weight: var(--weight-semibold);
-		font-size: var(--text-sm);
-		white-space: nowrap;
-	}
-	.tab.on {
-		background: var(--color-surface);
-		color: var(--color-text-primary);
-		box-shadow: var(--shadow-card);
 	}
 	.card {
 		display: flex;

@@ -115,6 +115,26 @@ class MirrorControl {
 		if (browser) sessionStorage.setItem(CONTROLLER_KEY, token);
 	}
 
+	/**
+	 * Controller only: tell the display which top-level section to show, right
+	 * now rather than waiting for the next heartbeat. The root layout's
+	 * interval still calls this every few seconds as a fallback (a dropped
+	 * request, a missed tick), but without an immediate call here a tab
+	 * switch took up to 5s to show up on the TV, which read as "doesn't
+	 * actually follow" even though it eventually did.
+	 */
+	reportPath(path: string) {
+		this.activePath = path;
+		if (this.role !== 'controller' || !this.token) return;
+		fetch('/api/mirror/nav', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ token: this.token, path })
+		}).catch(() => {
+			/* the layout's periodic report will retry */
+		});
+	}
+
 	/** Stop mirroring on this device (both roles cleared). */
 	stop() {
 		this.role = 'idle';

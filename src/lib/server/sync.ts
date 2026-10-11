@@ -48,10 +48,6 @@ async function validGoogleAccessToken(profileId?: number): Promise<string | null
 	return refreshed.accessToken;
 }
 
-export function isGoogleConnected(): boolean {
-	return isGoogleConfigured() && getAllGoogleTokens().length > 0;
-}
-
 /**
  * Pull Google calendars + events for a window around today into SQLite.
  * Returns the number of events synced. No-op (0) when not connected.
