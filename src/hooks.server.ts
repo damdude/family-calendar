@@ -10,8 +10,10 @@ import { logEvent } from '$lib/server/debugLog';
 startScheduler();
 
 // Device/network-control routes with no auth of their own: joining Wi-Fi,
-// mounting a NAS share, migrating where data lives, and triggering an OTA
-// install. Everything else under /api/ (calendar/tasks/lists/photos/config,
+// and read-only storage discovery (what NAS shares exist, how much space is
+// free). The mutating storage/update actions that used to be listed here
+// moved to PASSWORD_GATED_PATHS below. Everything else under /api/
+// (calendar/tasks/lists/photos/config,
 // the phone's /api/mirror/* channel) is deliberately left alone here — this
 // app has no accounts, and gating the family-content routes too would lock
 // the phone Settings tab out of endpoints it already calls without ever
@@ -24,11 +26,13 @@ const PIN_GATED_PATHS = new Set([
 	'/api/net/wifi/join',
 	'/api/net/wifi/restart-ap',
 	'/api/storage/check',
-	'/api/storage/migrate',
 	'/api/storage/nas/browse',
-	'/api/storage/nas/mount',
-	'/api/storage/nas/shares',
-	'/api/update/install'
+	'/api/storage/nas/shares'
+	// update/install, storage/migrate and storage/nas/mount used to be here
+	// too. They moved to PASSWORD_GATED_PATHS below, which runs first and
+	// returns before this check is ever reached for the same path -- leaving
+	// them listed in both was dead weight, not defense in depth: the two
+	// gates are never actually reachable to defend the same request twice.
 ]);
 
 /**
