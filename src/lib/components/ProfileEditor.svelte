@@ -6,7 +6,6 @@
 	import { ageFromDOB } from '$lib/time';
 	import Avatar from './Avatar.svelte';
 	import { Camera, X, Plus } from 'lucide-svelte';
-	import GoogleCalendarConnect from './GoogleCalendarConnect.svelte';
 
 	let { onChange }: { onChange: () => void } = $props();
 
@@ -107,7 +106,6 @@
 					value={(p.emails ?? []).join(', ')}
 					oninput={(e) => setEmails(p, (e.currentTarget as HTMLInputElement).value)}
 				/>
-				<GoogleCalendarConnect profileId={p.id} />
 				<div class="swatches">
 					{#each PROFILE_COLORS as c (c)}
 						<button

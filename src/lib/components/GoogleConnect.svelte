@@ -1,14 +1,20 @@
 <script lang="ts">
+	/**
+	 * One Google account for the whole household rather than any one person —
+	 * for a family/shared calendar nobody individually owns. Per-person
+	 * accounts are a separate thing entirely (GoogleCalendarConnect, listed
+	 * above this in the Calendars card) and never shown here: mixing the two
+	 * into one status list is what made an orphaned per-profile connection
+	 * once read as a second, confusing "place" for Google accounts instead of
+	 * what it actually was.
+	 */
 	import { RefreshCw, Link2, Link2Off } from 'lucide-svelte';
 	import GoogleCredentialsForm from './GoogleCredentialsForm.svelte';
-	import { family } from '$lib/stores/family.svelte';
 
-	type Connection = { profileId: number | null; accountEmail: string | null };
 	type Status = {
 		configured: boolean;
 		connected: boolean;
 		account: string | null;
-		allConnections?: Connection[];
 	};
 
 	let status = $state<Status | null>(null);
@@ -20,20 +26,6 @@
 	// Credentials can be present but wrong, so this has to be reachable when
 	// configured — not only when nothing is set at all.
 	let showCreds = $state(false);
-
-	/** Every connection this device knows about, with a name attached — "shared
-	 *  account" for the no-profile identity this card itself manages, or the
-	 *  matching profile's name. Shown unconditionally so a per-profile
-	 *  connection (made from that person's own card in the Family section)
-	 *  is never invisible here just because THIS card's own identity (the
-	 *  shared account) has nothing connected. */
-	const connections = $derived.by(() => {
-		return (status?.allConnections ?? []).map((c) => {
-			if (c.profileId === null) return { ...c, label: 'Shared account' };
-			const p = family.profiles.find((x) => x.id === c.profileId);
-			return { ...c, label: p ? p.name : `Profile #${c.profileId}` };
-		});
-	});
 
 	async function loadStatus() {
 		const res = await fetch('/api/google/status');
@@ -103,22 +95,10 @@
 </script>
 
 <div class="gc">
+	<p class="type-label head"><Link2 size={16} /> Shared account</p>
+
 	{#if !status}
 		<p class="type-body sub">Checking…</p>
-	{:else}
-		{#if connections.length}
-			<ul class="connlist">
-				{#each connections as c (c.profileId ?? 'shared')}
-					<li class="connrow">
-						<span class="badge ok"><Link2 size={14} /> {c.label}</span>
-						<span class="type-caption sub">{c.accountEmail ?? '(no account email on file)'}</span>
-					</li>
-				{/each}
-			</ul>
-			<p class="type-caption sub">
-				Per-person accounts are connected from that person's own card, under Family.
-			</p>
-		{/if}
 	{/if}
 
 	{#if status && !status.configured}
@@ -193,19 +173,11 @@
 	.sub {
 		color: var(--color-text-secondary);
 	}
-	.connlist {
-		list-style: none;
-		margin: 0;
-		padding: 0;
-		display: flex;
-		flex-direction: column;
-		gap: 6px;
-	}
-	.connrow {
+	.head {
 		display: flex;
 		align-items: center;
-		gap: var(--space-2);
-		flex-wrap: wrap;
+		gap: 6px;
+		color: var(--color-text-primary);
 	}
 	.connected {
 		display: flex;
