@@ -12,7 +12,11 @@
 
 const DEVICE_CODE_URL = 'https://oauth2.googleapis.com/device/code';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
-const CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar';
+const USERINFO_URL = 'https://www.googleapis.com/oauth2/v2/userinfo';
+// email on top of calendar access so each connection can be labelled with
+// whose account it actually is — without it there is no way to tell two
+// connected accounts apart beyond which profile row they're parked under.
+const CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar email';
 const DEVICE_GRANT = 'urn:ietf:params:oauth:grant-type:device_code';
 
 export const GOOGLE_PROVIDER = 'google';
@@ -94,8 +98,31 @@ export async function startDeviceFlow(): Promise<DeviceCode> {
 export type PollResult =
 	| { status: 'pending' }
 	| { status: 'slow_down' }
-	| { status: 'granted'; refreshToken: string; accessToken: string; expiresIn: number }
+	| {
+			status: 'granted';
+			refreshToken: string;
+			accessToken: string;
+			expiresIn: number;
+			accountEmail?: string;
+	  }
 	| { status: 'denied' | 'expired'; error: string };
+
+/** Who this access token actually belongs to — best-effort: a family should
+ *  still end up connected even if this one call fails, just without a label
+ *  to show for it (same fallback the UI already had before email was ever
+ *  requested at all). */
+async function fetchAccountEmail(accessToken: string): Promise<string | undefined> {
+	try {
+		const res = await fetch(USERINFO_URL, {
+			headers: { authorization: `Bearer ${accessToken}` }
+		});
+		if (!res.ok) return undefined;
+		const j = await res.json();
+		return typeof j.email === 'string' ? j.email : undefined;
+	} catch {
+		return undefined;
+	}
+}
 
 /** Step 2: poll once for the token after the user enters the code. */
 export async function pollDeviceToken(deviceCode: string): Promise<PollResult> {
@@ -116,7 +143,8 @@ export async function pollDeviceToken(deviceCode: string): Promise<PollResult> {
 			status: 'granted',
 			refreshToken: j.refresh_token,
 			accessToken: j.access_token,
-			expiresIn: j.expires_in
+			expiresIn: j.expires_in,
+			accountEmail: await fetchAccountEmail(j.access_token)
 		};
 	}
 	switch (j.error) {

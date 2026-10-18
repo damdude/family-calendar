@@ -43,6 +43,7 @@ export interface PendingGoogleToken {
 	refreshToken: string;
 	accessToken: string;
 	accessExpiresAt: number;
+	accountEmail?: string;
 }
 
 export interface PairingSession {

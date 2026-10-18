@@ -41,9 +41,14 @@
 			const conn = data.allConnections?.find(
 				(c: { profileId: number | null }) => c.profileId === profileId
 			);
-			if (conn?.accountEmail) {
+			// A connection existing at all is what matters — accountEmail is
+			// label-only. Requiring it here used to mean every account ever
+			// connected mid-wizard (before email was fetched at all) showed a
+			// "Connect Google Calendar" button forever despite actively syncing,
+			// because the thing gating "connected" was never populated.
+			if (conn) {
 				connected = true;
-				accountEmail = conn.accountEmail;
+				accountEmail = conn.accountEmail ?? null;
 			}
 		} catch {
 			/* status is advisory; connecting still works */
@@ -88,7 +93,7 @@
 
 			if (result.status === 'granted') {
 				connected = true;
-				accountEmail = result.accountEmail || 'Connected';
+				accountEmail = result.accountEmail ?? null;
 				showingFlow = false;
 				userCode = null;
 				isPolling = false;
@@ -129,11 +134,11 @@
 </script>
 
 <div class="google-connect">
-	{#if connected && accountEmail}
+	{#if connected}
 		<div class="connected">
 			<div class="status">
 				<Check size={16} />
-				<span>Connected: {accountEmail}</span>
+				<span>{accountEmail ? `Connected: ${accountEmail}` : 'Connected'}</span>
 			</div>
 			<button
 				type="button"

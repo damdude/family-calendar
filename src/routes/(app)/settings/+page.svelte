@@ -5,7 +5,6 @@
 	import type { FeatureFlags } from '$lib/config';
 	import { FEATURE_LABELS, FEATURE_KEYS } from '$lib/features';
 	import ProfileEditor from '$lib/components/ProfileEditor.svelte';
-	import GoogleCalendarConnect from '$lib/components/GoogleCalendarConnect.svelte';
 	import GoogleConnect from '$lib/components/GoogleConnect.svelte';
 	import CalendarLinks from '$lib/components/CalendarLinks.svelte';
 	import StoragePanel from '$lib/components/StoragePanel.svelte';
@@ -727,25 +726,18 @@
 			</div>
 		</section>
 
-		<!-- Calendars: every calendar connection lives here and nowhere else —
-		     per-person Google accounts, then shared/linked calendars below. -->
+		<!-- Calendars: shared/linked calendars. Each person's own Google account
+		     connects from their own card in Family above, not here — putting a
+		     second, parallel list of the same people here too is exactly the
+		     "two places" confusion this card used to cause. -->
 		<section class="card">
 			<div class="cardhead">
 				<h2 class="type-heading">Calendars</h2>
-				<p class="type-caption sub">Connect each person's Google account below.</p>
+				<p class="type-caption sub">
+					Connect each person's Google account from their own card in Family, above. Shared and
+					linked calendars live here.
+				</p>
 			</div>
-			<div class="rowset">
-				{#each family.profiles as p (p.id)}
-					<div class="row">
-						<span class="type-body">{p.name}</span>
-						<GoogleCalendarConnect profileId={p.id} />
-					</div>
-				{/each}
-				{#if family.profiles.length === 0}
-					<p class="type-caption sub">Add people in Family above first.</p>
-				{/if}
-			</div>
-			<div class="divider"></div>
 			<CalendarLinks />
 			<div class="divider"></div>
 			<GoogleConnect />

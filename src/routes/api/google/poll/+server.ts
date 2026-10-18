@@ -32,17 +32,19 @@ export const POST: RequestHandler = async ({ request }) => {
 			const held = stashPendingGoogle(setupToken, draftProfileId, {
 				refreshToken: result.refreshToken,
 				accessToken: result.accessToken,
-				accessExpiresAt: Math.floor(Date.now() / 1000) + result.expiresIn
+				accessExpiresAt: Math.floor(Date.now() / 1000) + result.expiresIn,
+				accountEmail: result.accountEmail
 			});
 			if (!held) throw error(410, 'This setup session has expired.');
-			return json({ status: 'granted', pending: true });
+			return json({ status: 'granted', pending: true, accountEmail: result.accountEmail });
 		}
 		saveOAuthToken({
 			provider: GOOGLE_PROVIDER,
 			profileId: parsed.data.profileId,
 			refreshToken: result.refreshToken,
 			accessToken: result.accessToken,
-			accessExpiresAt: Math.floor(Date.now() / 1000) + result.expiresIn
+			accessExpiresAt: Math.floor(Date.now() / 1000) + result.expiresIn,
+			accountEmail: result.accountEmail
 		});
 		let synced = 0;
 		try {
@@ -50,7 +52,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		} catch {
 			/* first sync can be retried from Settings */
 		}
-		return json({ status: 'granted', synced });
+		return json({ status: 'granted', synced, accountEmail: result.accountEmail });
 	}
 	return json(result);
 };

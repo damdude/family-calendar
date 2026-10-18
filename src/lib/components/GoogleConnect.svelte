@@ -2,8 +2,8 @@
 	/**
 	 * One Google account for the whole household rather than any one person —
 	 * for a family/shared calendar nobody individually owns. Per-person
-	 * accounts are a separate thing entirely (GoogleCalendarConnect, listed
-	 * above this in the Calendars card) and never shown here: mixing the two
+	 * accounts are a separate thing entirely (GoogleCalendarConnect, on each
+	 * person's own card under Family) and never shown here: mixing the two
 	 * into one status list is what made an orphaned per-profile connection
 	 * once read as a second, confusing "place" for Google accounts instead of
 	 * what it actually was.

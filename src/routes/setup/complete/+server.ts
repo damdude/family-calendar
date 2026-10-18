@@ -67,7 +67,8 @@ export const POST: RequestHandler = async ({ request }) => {
 			profileId: i + 1,
 			refreshToken: pending.refreshToken,
 			accessToken: pending.accessToken,
-			accessExpiresAt: pending.accessExpiresAt
+			accessExpiresAt: pending.accessExpiresAt,
+			accountEmail: pending.accountEmail
 		});
 		connected++;
 	});
