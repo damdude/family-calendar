@@ -86,11 +86,14 @@
 	/**
 	 * update.sh's checkpoints (5 / 10 / 30 / 45 / 85 / 95 / 100) are coarse and
 	 * real — each marks a step that actually finished, not a smooth fake
-	 * animation — but they're one continuous number across three logically
-	 * different phases. Slicing by the known boundaries and rescaling each
-	 * slice to its own 0–100 gives the three-phase feel being asked for
-	 * (download fills up, THEN install fills up, THEN restart) without
-	 * inventing a second data source update.sh doesn't have.
+	 * animation. Shown directly as one continuous 0–100 bar, with the label
+	 * switching at the same boundaries. An earlier version rescaled each
+	 * phase to its own independent 0–100%, which meant the download step
+	 * (git pull — a couple of seconds, checkpoint 0→10) hit "100%" almost
+	 * instantly, and "Installing" hit 100% at checkpoint 85 while prune, the
+	 * service restart and the health check were all still ahead — reporting
+	 * 100% complete on a phase that was nowhere near the real end. Confirmed
+	 * on a real device: it genuinely looked done when it wasn't.
 	 */
 	type Phase = { key: 'download' | 'install' | 'restart'; label: string; icon: typeof Download };
 	const PHASES: { max: number; phase: Phase }[] = [
@@ -100,16 +103,8 @@
 	];
 	const current = $derived.by(() => {
 		const raw = update?.progress ?? 0;
-		let prevMax = 0;
-		for (const { max, phase } of PHASES) {
-			if (raw <= max) {
-				const span = max - prevMax;
-				const pct = span > 0 ? Math.round(((raw - prevMax) / span) * 100) : 100;
-				return { phase, pct: Math.min(100, Math.max(0, pct)) };
-			}
-			prevMax = max;
-		}
-		return { phase: PHASES[PHASES.length - 1].phase, pct: 100 };
+		const phase = PHASES.find((p) => raw <= p.max)?.phase ?? PHASES[PHASES.length - 1].phase;
+		return { phase, pct: Math.min(100, Math.max(0, raw)) };
 	});
 </script>
 
