@@ -10,10 +10,19 @@
 	 * Checking (and the install trigger) needs its own setup-time auth
 	 * (api/update/install-setup) rather than the usual device-password gate:
 	 * nobody has chosen a password yet at this point in the wizard.
+	 *
+	 * TV mode has no input device on this screen at all -- everything else in
+	 * TV setup is driven from a paired phone instead, but round-tripping this
+	 * one decision through the phone isn't worth it. A dialog with buttons
+	 * nobody can press isn't a choice, it's a dead end: confirmed live on a
+	 * real device, where it silently blocked the whole wizard (including the
+	 * Wi-Fi join QR underneath it) with no way to get past it. TV mode
+	 * instead gets a plain countdown and installs automatically when it
+	 * elapses; only touch mode gets the two buttons.
 	 */
 	import { Sparkles } from 'lucide-svelte';
 
-	let { token, online }: { token: string; online: boolean } = $props();
+	let { token, online, isTouch }: { token: string; online: boolean; isTouch: boolean } = $props();
 
 	interface UpdateState {
 		status: 'idle' | 'available' | 'installing' | 'failed';
@@ -66,6 +75,23 @@
 			installing = false;
 		}
 	}
+
+	// TV mode: no buttons, just a countdown that installs on its own.
+	const AUTO_INSTALL_SECONDS = 15;
+	let countdown = $state(AUTO_INSTALL_SECONDS);
+	let countdownTimer: ReturnType<typeof setInterval>;
+	$effect(() => {
+		if (isTouch || !show) return;
+		countdown = AUTO_INSTALL_SECONDS;
+		countdownTimer = setInterval(() => {
+			countdown -= 1;
+			if (countdown <= 0) {
+				clearInterval(countdownTimer);
+				installNow();
+			}
+		}, 1000);
+		return () => clearInterval(countdownTimer);
+	});
 </script>
 
 {#if show}
@@ -81,18 +107,25 @@
 					{#each update.notes as n (n)}<li class="type-caption">{n}</li>{/each}
 				</ul>
 			{/if}
-			<p class="type-caption sub">
-				Installing now takes a couple of minutes and restarts the display, then picks setup back up
-				right where you left it. You can also keep going and install it later from Settings.
-			</p>
-			<div class="row">
-				<button type="button" class="btn" onclick={() => (dismissed = true)}>
-					Continue setting up
-				</button>
-				<button type="button" class="btn primary" disabled={installing} onclick={installNow}>
-					{installing ? 'Starting…' : 'Install now'}
-				</button>
-			</div>
+			{#if isTouch}
+				<p class="type-caption sub">
+					Installing now takes a couple of minutes and restarts the display, then picks setup back
+					up right where you left it. You can also keep going and install it later from Settings.
+				</p>
+				<div class="row">
+					<button type="button" class="btn" onclick={() => (dismissed = true)}>
+						Continue setting up
+					</button>
+					<button type="button" class="btn primary" disabled={installing} onclick={installNow}>
+						{installing ? 'Starting…' : 'Install now'}
+					</button>
+				</div>
+			{:else}
+				<p class="type-caption sub">
+					Installing automatically in {countdown}s. This takes a couple of minutes and restarts the
+					display, then picks setup back up right where it left off.
+				</p>
+			{/if}
 		</div>
 	</div>
 {/if}

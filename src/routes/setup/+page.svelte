@@ -183,7 +183,7 @@
 <Confetti active={complete} />
 
 {#if !complete}
-	<UpdateCheckPrompt token={data.token} online={data.online} />
+	<UpdateCheckPrompt token={data.token} online={data.online} {isTouch} />
 {/if}
 
 {#if needsMode}
