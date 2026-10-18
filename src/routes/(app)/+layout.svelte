@@ -103,6 +103,17 @@
 		}
 	});
 
+	// A phone that scanned the pairing QR (see /remote) renders this exact
+	// layout too, since "Settings" from there just navigates to the real
+	// /settings route rather than a phone-specific copy of it. The
+	// screensaver/sleep-window/idle logic below is a physical-kiosk concern —
+	// without this guard, a phone opened during the family's sleep window (a
+	// very plausible time to check something) showed the screensaver fully
+	// covering Settings, with no way past it short of waiting out a snooze
+	// meant for a touchscreen someone is standing in front of, not reading
+	// off their phone.
+	const isPhoneController = $derived(mirror.role === 'controller');
+
 	const sv = $derived(family.config.screensaver);
 	// The sleep window forces the screensaver on outside of the snooze below —
 	// otherwise it'd flip back on every few seconds all night regardless of
@@ -146,14 +157,16 @@
 	// Also gated on nobody actively driving it from a phone, since the live
 	// dashboard following their navigation is what's useful to show then.
 	const tvIdleActive = $derived(
-		family.isTv &&
+		!isPhoneController &&
+			family.isTv &&
 			tick >= snoozedUntil &&
 			(screensaver.forceSleep || sleepActive) &&
 			!mirror.controllerConnected
 	);
 	// Touch: the original idle-timeout-or-sleep-window dismissible screensaver, unchanged.
 	const touchScreensaverActive = $derived(
-		!family.isTv &&
+		!isPhoneController &&
+			!family.isTv &&
 			tick >= snoozedUntil &&
 			(screensaver.forceSleep || (sv.enabled && (sleepActive || idleActive)))
 	);
