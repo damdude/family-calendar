@@ -94,9 +94,8 @@ export const POST: RequestHandler = async ({ request }) => {
 		// The login password is part of what "factory" means, so it goes back to
 		// the shipped default rather than surviving the wipe. Reaching this
 		// point already required the current password (hooks.server.ts gates
-		// this route), so the reset is authorised; the wizard is where the next
-		// household chooses a new one. Clearing config.devicePasswordSet below
-		// is then simply true, rather than a claim that contradicts the device.
+		// this route unconditionally), so the reset is authorised; the wizard
+		// is where the next household chooses a new one.
 		const pwReset = await setDevicePassword(DEFAULT_DEVICE_PASSWORD);
 		logEvent('factoryReset.password', { ok: pwReset.ok, detail: pwReset.message });
 		if (!pwReset.ok) {

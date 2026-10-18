@@ -1,7 +1,6 @@
 import { error, json } from '@sveltejs/kit';
 import { z } from 'zod';
 import { getSession } from '$lib/server/pairing';
-import { loadConfig, saveConfig } from '$lib/server/config';
 import { logEvent } from '$lib/server/debugLog';
 import { CONTROL_CHARS, setDevicePassword } from '$lib/server/devicePassword';
 import { verifyDevicePassword } from '$lib/server/deviceAuth';
@@ -67,11 +66,6 @@ export const POST: RequestHandler = async ({ request }) => {
 		console.error('Password change failed:', result.message);
 		throw error(500, 'Could not change the device password.');
 	}
-
-	// From here on the device has a password the family actually chose, so the
-	// privileged actions can start demanding it.
-	const config = await loadConfig();
-	if (!config.devicePasswordSet) await saveConfig({ ...config, devicePasswordSet: true });
 
 	return json({ ok: true });
 };

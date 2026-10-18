@@ -6,6 +6,7 @@
 	import ModePicker from '$lib/components/ModePicker.svelte';
 	import WifiPicker from '$lib/components/WifiPicker.svelte';
 	import TouchFamilySetup from '$lib/components/TouchFamilySetup.svelte';
+	import UpdateCheckPrompt from '$lib/components/UpdateCheckPrompt.svelte';
 	import { Smartphone, Wifi, ArrowLeft, WifiOff, RefreshCw, CheckCircle2 } from 'lucide-svelte';
 
 	let { data }: { data: PageData } = $props();
@@ -180,6 +181,10 @@
 </script>
 
 <Confetti active={complete} />
+
+{#if !complete}
+	<UpdateCheckPrompt token={data.token} online={data.online} />
+{/if}
 
 {#if needsMode}
 	<!-- Step 0: TV or touchscreen — everything downstream depends on it. -->

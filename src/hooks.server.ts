@@ -3,7 +3,6 @@ import type { Handle } from '@sveltejs/kit';
 import { startScheduler } from '$lib/server/cron';
 import { isPinSet } from '$lib/server/pin';
 import { ELEVATED_COOKIE, isValidSessionToken, SESSION_COOKIE } from '$lib/server/session';
-import { loadConfig } from '$lib/server/config';
 import { logEvent } from '$lib/server/debugLog';
 
 // Start background jobs (calendar sync, later: scrape, OTA) once on boot.
@@ -38,13 +37,25 @@ const PIN_GATED_PATHS = new Set([
 /**
  * Actions that change the device itself rather than the family's content:
  * installing new code, wiping everything, moving where data lives, mounting a
- * network share. These require the device LOGIN password — the one chosen in
- * the setup wizard — re-entered within the last few minutes, on whichever
- * screen is being used (the TV's on-screen keyboard or the phone).
+ * network share. These require the device LOGIN password — whatever it
+ * currently is, the shipped default until a family changes it — re-entered
+ * within the last few minutes, on whichever screen is being used (the TV's
+ * on-screen keyboard or the phone).
  *
- * Only enforced once that password has actually been set. A device still on
- * the shipped default, or one that was just factory-reset, would otherwise
- * demand a password nobody has chosen yet and could never be set up again.
+ * Unconditional: there used to be a `devicePasswordSet` config flag that
+ * skipped this check entirely until a password had been chosen, on the
+ * reasoning that a device still on the shipped default shouldn't demand a
+ * password nobody had set yet. That flag was itself the vulnerability — it
+ * lived in the same config.json a routine Settings autosave could (and did,
+ * on a real device) silently reset to false, turning this whole gate off
+ * with no one touching a security setting. There is no scenario where
+ * skipping this is correct: the default password is a real, working Unix
+ * password (verifyDevicePassword checks it via PAM/sudo, not against this
+ * config), so there is always a correct value to demand. The one legitimate
+ * case where no password has been chosen yet — mid first-run setup — is
+ * handled by a completely separate, narrower mechanism: see
+ * /api/update/install-setup, gated on a live setup pairing token instead of
+ * this cookie, which stops validating the instant setup completes.
  */
 const PASSWORD_GATED_PATHS = new Set([
 	'/api/update/install',
@@ -106,15 +117,15 @@ export const handle: Handle = async ({ event, resolve }) => {
 		}
 	}
 
-	if (PASSWORD_GATED_PATHS.has(pathname)) {
-		const { devicePasswordSet } = await loadConfig();
-		if (devicePasswordSet && !isValidSessionToken(event.cookies.get(ELEVATED_COOKIE), 'elevated')) {
-			logEvent('gate.devicePasswordRequired', { pathname });
-			return json(
-				{ message: 'Device password required', needsDevicePassword: true },
-				{ status: 401 }
-			);
-		}
+	if (
+		PASSWORD_GATED_PATHS.has(pathname) &&
+		!isValidSessionToken(event.cookies.get(ELEVATED_COOKIE), 'elevated')
+	) {
+		logEvent('gate.devicePasswordRequired', { pathname });
+		return json(
+			{ message: 'Device password required', needsDevicePassword: true },
+			{ status: 401 }
+		);
 	}
 
 	if (PIN_GATED_PATHS.has(pathname) && (await isPinSet())) {

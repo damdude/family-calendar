@@ -3,7 +3,6 @@ import { z } from 'zod';
 import { verifyRecovery } from '$lib/server/recovery';
 import { CONTROL_CHARS, setDevicePassword } from '$lib/server/devicePassword';
 import { verifyDevicePassword } from '$lib/server/deviceAuth';
-import { loadConfig, saveConfig } from '$lib/server/config';
 import { createSessionToken, ELEVATED_COOKIE, ELEVATED_MAX_AGE_SECONDS } from '$lib/server/session';
 import { logEvent } from '$lib/server/debugLog';
 import type { RequestHandler } from './$types';
@@ -71,9 +70,6 @@ export const POST: RequestHandler = async ({ request, cookies }) => {
 			'The password was changed but did not verify afterwards. Start recovery again, and decline any offer from your browser to fill a generated password.'
 		);
 	}
-
-	const cfg = await loadConfig();
-	await saveConfig({ ...cfg, devicePasswordSet: true });
 
 	// Whoever did this stood at the screen and chose the password a moment
 	// ago, which is at least as strong as typing it at the prompt. Issuing the

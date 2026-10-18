@@ -60,8 +60,8 @@
 			});
 			const body = await r.json().catch(() => null);
 			if (r.ok) {
-				// The gate keys off devicePasswordSet, which the reset just
-				// cleared, so replaying the original action now succeeds.
+				// Recovery issues a fresh elevated-session cookie on success, so
+				// replaying the original action now succeeds.
 				return settle(true);
 			}
 			recoveryErr = body?.message ?? 'That code was not accepted.';

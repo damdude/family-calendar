@@ -17,29 +17,19 @@ export const GET: RequestHandler = async () => {
  * spawning a needless subprocess on every autosave and so a save that races
  * with another tab can't repeatedly stomp the clock.
  *
- * Two things the client is never trusted for, because trusting it caused
- * real damage on-device:
+ * The client is never trusted to send a full, authoritative config. This
+ * endpoint used to replace the ENTIRE stored config with whatever the client
+ * posted, which on-device actually dropped every profile in one save: a
+ * stale/not-yet-hydrated client snapshot looks exactly like "the family
+ * wants zero profiles", which is never a real action anywhere in this app on
+ * an already-set-up device. Refusing that specific shape turns a silent,
+ * unrecoverable data-loss bug into a loud, retryable 409.
  *
- * 1. devicePasswordSet. The client-side family store has no field for this
- *    at all — it is set only by /api/pi-password, /api/factory-reset and
- *    /api/recovery/verify, each of which loads-then-mutates the real config.
- *    This endpoint instead replaces the ENTIRE config with whatever the
- *    client sent, and the client never sends this field, so Zod quietly
- *    filled in its schema default (false) on every single Settings save —
- *    unconditionally turning the password gate back off the moment anyone
- *    changed anything in Settings, including just picking a time zone.
- *    Confirmed on-device: a device that had a real password set, and had
- *    just been used to install an update with no prompt, showed
- *    devicePasswordSet: false moments after a routine Settings save. Always
- *    carrying the server's own value forward closes that regardless of what
- *    the client does or doesn't know to send.
- *
- * 2. Dropping every profile in one save. Legitimately removing one of
- *    several people is a normal edit (ProfileEditor -> persist()); legitimately
- *    going from some profiles to zero, on an already-set-up device, is not a
- *    real user action anywhere in this app -- it is what a client posting a
- *    stale/not-yet-hydrated snapshot looks like. Refusing that specific shape
- *    turns a silent, unrecoverable data-loss bug into a loud, retryable 400.
+ * (The device password gate used to live behind a devicePasswordSet flag in
+ * this same config, which a save like that could also silently reset —
+ * turning off password protection with no one touching a security setting.
+ * That flag is gone now; see hooks.server.ts, which checks the password
+ * unconditionally.)
  */
 export const POST: RequestHandler = async ({ request }) => {
 	const parsed = PersistedConfigSchema.safeParse(await request.json().catch(() => null));
@@ -52,7 +42,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		throw error(409, 'Refusing to save: this would remove every profile. Reload and try again.');
 	}
 
-	await saveConfig({ ...parsed.data, devicePasswordSet: before.devicePasswordSet });
+	await saveConfig(parsed.data);
 
 	const nextTz = parsed.data.family.timezone;
 	if (nextTz && nextTz !== before.family.timezone) {
