@@ -190,6 +190,23 @@ SUDO
 chmod 440 /etc/sudoers.d/family-calendar
 visudo -cf /etc/sudoers.d/family-calendar >/dev/null
 
+# Raspberry Pi OS ships /etc/sudoers.d/010_pi-nopasswd by default: pi ALL=
+# (ALL) NOPASSWD: ALL. With that in place the scoped grant above is pure
+# decoration -- pi can already run anything as root with no password, which
+# means any code-execution bug in the app (running as pi) is instant, silent
+# root. This was previously stripped by hand over SSH on one already-running
+# device as part of a security pass, which only ever hardened that one boot:
+# every image rebuilt since then shipped the default file again, silently
+# undoing it. Doing it here means every image is hardened from first boot,
+# with no manual step to forget.
+#
+# Not a lockout risk: pi is in the sudo group by default on Raspberry Pi OS
+# (confirmed via `id pi` on a real device: ...,27(sudo),...) -- nothing in
+# this script grants or touches that membership, only adds to it elsewhere
+# for seat/video/input access, so sudo keeps working. It just prompts for the
+# password instead of granting root silently to anything that asks for it.
+rm -f /etc/sudoers.d/010_pi-nopasswd
+
 # --- Console autologin on tty1 ---
 mkdir -p /etc/systemd/system/getty@tty1.service.d
 cat > /etc/systemd/system/getty@tty1.service.d/autologin.conf <<GETTY
